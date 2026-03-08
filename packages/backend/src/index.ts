@@ -29,7 +29,7 @@ app.get('/api/health', (_req, res) => {
     res.json({
         success: true,
         data: {
-            service: 'adrena-battle-royale',
+            service: 'adrena-the-gauntlet',
             status: 'healthy',
             timestamp: new Date().toISOString(),
         },

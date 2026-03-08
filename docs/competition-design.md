@@ -197,17 +197,94 @@ The bracket format also creates natural social dynamics: traders in the same bra
 
 ## Integration with Adrena
 
-### What integrates now
+### Current Integrations
 
-- **Data source**: The scoring engine reads from `datapi.adrena.xyz/position`. No special access or API keys required.
+- **Data source**: The scoring engine reads from `datapi.adrena.trade/position`. No special access or API keys required.
 - **Trading**: Competitors trade on Adrena's platform as they normally would. The competition engine is an observational overlay — it watches and scores, but never interferes with trading.
 - **Wallet-based identity**: The same wallet-centric model Adrena already uses. No additional auth layer needed for traders.
 
-### Potential future integrations
+---
 
-- **MrRewards**: Competition results could be inserted into the `rewards` table schema (discovered in the `MrRewards` repository) for automatic prize distribution via Adrena's existing keeper infrastructure.
-- **Mutagen**: The CPI could supplement or replace Mutagen as a scoring mechanism — particularly for time-bounded competitive events vs. ongoing accumulation.
-- **Quest system**: Daily objectives within a round ("trade both long and short today", "close a position in profit") could feed into the Activity sub-score for additional engagement.
+## Reward Structure
+
+### Prize Distribution Model
+
+Tournament prizes are distributed based on final standing. The recommended structure for a standard 3-round Gauntlet:
+
+| Placement | Share | Example ($5,000 pool) |
+|-----------|-------|----------------------|
+| 1st       | 40%   | $2,000               |
+| 2nd       | 25%   | $1,250               |
+| 3rd       | 15%   | $750                 |
+| Finalists (remaining) | 20% split | Variable |
+
+The prize pool can be funded in USDC, ADX, or a combination. For ADX-denominated prizes, the current market rate at tournament completion determines dollar equivalence.
+
+### MrRewards Integration
+
+Adrena's `MrRewards` repository contains a keeper service that processes reward distributions automatically. The integration path:
+
+1. **On tournament completion**, the engine produces a ranked finalists list with wallet addresses and placements.
+2. **A reward insertion script** writes rows to the `rewards` table in Adrena's rewards database:
+   ```
+   INSERT INTO rewards (wallet, amount, token, source, tournament_id, placement)
+   ```
+3. **The MrRewards keeper** picks up pending reward rows and executes SPL token transfers to each wallet automatically.
+
+This means prize distribution requires no manual token transfers — the existing Adrena infrastructure handles it. The only new code needed is a post-tournament script that maps placements to reward amounts and inserts the rows.
+
+### Manual Distribution (Fallback)
+
+If MrRewards integration is not available, prizes can be distributed manually:
+1. Export the final standings from the leaderboard endpoint (`GET /api/brackets/leaderboard/:tournamentId`)
+2. Transfer tokens to each winner's wallet using any Solana wallet
+3. Document the transactions in the tournament's audit trail
+
+---
+
+## Mutagen Integration
+
+### CPI → Mutagen Points Mapping
+
+The Gauntlet's CPI scores can feed directly into Adrena's Mutagen system, rewarding participants with Mutagen points based on their competitive performance:
+
+| Event | Mutagen Points | Rationale |
+|-------|---------------|-----------|
+| Enter a Gauntlet tournament | 50 | Reward participation |
+| Survive Round 1 (First Blood) | 100 | Reward for not being eliminated |
+| Survive Round 2 (The Crucible) | 200 | Increasing reward for deeper runs |
+| Reach Endgame (finals) | 500 | Significant achievement |
+| Win a Gauntlet | 1,000 | Major milestone |
+| CPI performance bonus | CPI × 2 | Scaling reward based on score quality |
+
+**Example:** A trader who enters (50), survives Round 1 (100), gets eliminated in Round 2, with a CPI of 65.5 would earn: 50 + 100 + 131 = **281 Mutagen points**.
+
+### Suggested Mutagen Quests
+
+Gauntlet participation creates natural quest opportunities within Adrena's existing quest system:
+
+| Quest | Condition | Points | Category |
+|-------|-----------|--------|----------|
+| "Enter the Arena" | Register for a Gauntlet tournament | 50 | Participation |
+| "Survivor" | Advance past Round 1 | 100 | Achievement |
+| "Iron Will" | Win 3 trades in a single round | 75 | Trading |
+| "Diversified" | Trade all 4 supported assets in one round | 50 | Activity |
+| "Risk Controlled" | Finish a round with Risk score > 80 | 100 | Discipline |
+| "Consistent Performer" | Finish a round with Consistency score > 60 | 100 | Discipline |
+| "Gauntlet Champion" | Win a tournament | 500 | Achievement |
+
+### Streak Integration
+
+Gauntlet rounds naturally integrate with Adrena's streak mechanic:
+- **Round streak**: Consecutive rounds survived across tournaments
+- **Trade streak**: Consecutive profitable trades within a round
+- **Participation streak**: Entering consecutive Gauntlet seasons
+
+---
+
+## Future Integration Paths
+
 - **Frontend embedding**: The bracket view could be embedded directly in Adrena's trading interface via iframe or as a React component library.
 - **Streaming API**: If Adrena ships their planned streaming service, the engine could switch from API polling to real-time event streams for live score updates.
+- **Cross-protocol tournaments**: The scoring engine's modular design allows swapping the data source. A future version could score traders across multiple Solana perp DEXes simultaneously.
 

@@ -39,7 +39,7 @@ Returns the server status.
 {
   "success": true,
   "data": {
-    "service": "adrena-battle-royale",
+    "service": "adrena-the-gauntlet",
     "status": "healthy",
     "timestamp": "2026-03-08T05:00:00.000Z"
   }
@@ -107,7 +107,7 @@ Returns tournament details including rounds and registration counts.
         "id": 1,
         "tournamentId": 1,
         "roundNumber": 1,
-        "name": "The Drop",
+        "name": "First Blood",
         "startTime": "2026-03-08T05:00:00.000Z",
         "endTime": "2026-03-11T05:00:00.000Z",
         "status": "active"
@@ -138,7 +138,7 @@ Returns the most recent round and all its brackets with entries, sorted by CPI d
       "id": 1,
       "tournamentId": 1,
       "roundNumber": 1,
-      "name": "The Drop",
+      "name": "First Blood",
       "startTime": "...",
       "endTime": "...",
       "status": "active"
@@ -330,7 +330,7 @@ Returns a trader's performance across all rounds in a tournament.
     "rounds": [
       {
         "roundNumber": 1,
-        "roundName": "The Drop",
+        "roundName": "First Blood",
         "bracketNumber": 2,
         "scores": {
           "pnlScore": 72.5,

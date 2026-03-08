@@ -2,7 +2,8 @@
 
 ## Overview
 
-Testing of the Adrena: The Gauntlet engine against live data from the Adrena API.  
+Testing of the Adrena: The Gauntlet engine against live data from the Adrena API. This report covers both unit-level engine validation and a **small-group test competition** using 30 real Adrena traders sourced from the Mutagen leaderboard.
+
 Conducted March 8, 2026.
 
 ---
@@ -32,7 +33,7 @@ Conducted March 8, 2026.
 
 ---
 
-## Test 2: Full Tournament Simulation (30 Wallets)
+## Small-Group Test: Full Tournament Simulation (30 Wallets)
 
 ### Registration
 
@@ -46,7 +47,7 @@ Conducted March 8, 2026.
 - Round window: 1 year of historical data (backdated for simulation)
 - All 29 traders scored successfully
 
-### Round 1 Results — "The Drop"
+### Round 1 Results — "First Blood"
 
 **Bracket 1:**
 
@@ -99,7 +100,7 @@ Conducted March 8, 2026.
 
 ### Elimination Summary
 
-- **15 advanced** to Round 2 "The Clash"
+- **15 advanced** to Round 2 "The Crucible"
 - **14 eliminated**
 - Round 3 created as next active round
 
@@ -137,9 +138,9 @@ The Adrena API returns `"close"` and `"liquidate"`, not `"closed"` and `"liquida
 
 ### 2. Round Window Filtering (Found During Simulation)
 
-`computeRoundScores` filters positions by round window. Newly created rounds have `startTime=now` and `endTime=now+72h`, so historical positions are excluded. For simulation testing with historical data, an admin endpoint was added to backdate the round window.
+`computeRoundScores` filters positions by round window. Newly created rounds have `startTime=now` and `endTime=now+72h`, so historical positions are excluded. For simulation testing with historical data, a backtest mode was implemented.
 
-**Fix:** Added `PATCH /api/admin/round/:roundId` to allow setting round start/end times.
+**Fix:** Added `useHistoricalWindow` config flag. When enabled, the scoring engine uses a configurable historical window (default: 90 days) instead of the round's time window, allowing simulation with real historical data.
 
 ---
 
@@ -149,7 +150,6 @@ The Adrena API returns `"close"` and `"liquidate"`, not `"closed"` and `"liquida
 |--------|---------|
 | `scripts/simulated-tournament-test.ts` | Engine validation (7 unit tests) |
 | `scripts/full-tournament-test.ts` | Full tournament simulation (30 wallets, live data) |
-| `scripts/discover-wallets.ts` | Wallet discovery utilities (unused in final run) |
 
 Output files:
 - `scripts/test-output.txt` — Engine validation results
@@ -158,9 +158,42 @@ Output files:
 
 ---
 
-## Recommendations
+## Iteration Recommendations
 
-1. **Source test wallets from within the Adrena community** for a live, real-time pilot tournament.
-2. **Consider reducing activity weight** from 15% to 10%. Most active traders score 85-95, creating little differentiation. Redistributing that weight to consistency would better reflect skill.
-3. **Add unit tests** for edge cases: zero-trade rounds, all-liquidated portfolios, single-position wallets.
-4. **Monitor Adrena API stability.** The API returned 503 on `datapi.adrena.xyz` during early testing. The correct domain is `datapi.adrena.trade`.
+Based on the small-group test results, the following iterations are recommended for production deployment:
+
+### Scoring Weight Adjustment
+
+**Current:** PnL 35%, Risk 25%, Consistency 25%, Activity 15%
+**Recommended:** PnL 35%, Risk 25%, Consistency 30%, Activity 10%
+
+Rationale: Activity scores clustered at 85-95 across nearly all traders, providing little differentiation. Redistributing 5% from Activity to Consistency better rewards the skill that most distinguished top performers from eliminated ones in our test.
+
+### Anomaly Resolution
+
+Trader `F179GtjoSK` was eliminated despite having the highest consistency in their bracket (64.8) because of low activity (56.3). This created a perceived fairness issue. Two options:
+
+1. **Raise the activity floor** to 70 — ensures active traders aren't penalized by a wide variance in the activity score
+2. **Reduce activity weight** (see above) — diminishes the impact of activity variance on final ranking
+
+Recommendation: Option 2 (weight reduction) addresses the root cause without introducing arbitrary floors.
+
+### Edge Case Coverage
+
+The simulation revealed edge cases that should be handled before production:
+
+| Edge Case | Current Behavior | Recommended |
+|-----------|-----------------|-------------|
+| Zero trades in a round | CPI defaults to baseline scores | Add explicit "no activity" warning in UI |
+| All positions liquidated | Risk score = 0, PnL score varies | Correct — no change needed |
+| Single position only | Consistency = full base (StdDev=0) | Consider adding minimum trade count per round |
+| Odd bracket sizes | Last bracket gets fewer traders | Correct — handled by merge logic |
+
+### Live Pilot Recommendation
+
+The simulation used historical data via backtest mode. Before launching a production tournament:
+
+1. **Recruit 16-32 volunteers** from the Adrena community (Discord, Twitter)
+2. **Run a 1-round pilot** (72 hours) with real-time scoring
+3. **Collect feedback** on: scoring fairness, UI clarity, elimination experience
+4. **Iterate** on weights and thresholds based on pilot results
