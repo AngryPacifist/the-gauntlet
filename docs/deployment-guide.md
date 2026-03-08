@@ -122,7 +122,7 @@ Indexes are created on foreign keys and commonly queried columns. See the migrat
 ## Project Structure
 
 ```
-adrena-battle-royale/
+adrena-the-gauntlet/
 ├── packages/
 │   ├── backend/
 │   │   └── src/

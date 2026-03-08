@@ -71,9 +71,10 @@ Each round has a thematic name:
 
 | Round | Name           |
 |-------|----------------|
-| 1     | The Drop       |
-| 2     | The Clash      |
-| 3     | The Final Ring |
+| 1     | First Blood    |
+| 2     | The Crucible   |
+| 3     | Sudden Death   |
+| Final | Endgame        |
 
 ---
 
@@ -156,7 +157,7 @@ All parameters are configurable per tournament:
 
 ## Data Source
 
-All trader data comes from the Adrena public HTTP API at `https://datapi.adrena.xyz`. The engine fetches:
+All trader data comes from the Adrena public HTTP API at `https://datapi.adrena.trade`. The engine fetches:
 
 - `GET /position?user_wallet=<wallet>` — All positions for a wallet (open, closed, liquidated).
 

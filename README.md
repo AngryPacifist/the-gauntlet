@@ -90,7 +90,7 @@ Full reference: [docs/api-reference.md](docs/api-reference.md)
 ## Project Structure
 
 ```
-adrena-battle-royale/
+adrena-the-gauntlet/
 ├── packages/
 │   ├── backend/           # Express API server
 │   │   └── src/
