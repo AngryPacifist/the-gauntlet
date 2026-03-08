@@ -129,7 +129,7 @@ export class AdrenaClient {
     // This matches Adrena's existing Mutagen rule:
     // "Positions must open AND close within same week"
     //
-    // For Battle Royale: positions must be opened during the round window.
+    // For The Gauntlet: positions must be opened during the round window.
     // They can still be open at round end (scored at mark price) or closed.
     // --------------------------------------------------------------------------
     filterPositionsForRound(

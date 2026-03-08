@@ -1,12 +1,12 @@
 // ============================================================================
-// Adrena Battle Royale — Shared TypeScript Types
+// Adrena: The Gauntlet — Shared TypeScript Types
 // ============================================================================
 
 // --- Tournament ---
 
 export type TournamentStatus = 'registration' | 'active' | 'completed' | 'cancelled';
 export type RoundStatus = 'pending' | 'active' | 'completed';
-export type RoundName = 'The Drop' | 'The Clash' | 'The Final Ring';
+export type RoundName = 'First Blood' | 'The Crucible' | 'Sudden Death' | 'Endgame';
 
 export interface TournamentConfig {
     bracketSize: number;         // Traders per bracket in Round 1 (default: 8)

@@ -61,7 +61,7 @@ app.listen(PORT, () => {
     console.log(`
 ╔══════════════════════════════════════════════════╗
 ║                                                  ║
-║   ⚔️  ADRENA BATTLE ROYALE                      ║
+║   ⚔️  ADRENA: THE GAUNTLET                         ║
 ║   Trading Competition Engine                     ║
 ║                                                  ║
 ║   Server running on port ${PORT}                  ║

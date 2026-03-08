@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'Adrena Battle Royale — Trading Competition Engine',
+  title: 'Adrena: The Gauntlet — Trading Competition Engine',
   description:
     'Bracket-style elimination trading competitions on Adrena. Compete, survive, conquer.',
 };
@@ -19,7 +19,7 @@ export default function RootLayout({
           <div className="container nav__inner">
             <a href="/" className="nav__logo">
               <span className="nav__logo-icon">⚔️</span>
-              <span className="nav__logo-text">Battle Royale</span>
+              <span className="nav__logo-text">The Gauntlet</span>
             </a>
             <div className="nav__links">
               <a href="/" className="nav__link">Dashboard</a>

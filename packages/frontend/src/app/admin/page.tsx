@@ -152,7 +152,7 @@ export default function AdminPage() {
             <header className="page-header">
                 <h1 className="page-header__title">🛡️ Admin Panel</h1>
                 <p className="page-header__subtitle">
-                    Create tournaments, manage rounds, and control the Battle Royale.
+                    Create tournaments, manage rounds, and control The Gauntlet.
                 </p>
             </header>
 
@@ -180,7 +180,7 @@ export default function AdminPage() {
                     <input
                         type="text"
                         className="input"
-                        placeholder="Tournament name (e.g., Battle Royale Season 1)"
+                        placeholder="Tournament name (e.g., The Gauntlet Season 1)"
                         value={newName}
                         onChange={(e) => setNewName(e.target.value)}
                         disabled={creating}

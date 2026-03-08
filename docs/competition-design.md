@@ -1,8 +1,8 @@
-# Competition Design: Battle Royale
+# Competition Design: The Gauntlet
 
 ## Overview
 
-Adrena Battle Royale is a bracket-style elimination trading competition built on top of the Adrena perpetuals protocol. Traders compete in rounds, and the bottom performers are eliminated each round until a small group of top traders remains.
+Adrena: The Gauntlet is a bracket-style elimination trading competition built on top of the Adrena perpetuals protocol. Traders compete in rounds, and the bottom performers are eliminated each round until a small group of top traders remains.
 
 The engine consumes live position data from the Adrena public API, computes a multi-dimensional performance score (the Composite Performance Index), and uses it to rank, eliminate, and advance traders through rounds.
 
@@ -179,9 +179,9 @@ This provides a complete, auditable record of how every score was derived.
 
 ## Competitive Analysis
 
-Battle Royale is designed to solve specific problems with existing competition formats in the Solana perps space:
+The Gauntlet is designed to solve specific problems with existing competition formats in the Solana perps space:
 
-| Platform | Format | Limitation | How Battle Royale Differs |
+| Platform | Format | Limitation | How The Gauntlet Differs |
 |----------|--------|-----------|--------------------------|
 | Jupiter | Flat PnL leaderboard | Whales dominate; small traders have no realistic path to winning | Brackets normalize competition — you compete against 3-7 others in your group, not 10,000 sharks |
 | Drift | No competition infrastructure | No structured engagement mechanism | Full tournament lifecycle with rounds, progression, and elimination |

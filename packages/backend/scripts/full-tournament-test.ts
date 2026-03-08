@@ -71,7 +71,7 @@ async function backendFetch(
 }
 
 async function main(): Promise<void> {
-    console.log('=== Adrena Battle Royale: Full Tournament Simulation ===');
+    console.log('=== Adrena: The Gauntlet — Full Tournament Simulation ===');
     console.log(`Timestamp: ${new Date().toISOString()}`);
     console.log(`Wallets: ${LEADERBOARD_WALLETS.length} (from Adrena Mutagen Leaderboard)\n`);
 

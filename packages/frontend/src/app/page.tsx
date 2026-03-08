@@ -35,7 +35,7 @@ export default function DashboardPage() {
   return (
     <div className="container">
       <header className="page-header">
-        <h1 className="page-header__title">⚔️ Adrena Battle Royale</h1>
+        <h1 className="page-header__title">⚔️ Adrena: The Gauntlet</h1>
         <p className="page-header__subtitle">
           Bracket-style elimination trading competitions. Survive or be eliminated.
         </p>
@@ -62,7 +62,7 @@ export default function DashboardPage() {
           <div className={styles.emptyIcon}>🏟️</div>
           <h2>No Tournaments Yet</h2>
           <p className={styles.emptyText}>
-            No Battle Royale tournaments have been created. Go to the{' '}
+            No Gauntlet tournaments have been created. Go to the{' '}
             <a href="/admin">Admin Panel</a> to create one.
           </p>
         </div>

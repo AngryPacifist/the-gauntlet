@@ -2,7 +2,7 @@
     "name": "adrena-battle-royale",
     "version": "1.0.0",
     "private": true,
-    "description": "Battle Royale Trading Competition Engine for Adrena",
+    "description": "The Gauntlet — Trading Competition Engine for Adrena",
     "workspaces": [
         "packages/backend",
         "packages/frontend"

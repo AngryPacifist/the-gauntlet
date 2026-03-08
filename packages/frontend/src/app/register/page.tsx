@@ -74,7 +74,7 @@ export default function RegisterPage() {
                     <span className="gradient-text">Join the Battle</span>
                 </h1>
                 <p className="hero-subtitle">
-                    Register your Solana wallet to compete in the Adrena Battle Royale.
+                    Register your Solana wallet to compete in The Gauntlet.
                     Your trading history will be verified for eligibility.
                 </p>
             </div>
@@ -153,7 +153,7 @@ export default function RegisterPage() {
                             <div className="info-grid">
                                 <div className="info-item">
                                     <span className="info-label">Format</span>
-                                    <span className="info-value">Battle Royale ({selectedTournament.config.bracketSize} per bracket)</span>
+                                    <span className="info-value">The Gauntlet ({selectedTournament.config.bracketSize} per bracket)</span>
                                 </div>
                                 <div className="info-item">
                                     <span className="info-label">Round Duration</span>

@@ -2,7 +2,7 @@
 
 ## Overview
 
-Testing of the Adrena Battle Royale engine against live data from the Adrena API.  
+Testing of the Adrena: The Gauntlet engine against live data from the Adrena API.  
 Conducted March 8, 2026.
 
 ---

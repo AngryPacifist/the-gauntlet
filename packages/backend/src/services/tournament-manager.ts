@@ -1,7 +1,7 @@
 // ============================================================================
 // Tournament Manager
 //
-// Orchestrates the lifecycle of a Battle Royale tournament:
+// Orchestrates the lifecycle of a Gauntlet tournament:
 //   Registration → Bracket Creation → Round Progression → Elimination → Results
 //
 // Core operations:
@@ -32,7 +32,7 @@ import type {
 } from '../types.js';
 import { DEFAULT_TOURNAMENT_CONFIG, DEFAULT_CPI_WEIGHTS } from '../types.js';
 
-const ROUND_NAMES: RoundName[] = ['The Drop', 'The Clash', 'The Final Ring'];
+const ROUND_NAMES: RoundName[] = ['First Blood', 'The Crucible', 'Sudden Death', 'Endgame'];
 
 const adrenaClient = new AdrenaClient();
 

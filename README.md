@@ -1,4 +1,4 @@
-# Adrena Battle Royale
+# Adrena: The Gauntlet
 
 A bracket-style elimination trading competition engine built for the [Adrena](https://www.adrena.xyz/) perpetuals protocol on Solana.
 
