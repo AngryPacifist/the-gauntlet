@@ -125,4 +125,4 @@ adrena-battle-royale/
 
 ## License
 
-MIT
+[MIT](LICENSE)
