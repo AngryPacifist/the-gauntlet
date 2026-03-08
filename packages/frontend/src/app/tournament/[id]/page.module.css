@@ -1,0 +1,249 @@
+/* Tournament Detail Page Styles */
+
+.center {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-md);
+    padding: var(--space-3xl) 0;
+}
+
+.errorCard {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-md);
+    margin-top: var(--space-2xl);
+}
+
+.headerRow {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--space-md);
+}
+
+.stats {
+    margin-bottom: var(--space-2xl);
+}
+
+.section {
+    margin-bottom: var(--space-2xl);
+}
+
+.sectionTitle {
+    font-size: 1.25rem;
+    font-weight: 700;
+    margin-bottom: var(--space-md);
+    color: var(--text-primary);
+}
+
+/* Registration */
+.regForm {
+    display: flex;
+    gap: var(--space-md);
+}
+
+.regForm .input {
+    flex: 1;
+}
+
+.regResult {
+    margin-top: var(--space-md);
+    padding: var(--space-md);
+    border-radius: var(--radius-md);
+    font-size: 0.875rem;
+}
+
+.regSuccess {
+    background: var(--status-success-bg);
+    color: var(--status-success);
+    border: 1px solid rgba(0, 230, 118, 0.2);
+}
+
+.regFail {
+    background: var(--status-danger-bg);
+    color: var(--status-danger);
+    border: 1px solid rgba(255, 71, 87, 0.2);
+}
+
+/* Brackets Grid */
+.roundMeta {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+    margin-bottom: var(--space-lg);
+}
+
+.countdown {
+    color: var(--accent-secondary);
+    font-weight: 600;
+    font-size: 0.875rem;
+}
+
+.bracketsGrid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+    gap: var(--space-lg);
+}
+
+.bracketCard {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+}
+
+.bracketHeader {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.bracketHeader h3 {
+    font-size: 1rem;
+    font-weight: 700;
+}
+
+.bracketCount {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+.entriesList {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.entryRow {
+    display: grid;
+    grid-template-columns: 36px 1fr auto auto;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: var(--space-sm) var(--space-md);
+    border-radius: var(--radius-sm);
+    background: var(--bg-secondary);
+    transition: background var(--transition-fast);
+}
+
+.entryRow:hover {
+    background: var(--bg-card-hover);
+}
+
+.entryEliminated {
+    opacity: 0.5;
+    background: var(--status-danger-bg);
+}
+
+.entryAdvanced {
+    background: var(--status-success-bg);
+}
+
+.entryRank {
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: var(--text-muted);
+    text-align: center;
+}
+
+.entryInfo {
+    min-width: 0;
+    overflow: hidden;
+}
+
+.entryScore {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+}
+
+.cpiValue {
+    font-size: 1rem;
+    font-weight: 800;
+    background: var(--gradient-brand-text);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+.cpiLabel {
+    font-size: 0.625rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-muted);
+}
+
+.entryStatus {
+    min-width: 40px;
+    text-align: right;
+}
+
+/* Score Breakdown */
+.scoreBreakdown {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+    padding-top: var(--space-md);
+    border-top: 1px solid var(--border-subtle);
+}
+
+.scoreRow {
+    display: grid;
+    grid-template-columns: 80px 1fr;
+    align-items: center;
+    gap: var(--space-sm);
+}
+
+.scoreLabel {
+    font-size: 0.6875rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-muted);
+}
+
+/* Round History */
+.roundHistory {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+}
+
+.roundCard {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--space-md) var(--space-lg);
+}
+
+.roundInfo {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+}
+
+.roundNumber {
+    font-weight: 700;
+    font-size: 0.875rem;
+}
+
+.roundName {
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+}
+
+@media (max-width: 480px) {
+    .regForm {
+        flex-direction: column;
+    }
+
+    .bracketsGrid {
+        grid-template-columns: 1fr;
+    }
+
+    .headerRow {
+        flex-direction: column;
+    }
+}

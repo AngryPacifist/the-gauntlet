@@ -1,0 +1,18 @@
+{
+    "name": "adrena-battle-royale",
+    "version": "1.0.0",
+    "private": true,
+    "description": "Battle Royale Trading Competition Engine for Adrena",
+    "workspaces": [
+        "packages/backend",
+        "packages/frontend"
+    ],
+    "scripts": {
+        "dev": "concurrently \"npm run dev -w packages/backend\" \"npm run dev -w packages/frontend\"",
+        "build": "npm run build -w packages/backend && npm run build -w packages/frontend",
+        "db:setup": "npm run db:setup -w packages/backend"
+    },
+    "devDependencies": {
+        "concurrently": "^9.1.0"
+    }
+}

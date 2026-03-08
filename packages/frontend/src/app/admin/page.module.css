@@ -1,0 +1,133 @@
+/* Admin Page Styles */
+
+.section {
+    margin-bottom: var(--space-2xl);
+}
+
+.sectionTitle {
+    font-size: 1.125rem;
+    font-weight: 700;
+    margin-bottom: var(--space-md);
+    color: var(--text-primary);
+}
+
+.center {
+    display: flex;
+    justify-content: center;
+    padding: var(--space-xl) 0;
+}
+
+/* Admin Secret */
+.secretRow {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+}
+
+.secretRow .input {
+    max-width: 400px;
+}
+
+.secretHint {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+/* Create Form */
+.createForm {
+    display: flex;
+    gap: var(--space-md);
+}
+
+.createForm .input {
+    flex: 1;
+}
+
+/* Tournament Controls */
+.controlCard {
+    margin-bottom: var(--space-md);
+}
+
+.controlHeader {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    margin-bottom: var(--space-md);
+}
+
+.controlName {
+    font-size: 1rem;
+    font-weight: 700;
+}
+
+.controlId {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+}
+
+.controlActions {
+    display: flex;
+    gap: var(--space-sm);
+    flex-wrap: wrap;
+}
+
+.completedText {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+    align-self: center;
+}
+
+.emptyText {
+    color: var(--text-muted);
+    font-size: 0.875rem;
+}
+
+/* Action Log */
+.logPanel {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    padding: var(--space-md);
+    max-height: 300px;
+    overflow-y: auto;
+    font-family: var(--font-mono);
+    font-size: 0.8125rem;
+}
+
+.logEmpty {
+    color: var(--text-muted);
+}
+
+.logEntry {
+    padding: var(--space-xs) 0;
+    border-bottom: 1px solid var(--border-subtle);
+    color: var(--text-secondary);
+}
+
+.logEntry:last-child {
+    border-bottom: none;
+}
+
+@media (max-width: 480px) {
+    .createForm {
+        flex-direction: column;
+    }
+
+    .secretRow {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .secretRow .input {
+        max-width: 100%;
+    }
+
+    .controlActions {
+        flex-direction: column;
+    }
+
+    .controlActions .btn {
+        width: 100%;
+    }
+}

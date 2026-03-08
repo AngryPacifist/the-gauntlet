@@ -1,0 +1,528 @@
+# API Reference
+
+Base URL: `http://localhost:3001/api`
+
+All responses follow a consistent envelope:
+
+```json
+{
+  "success": true,
+  "error": null,
+  "data": { ... }
+}
+```
+
+On error:
+
+```json
+{
+  "success": false,
+  "error": "Description of what went wrong",
+  "data": null
+}
+```
+
+---
+
+## Public Endpoints
+
+### Health Check
+
+```
+GET /api/health
+```
+
+Returns the server status.
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "service": "adrena-battle-royale",
+    "status": "healthy",
+    "timestamp": "2026-03-08T05:00:00.000Z"
+  }
+}
+```
+
+---
+
+### List Tournaments
+
+```
+GET /api/tournaments
+```
+
+Returns all tournaments, ordered by creation date (newest first).
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": 1,
+      "name": "Season 1",
+      "status": "registration",
+      "config": {
+        "bracketSize": 8,
+        "advanceRatio": 0.5,
+        "roundDurationHours": 72,
+        "minHistoricalTrades": 5,
+        "minPositionCollateral": 10,
+        "minTradeDurationSec": 120,
+        "maxDaysInactive": 30
+      },
+      "createdAt": "2026-03-08T04:00:00.000Z",
+      "updatedAt": "2026-03-08T04:00:00.000Z"
+    }
+  ]
+}
+```
+
+---
+
+### Get Tournament
+
+```
+GET /api/tournaments/:id
+```
+
+Returns tournament details including rounds and registration counts.
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "id": 1,
+    "name": "Season 1",
+    "status": "active",
+    "config": { ... },
+    "createdAt": "2026-03-08T04:00:00.000Z",
+    "updatedAt": "2026-03-08T05:00:00.000Z",
+    "rounds": [
+      {
+        "id": 1,
+        "tournamentId": 1,
+        "roundNumber": 1,
+        "name": "The Drop",
+        "startTime": "2026-03-08T05:00:00.000Z",
+        "endTime": "2026-03-11T05:00:00.000Z",
+        "status": "active"
+      }
+    ],
+    "registrationCount": 24,
+    "eligibleCount": 16
+  }
+}
+```
+
+---
+
+### Get Tournament Brackets
+
+```
+GET /api/tournaments/:id/brackets
+```
+
+Returns the most recent round and all its brackets with entries, sorted by CPI descending within each bracket.
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "round": {
+      "id": 1,
+      "tournamentId": 1,
+      "roundNumber": 1,
+      "name": "The Drop",
+      "startTime": "...",
+      "endTime": "...",
+      "status": "active"
+    },
+    "brackets": [
+      {
+        "id": 1,
+        "roundId": 1,
+        "bracketNumber": 1,
+        "entries": [
+          {
+            "id": 1,
+            "bracketId": 1,
+            "wallet": "AbcXyz...",
+            "pnlScore": 72.5,
+            "riskScore": 88.0,
+            "consistencyScore": 65.3,
+            "activityScore": 45.0,
+            "cpiScore": 70.12,
+            "eliminated": false,
+            "advanced": false
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+---
+
+### Update Tournament
+
+```
+PUT /api/tournaments/:id
+```
+
+Updates a tournament's name and/or config. **Admin-only. Only works during `registration` status.**
+
+**Headers:** `X-Admin-Secret: your-secret`
+
+**Request body:**
+```json
+{
+  "name": "Season 1 — Updated",
+  "config": {
+    "bracketSize": 16,
+    "roundDurationHours": 48
+  }
+}
+```
+
+Config overrides are merged with the existing config — you only need to send the fields you want to change.
+
+**Response:** Returns the updated tournament object.
+
+**Errors:**
+- `401` if admin secret is missing/wrong
+- `404` if tournament not found
+- `409` if tournament is not in `registration` status
+
+---
+
+### Delete Tournament
+
+```
+DELETE /api/tournaments/:id
+```
+
+Deletes a tournament and all its registrations. **Admin-only. Only works during `registration` status.**
+
+**Headers:** `X-Admin-Secret: your-secret`
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "id": 1,
+    "name": "Season 1",
+    "deleted": true
+  }
+}
+```
+
+**Errors:**
+- `401` if admin secret is missing/wrong
+- `404` if tournament not found
+- `409` if tournament is not in `registration` status
+
+---
+
+### Register Wallet
+
+```
+POST /api/register
+```
+
+Registers a wallet for a tournament. Checks eligibility against the Adrena API.
+
+**Request body:**
+```json
+{
+  "tournamentId": 1,
+  "wallet": "BVsfLRjj5LBYUxE39cr8uQF99BU1LxYUon4AqEEQhBxX"
+}
+```
+
+**Success response (eligible):**
+```json
+{
+  "success": true,
+  "data": {
+    "eligible": true
+  }
+}
+```
+
+**Success response (ineligible):**
+```json
+{
+  "success": true,
+  "data": {
+    "eligible": false,
+    "reason": "Need at least 5 closed trades. Found 0."
+  }
+}
+```
+
+**Validation rules:**
+- Wallet must be 32-44 characters (Solana base58 address format).
+- Tournament must exist and be in `registration` status.
+- Duplicate registrations are rejected.
+- The Adrena API is queried for historical positions. If the API errors (e.g. wallet unknown), the wallet is treated as having 0 positions.
+
+---
+
+### Get Registrations
+
+```
+GET /api/register/:tournamentId
+```
+
+Returns all registrations for a tournament.
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": 1,
+      "tournamentId": 1,
+      "wallet": "AbcXyz...",
+      "registeredAt": "2026-03-08T04:30:00.000Z",
+      "eligible": true
+    }
+  ]
+}
+```
+
+---
+
+### Get Bracket
+
+```
+GET /api/brackets/:id
+```
+
+Returns a single bracket with its entries, sorted by CPI descending.
+
+---
+
+### Get Trader Profile
+
+```
+GET /api/brackets/traders/:wallet?tournamentId=1
+```
+
+Returns a trader's performance across all rounds in a tournament.
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "wallet": "AbcXyz...",
+    "tournament": { "id": 1, "name": "Season 1" },
+    "rounds": [
+      {
+        "roundNumber": 1,
+        "roundName": "The Drop",
+        "bracketNumber": 2,
+        "scores": {
+          "pnlScore": 72.5,
+          "riskScore": 88.0,
+          "consistencyScore": 65.3,
+          "activityScore": 45.0,
+          "cpiScore": 70.12
+        },
+        "eliminated": false,
+        "advanced": true
+      }
+    ]
+  }
+}
+```
+
+---
+
+### Get Leaderboard
+
+```
+GET /api/brackets/leaderboard/:tournamentId
+```
+
+Returns all participants ranked across the tournament. Sorting priority:
+1. Active traders before eliminated traders.
+2. Traders who survived more rounds rank higher.
+3. Within the same round, sorted by CPI score.
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "totalRounds": 2,
+    "entries": [
+      {
+        "wallet": "AbcXyz...",
+        "cpiScore": 70.12,
+        "pnlScore": 72.5,
+        "riskScore": 88.0,
+        "consistencyScore": 65.3,
+        "activityScore": 45.0,
+        "lastRound": 2,
+        "eliminated": false,
+        "advanced": true
+      }
+    ]
+  }
+}
+```
+
+---
+
+## Admin Endpoints
+
+All admin endpoints require the `X-Admin-Secret` header matching the `ADMIN_SECRET` environment variable. Returns `401 Unauthorized` if the secret is missing or incorrect.
+
+### Create Tournament
+
+```
+POST /api/tournaments
+```
+
+**Headers:**
+```
+X-Admin-Secret: <your-admin-secret>
+```
+
+**Request body:**
+```json
+{
+  "name": "Season 1",
+  "config": {
+    "bracketSize": 16,
+    "roundDurationHours": 48
+  }
+}
+```
+
+The `config` object is optional. Any omitted fields use the defaults listed in the competition design document.
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": { "id": 1 }
+}
+```
+
+---
+
+### Start Tournament
+
+```
+POST /api/admin/start
+```
+
+Closes registration, shuffles eligible wallets, creates Round 1 brackets, and sets the tournament status to `active`.
+
+**Request body:**
+```json
+{
+  "tournamentId": 1
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "roundId": 1,
+    "bracketCount": 2
+  }
+}
+```
+
+**Errors:**
+- Tournament must be in `registration` status.
+- At least 2 eligible traders are required.
+
+---
+
+### Compute Scores
+
+```
+POST /api/admin/score/:roundId
+```
+
+Triggers CPI computation for all traders in all brackets of the specified round. Fetches live position data from the Adrena API for each trader.
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": { "scoredCount": 16 }
+}
+```
+
+Scoring continues even if individual trader API calls fail. Failures are logged but do not stop the round.
+
+---
+
+### Advance Round
+
+```
+POST /api/admin/advance
+```
+
+Ranks each bracket by CPI, eliminates the bottom half, and creates the next round with the advancing traders.
+
+**Request body:**
+```json
+{
+  "tournamentId": 1
+}
+```
+
+**Response (next round created):**
+```json
+{
+  "success": true,
+  "data": {
+    "nextRoundId": 2,
+    "advanced": 8,
+    "eliminated": 8
+  }
+}
+```
+
+**Response (tournament completed):**
+```json
+{
+  "success": true,
+  "data": {
+    "completed": true
+  }
+}
+```
+
+The tournament completes if 3 or fewer traders remain or 3 rounds have been played.
+
+---
+
+## Error Codes
+
+| Status | Meaning                              |
+|--------|--------------------------------------|
+| 200    | Success                              |
+| 201    | Created (registration, tournament)   |
+| 400    | Bad request (missing/invalid params) |
+| 401    | Unauthorized (admin secret required) |
+| 404    | Resource not found                   |
+| 500    | Internal server error                |
