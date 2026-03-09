@@ -302,6 +302,22 @@
     color: var(--text-muted);
 }
 
+@media (max-width: 768px) {
+    .headerRow {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .journeyTrack {
+        flex-wrap: wrap;
+        gap: var(--space-sm);
+    }
+
+    .journeyTrack::before {
+        display: none;
+    }
+}
+
 @media (max-width: 600px) {
     .scoreGrid {
         grid-template-columns: 1fr;

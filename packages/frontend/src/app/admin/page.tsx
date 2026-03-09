@@ -79,10 +79,13 @@ export default function AdminPage() {
             setCreating(true);
             const result = await createTournament(newName.trim(), undefined, adminSecret);
             addLog(`Created tournament "${newName}" (id: ${result.id})`);
+            showToast(`Tournament "${newName}" created`, 'success');
             setNewName('');
             loadTournaments();
         } catch (err) {
-            addLog(`Error: ${err instanceof Error ? err.message : 'Failed to create'}`);
+            const msg = err instanceof Error ? err.message : 'Failed to create';
+            addLog(`Error: ${msg}`);
+            showToast(msg, 'error');
         } finally {
             setCreating(false);
         }
@@ -100,9 +103,12 @@ export default function AdminPage() {
             addLog(
                 `Started "${tournamentName}": Round 1 created with ${result.bracketCount} bracket(s)`,
             );
+            showToast(`"${tournamentName}" started`, 'success');
             loadTournaments();
         } catch (err) {
-            addLog(`Error: ${err instanceof Error ? err.message : 'Failed to start'}`);
+            const msg = err instanceof Error ? err.message : 'Failed to start';
+            addLog(`Error: ${msg}`);
+            showToast(msg, 'error');
         } finally {
             setActionLoading(false);
         }
@@ -119,6 +125,7 @@ export default function AdminPage() {
             const data = await getTournamentBrackets(tournamentId);
             if (!data.round) {
                 addLog('Error: No active round found');
+                showToast('No active round found', 'error');
                 setActionLoading(false);
                 return;
             }
@@ -126,9 +133,12 @@ export default function AdminPage() {
             addLog(
                 `Scored "${tournamentName}" Round ${data.round.roundNumber}: ${result.scoredCount} entries`,
             );
+            showToast(`Scores computed: ${result.scoredCount} entries`, 'success');
             loadTournaments();
         } catch (err) {
-            addLog(`Error: ${err instanceof Error ? err.message : 'Failed to score'}`);
+            const msg = err instanceof Error ? err.message : 'Failed to score';
+            addLog(`Error: ${msg}`);
+            showToast(msg, 'error');
         } finally {
             setActionLoading(false);
         }
@@ -145,14 +155,18 @@ export default function AdminPage() {
             const result = await adminAdvanceRound(tournamentId, adminSecret);
             if (result.completed) {
                 addLog(`"${tournamentName}" completed!`);
+                showToast(`"${tournamentName}" completed!`, 'success');
             } else {
                 addLog(
                     `"${tournamentName}": ${result.advanced} advanced, ${result.eliminated} eliminated`,
                 );
+                showToast(`Round advanced: ${result.advanced} advanced, ${result.eliminated} eliminated`, 'success');
             }
             loadTournaments();
         } catch (err) {
-            addLog(`Error: ${err instanceof Error ? err.message : 'Failed to advance'}`);
+            const msg = err instanceof Error ? err.message : 'Failed to advance';
+            addLog(`Error: ${msg}`);
+            showToast(msg, 'error');
         } finally {
             setActionLoading(false);
         }
@@ -169,9 +183,12 @@ export default function AdminPage() {
             setActionLoading(true);
             await adminCancelTournament(tournamentId, adminSecret);
             addLog(`Cancelled "${tournamentName}"`);
+            showToast(`"${tournamentName}" cancelled`, 'success');
             loadTournaments();
         } catch (err) {
-            addLog(`Error: ${err instanceof Error ? err.message : 'Failed to cancel'}`);
+            const msg = err instanceof Error ? err.message : 'Failed to cancel';
+            addLog(`Error: ${msg}`);
+            showToast(msg, 'error');
         } finally {
             setActionLoading(false);
         }
@@ -188,9 +205,12 @@ export default function AdminPage() {
             setActionLoading(true);
             await deleteTournament(tournamentId, adminSecret);
             addLog(`Deleted "${tournamentName}"`);
+            showToast(`"${tournamentName}" deleted`, 'success');
             loadTournaments();
         } catch (err) {
-            addLog(`Error: ${err instanceof Error ? err.message : 'Failed to delete'}`);
+            const msg = err instanceof Error ? err.message : 'Failed to delete';
+            addLog(`Error: ${msg}`);
+            showToast(msg, 'error');
         } finally {
             setActionLoading(false);
         }

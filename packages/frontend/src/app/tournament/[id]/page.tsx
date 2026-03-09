@@ -20,6 +20,7 @@ import {
     Trophy,
     ChevronRight,
 } from 'lucide-react';
+import Link from 'next/link';
 import styles from './page.module.css';
 
 export default function TournamentPage({ params }: { params: Promise<{ id: string }> }) {
@@ -43,6 +44,9 @@ export default function TournamentPage({ params }: { params: Promise<{ id: strin
     } | null>(null);
     const [registering, setRegistering] = useState(false);
 
+    // Live clock for countdown timer
+    const [now, setNow] = useState(Date.now());
+
     useEffect(() => {
         loadData();
     }, [tournamentId]);
@@ -59,6 +63,20 @@ export default function TournamentPage({ params }: { params: Promise<{ id: strin
             loadBrackets(selectedRoundId);
         }
     }, [selectedRoundId]);
+
+    // Tick the clock every 60s so countdown timers update
+    useEffect(() => {
+        const interval = setInterval(() => setNow(Date.now()), 60_000);
+        return () => clearInterval(interval);
+    }, []);
+
+    // Poll for data updates while tournament is active or in registration
+    useEffect(() => {
+        if (!tournament) return;
+        if (tournament.status !== 'active' && tournament.status !== 'registration') return;
+        const interval = setInterval(loadData, 60_000);
+        return () => clearInterval(interval);
+    }, [tournament?.status]);
 
     async function loadData() {
         try {
@@ -116,8 +134,8 @@ export default function TournamentPage({ params }: { params: Promise<{ id: strin
     }
 
     function getTimeRemaining(endTime: string): string {
-        const diff = new Date(endTime).getTime() - Date.now();
-        if (diff <= 0) return 'Ended';
+        const diff = new Date(endTime).getTime() - now;
+        if (diff <= 0) return 'Round ended — awaiting advancement';
         const hours = Math.floor(diff / (1000 * 60 * 60));
         const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
         return `${hours}h ${minutes}m remaining`;
@@ -139,9 +157,9 @@ export default function TournamentPage({ params }: { params: Promise<{ id: strin
             <div className="container">
                 <div className={`card ${styles.errorCard}`}>
                     <p>{error || 'Tournament not found'}</p>
-                    <a href="/" className="btn btn--secondary">
+                    <Link href="/" className="btn btn--secondary">
                         <ArrowLeft size={14} /> Back
-                    </a>
+                    </Link>
                 </div>
             </div>
         );
@@ -158,9 +176,9 @@ export default function TournamentPage({ params }: { params: Promise<{ id: strin
         <div className="container">
             {/* Header */}
             <header className="page-header">
-                <a href="/" className={styles.backLink}>
+                <Link href="/" className={styles.backLink}>
                     <ArrowLeft size={14} /> Back to Dashboard
-                </a>
+                </Link>
                 <div className={styles.headerRow}>
                     <div>
                         <h1 className="page-header__title">{tournament.name}</h1>
@@ -277,13 +295,13 @@ export default function TournamentPage({ params }: { params: Promise<{ id: strin
                                 ? `Round ${bracketsData.round.roundNumber}: ${bracketsData.round.name}`
                                 : 'Brackets'}
                         </h2>
-                        <a
+                        <Link
                             href={`/leaderboard/${tournamentId}`}
                             className="btn btn--secondary"
                             style={{ fontSize: '0.8125rem', padding: '6px 12px' }}
                         >
                             Leaderboard <ChevronRight size={14} />
-                        </a>
+                        </Link>
                     </div>
 
                     {bracketsData.round && bracketsData.round.status === 'active' && (
@@ -328,9 +346,9 @@ export default function TournamentPage({ params }: { params: Promise<{ id: strin
                                                 >
                                                     <div className={styles.entryRank}>#{idx + 1}</div>
                                                     <div className={styles.entryInfo}>
-                                                        <a href={`/trader/${entry.wallet}?tournamentId=${tournamentId}`} className="wallet-address">
+                                                        <Link href={`/trader/${entry.wallet}?tournamentId=${tournamentId}`} className="wallet-address">
                                                             {formatWallet(entry.wallet)}
-                                                        </a>
+                                                        </Link>
                                                     </div>
                                                     <div className={styles.entryScore}>
                                                         <span className={styles.cpiValue}>
@@ -347,51 +365,57 @@ export default function TournamentPage({ params }: { params: Promise<{ id: strin
                                                         )}
                                                     </div>
                                                 </div>
+                                                {/* Per-trader collapsible score breakdown */}
+                                                {entry.cpiScore > 0 && (
+                                                    <details className={styles.entryDetails}>
+                                                        <summary className={styles.scoreToggle}>Score Breakdown</summary>
+                                                        <div className={styles.scoreBreakdown}>
+                                                            <div className={styles.scoreRow}>
+                                                                <span className={styles.scoreLabel}>PnL</span>
+                                                                <div className="score-bar">
+                                                                    <div
+                                                                        className="score-bar__fill score-bar__fill--pnl"
+                                                                        style={{ width: `${entry.pnlScore}%` }}
+                                                                    />
+                                                                </div>
+                                                                <span className={styles.scoreValue}>{entry.pnlScore.toFixed(1)}</span>
+                                                            </div>
+                                                            <div className={styles.scoreRow}>
+                                                                <span className={styles.scoreLabel}>Risk</span>
+                                                                <div className="score-bar">
+                                                                    <div
+                                                                        className="score-bar__fill score-bar__fill--risk"
+                                                                        style={{ width: `${entry.riskScore}%` }}
+                                                                    />
+                                                                </div>
+                                                                <span className={styles.scoreValue}>{entry.riskScore.toFixed(1)}</span>
+                                                            </div>
+                                                            <div className={styles.scoreRow}>
+                                                                <span className={styles.scoreLabel}>Consistency</span>
+                                                                <div className="score-bar">
+                                                                    <div
+                                                                        className="score-bar__fill score-bar__fill--consistency"
+                                                                        style={{ width: `${entry.consistencyScore}%` }}
+                                                                    />
+                                                                </div>
+                                                                <span className={styles.scoreValue}>{entry.consistencyScore.toFixed(1)}</span>
+                                                            </div>
+                                                            <div className={styles.scoreRow}>
+                                                                <span className={styles.scoreLabel}>Activity</span>
+                                                                <div className="score-bar">
+                                                                    <div
+                                                                        className="score-bar__fill score-bar__fill--activity"
+                                                                        style={{ width: `${entry.activityScore}%` }}
+                                                                    />
+                                                                </div>
+                                                                <span className={styles.scoreValue}>{entry.activityScore.toFixed(1)}</span>
+                                                            </div>
+                                                        </div>
+                                                    </details>
+                                                )}
                                             </div>
                                         ))}
                                     </div>
-
-                                    {/* Score breakdown bars for top entry */}
-                                    {bracket.entries.length > 0 && bracket.entries[0].cpiScore > 0 && (
-                                        <div className={styles.scoreBreakdown}>
-                                            <div className={styles.scoreRow}>
-                                                <span className={styles.scoreLabel}>PnL</span>
-                                                <div className="score-bar">
-                                                    <div
-                                                        className="score-bar__fill score-bar__fill--pnl"
-                                                        style={{ width: `${bracket.entries[0].pnlScore}%` }}
-                                                    />
-                                                </div>
-                                            </div>
-                                            <div className={styles.scoreRow}>
-                                                <span className={styles.scoreLabel}>Risk</span>
-                                                <div className="score-bar">
-                                                    <div
-                                                        className="score-bar__fill score-bar__fill--risk"
-                                                        style={{ width: `${bracket.entries[0].riskScore}%` }}
-                                                    />
-                                                </div>
-                                            </div>
-                                            <div className={styles.scoreRow}>
-                                                <span className={styles.scoreLabel}>Consistency</span>
-                                                <div className="score-bar">
-                                                    <div
-                                                        className="score-bar__fill score-bar__fill--consistency"
-                                                        style={{ width: `${bracket.entries[0].consistencyScore}%` }}
-                                                    />
-                                                </div>
-                                            </div>
-                                            <div className={styles.scoreRow}>
-                                                <span className={styles.scoreLabel}>Activity</span>
-                                                <div className="score-bar">
-                                                    <div
-                                                        className="score-bar__fill score-bar__fill--activity"
-                                                        style={{ width: `${bracket.entries[0].activityScore}%` }}
-                                                    />
-                                                </div>
-                                            </div>
-                                        </div>
-                                    )}
                                 </div>
                             );
                         })}

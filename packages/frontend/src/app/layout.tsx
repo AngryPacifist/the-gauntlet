@@ -1,6 +1,7 @@
 'use client';
 
 import { usePathname } from 'next/navigation';
+import Link from 'next/link';
 import { Swords } from 'lucide-react';
 import './globals.css';
 
@@ -29,10 +30,10 @@ export default function RootLayout({
       <body>
         <nav className="nav">
           <div className="container nav__inner">
-            <a href="/" className="nav__logo">
+            <Link href="/" className="nav__logo">
               <Swords size={20} strokeWidth={2.5} />
               <span className="nav__logo-text">The Gauntlet</span>
-            </a>
+            </Link>
             <div className="nav__links">
               {navLinks.map((link) => {
                 const isActive =
@@ -40,13 +41,13 @@ export default function RootLayout({
                     ? pathname === '/'
                     : pathname.startsWith(link.href);
                 return (
-                  <a
+                  <Link
                     key={link.href}
                     href={link.href}
                     className={`nav__link${isActive ? ' nav__link--active' : ''}`}
                   >
                     {link.label}
-                  </a>
+                  </Link>
                 );
               })}
             </div>

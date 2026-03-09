@@ -14,6 +14,7 @@ import {
     Skull,
     Swords,
 } from 'lucide-react';
+import Link from 'next/link';
 import styles from './page.module.css';
 
 export default function TraderPage({ params }: { params: Promise<{ wallet: string }> }) {
@@ -137,9 +138,9 @@ export default function TraderPage({ params }: { params: Promise<{ wallet: strin
                     {/* Tournament context */}
                     <div className={`card ${styles.contextCard}`}>
                         <span className={styles.contextLabel}>Tournament</span>
-                        <a href={`/tournament/${profile.tournament.id}`} className={styles.contextLink}>
+                        <Link href={`/tournament/${profile.tournament.id}`} className={styles.contextLink}>
                             {profile.tournament.name}
-                        </a>
+                        </Link>
                     </div>
 
                     {/* Journey timeline */}

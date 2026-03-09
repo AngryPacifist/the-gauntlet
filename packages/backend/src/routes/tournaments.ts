@@ -5,7 +5,7 @@
 // GET    /api/tournaments             — List all tournaments
 // GET    /api/tournaments/:id         — Get tournament state
 // PUT    /api/tournaments/:id         — Update tournament (admin, registration only)
-// DELETE /api/tournaments/:id         — Delete tournament (admin, registration only)
+// DELETE /api/tournaments/:id         — Delete tournament (admin, full cascade)
 // GET    /api/tournaments/:id/brackets — Get all brackets for active round
 // ============================================================================
 
@@ -15,9 +15,8 @@ import {
     getTournamentState,
 } from '../services/tournament-manager.js';
 import { db } from '../db/index.js';
-import { rounds, brackets, bracketEntries, registrations } from '../db/schema.js';
-import { tournaments } from '../db/schema.js';
-import { eq, desc } from 'drizzle-orm';
+import { tournaments, rounds, brackets, bracketEntries, registrations, scoreSnapshots } from '../db/schema.js';
+import { eq, desc, inArray } from 'drizzle-orm';
 import type { TournamentConfig } from '../types.js';
 
 const router = Router();
@@ -179,7 +178,7 @@ router.put('/:id', async (req, res) => {
     }
 });
 
-// DELETE /api/tournaments/:id — Delete tournament (admin, registration status only)
+// DELETE /api/tournaments/:id — Delete tournament (admin, full cascade)
 router.delete('/:id', async (req, res) => {
     try {
         const secret = req.headers['x-admin-secret'] as string;
@@ -196,7 +195,6 @@ router.delete('/:id', async (req, res) => {
             return;
         }
 
-        // Verify tournament exists and is still in registration phase
         const [tournament] = await db
             .select()
             .from(tournaments)
@@ -208,25 +206,55 @@ router.delete('/:id', async (req, res) => {
             return;
         }
 
-        if (tournament.status !== 'registration') {
-            res.status(409).json({
-                success: false,
-                error: `Cannot delete tournament in "${tournament.status}" status. Only tournaments in "registration" status can be deleted.`,
-            });
-            return;
+        // Cascade delete in FK dependency order:
+        // scoreSnapshots → bracketEntries → brackets → rounds → registrations → tournament
+
+        // 1. Gather round IDs for this tournament
+        const tournamentRounds = await db
+            .select({ id: rounds.id })
+            .from(rounds)
+            .where(eq(rounds.tournamentId, id));
+        const roundIds = tournamentRounds.map(r => r.id);
+
+        if (roundIds.length > 0) {
+            // 2. Gather bracket IDs for these rounds
+            const tournamentBrackets = await db
+                .select({ id: brackets.id })
+                .from(brackets)
+                .where(inArray(brackets.roundId, roundIds));
+            const bracketIds = tournamentBrackets.map(b => b.id);
+
+            if (bracketIds.length > 0) {
+                // 3. Gather bracket entry IDs for these brackets
+                const tournamentEntries = await db
+                    .select({ id: bracketEntries.id })
+                    .from(bracketEntries)
+                    .where(inArray(bracketEntries.bracketId, bracketIds));
+                const entryIds = tournamentEntries.map(e => e.id);
+
+                // 4. Delete score snapshots (FK → bracketEntries)
+                if (entryIds.length > 0) {
+                    await db.delete(scoreSnapshots).where(inArray(scoreSnapshots.bracketEntryId, entryIds));
+                }
+
+                // 5. Delete bracket entries (FK → brackets)
+                await db.delete(bracketEntries).where(inArray(bracketEntries.bracketId, bracketIds));
+            }
+
+            // 6. Delete brackets (FK → rounds)
+            await db.delete(brackets).where(inArray(brackets.roundId, roundIds));
+
+            // 7. Delete rounds (FK → tournaments)
+            await db.delete(rounds).where(eq(rounds.tournamentId, id));
         }
 
-        // Delete registrations first (foreign key dependency)
-        await db
-            .delete(registrations)
-            .where(eq(registrations.tournamentId, id));
+        // 8. Delete registrations (FK → tournaments)
+        await db.delete(registrations).where(eq(registrations.tournamentId, id));
 
-        // Delete the tournament
-        await db
-            .delete(tournaments)
-            .where(eq(tournaments.id, id));
+        // 9. Delete the tournament
+        await db.delete(tournaments).where(eq(tournaments.id, id));
 
-        console.log(`[API] Deleted tournament ${id} ("${tournament.name}")`);
+        console.log(`[API] Deleted tournament ${id} ("${tournament.name}") — full cascade`);
         res.json({ success: true, data: { id, name: tournament.name, deleted: true } });
     } catch (error) {
         console.error('[API] Error deleting tournament:', error);

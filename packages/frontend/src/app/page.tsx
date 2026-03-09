@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { listTournaments, type Tournament } from '@/lib/api';
 import { Swords, Clock, Trophy, XCircle, ArrowRight, Users, ShieldCheck } from 'lucide-react';
+import Link from 'next/link';
 import styles from './page.module.css';
 
 export default function DashboardPage() {
@@ -108,7 +109,7 @@ export default function DashboardPage() {
           <h2>No Tournaments Yet</h2>
           <p className={styles.emptyText}>
             No Gauntlet tournaments have been created. Go to the{' '}
-            <a href="/admin">Admin Panel</a> to create one.
+            <Link href="/admin">Admin Panel</Link> to create one.
           </p>
         </div>
       )}
@@ -116,7 +117,7 @@ export default function DashboardPage() {
       {!loading && tournaments.length > 0 && (
         <div className={styles.tournamentGrid}>
           {tournaments.map((t, i) => (
-            <a
+            <Link
               key={t.id}
               href={`/tournament/${t.id}`}
               className={`card ${styles.tournamentCard} ${styles[`status_${t.status}`] || ''}`}
@@ -161,7 +162,7 @@ export default function DashboardPage() {
                 </span>
                 <ArrowRight size={16} className={styles.arrowIcon} />
               </div>
-            </a>
+            </Link>
           ))}
         </div>
       )}
