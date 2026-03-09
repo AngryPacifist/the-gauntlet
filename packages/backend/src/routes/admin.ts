@@ -3,7 +3,8 @@
 //
 // POST /api/admin/start             — Start a tournament (close reg, create brackets)
 // POST /api/admin/score/:roundId    — Trigger score computation for a round
-// POST /api/admin/advance/:id       — Advance to next round (eliminate + promote)
+// POST /api/admin/advance           — Advance to next round (eliminate + promote)
+// POST /api/admin/cancel/:id        — Cancel a tournament
 // ============================================================================
 
 import { Router } from 'express';
@@ -12,6 +13,9 @@ import {
     computeRoundScores,
     advanceRound,
 } from '../services/tournament-manager.js';
+import { db } from '../db/index.js';
+import { tournaments } from '../db/schema.js';
+import { eq } from 'drizzle-orm';
 
 const router = Router();
 
@@ -89,6 +93,50 @@ router.post('/advance', async (req, res) => {
         res.json({ success: true, data: result });
     } catch (error) {
         console.error('[Admin] Error advancing round:', error);
+        res.status(500).json({
+            success: false,
+            error: error instanceof Error ? error.message : 'Internal server error',
+        });
+    }
+});
+
+// POST /api/admin/cancel/:id — Cancel a tournament
+router.post('/cancel/:id', async (req, res) => {
+    try {
+        const tournamentId = parseInt(req.params.id, 10);
+        if (isNaN(tournamentId)) {
+            res.status(400).json({ success: false, error: 'Invalid tournament ID' });
+            return;
+        }
+
+        const [tournament] = await db
+            .select()
+            .from(tournaments)
+            .where(eq(tournaments.id, tournamentId))
+            .limit(1);
+
+        if (!tournament) {
+            res.status(404).json({ success: false, error: 'Tournament not found' });
+            return;
+        }
+
+        if (tournament.status === 'completed' || tournament.status === 'cancelled') {
+            res.status(409).json({
+                success: false,
+                error: `Cannot cancel tournament in "${tournament.status}" status`,
+            });
+            return;
+        }
+
+        await db
+            .update(tournaments)
+            .set({ status: 'cancelled', updatedAt: new Date() })
+            .where(eq(tournaments.id, tournamentId));
+
+        console.log(`[Admin] Cancelled tournament ${tournamentId} ("${tournament.name}")`);
+        res.json({ success: true, data: { id: tournamentId, status: 'cancelled' } });
+    } catch (error) {
+        console.error('[Admin] Error cancelling tournament:', error);
         res.status(500).json({
             success: false,
             error: error instanceof Error ? error.message : 'Internal server error',

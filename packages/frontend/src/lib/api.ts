@@ -138,8 +138,10 @@ export async function getTournament(id: number): Promise<TournamentState> {
 
 export async function getTournamentBrackets(
     tournamentId: number,
+    roundId?: number,
 ): Promise<{ round: Round | null; brackets: Bracket[] }> {
-    return apiFetch(`/api/tournaments/${tournamentId}/brackets`);
+    const query = roundId ? `?roundId=${roundId}` : '';
+    return apiFetch(`/api/tournaments/${tournamentId}/brackets${query}`);
 }
 
 export async function registerWallet(
@@ -239,6 +241,16 @@ export async function deleteTournament(
 ): Promise<{ id: number; name: string; deleted: boolean }> {
     return apiFetch(`/api/tournaments/${id}`, {
         method: 'DELETE',
+        headers: { 'X-Admin-Secret': adminSecret },
+    });
+}
+
+export async function adminCancelTournament(
+    tournamentId: number,
+    adminSecret: string,
+): Promise<{ id: number; status: string }> {
+    return apiFetch(`/api/admin/cancel/${tournamentId}`, {
+        method: 'POST',
         headers: { 'X-Admin-Secret': adminSecret },
     });
 }

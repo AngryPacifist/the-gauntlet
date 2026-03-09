@@ -7,6 +7,13 @@ import {
     type Tournament,
     type TraderProfile,
 } from '@/lib/api';
+import {
+    Copy,
+    CheckCircle,
+    ShieldCheck,
+    Skull,
+    Swords,
+} from 'lucide-react';
 import styles from './page.module.css';
 
 export default function TraderPage({ params }: { params: Promise<{ wallet: string }> }) {
@@ -17,6 +24,7 @@ export default function TraderPage({ params }: { params: Promise<{ wallet: strin
     const [profile, setProfile] = useState<TraderProfile | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [copied, setCopied] = useState(false);
 
     useEffect(() => {
         loadTournaments();
@@ -57,9 +65,10 @@ export default function TraderPage({ params }: { params: Promise<{ wallet: strin
         }
     }
 
-    function formatWallet(w: string) {
-        if (w.length <= 12) return w;
-        return `${w.slice(0, 6)}...${w.slice(-6)}`;
+    function copyWallet() {
+        navigator.clipboard.writeText(wallet);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
     }
 
     function getStatusLabel(round: TraderProfile['rounds'][0]): string {
@@ -80,20 +89,29 @@ export default function TraderPage({ params }: { params: Promise<{ wallet: strin
                 <div className={styles.headerRow}>
                     <div>
                         <h1 className="page-header__title">Trader Profile</h1>
-                        <p className={`page-header__subtitle ${styles.walletDisplay}`}>
-                            {formatWallet(wallet)}
-                        </p>
+                        <div className={styles.walletRow}>
+                            <code className={styles.walletDisplay}>{wallet}</code>
+                            <button
+                                className={styles.copyBtn}
+                                onClick={copyWallet}
+                                title="Copy wallet address"
+                            >
+                                {copied ? <CheckCircle size={14} /> : <Copy size={14} />}
+                            </button>
+                        </div>
                     </div>
                     {tournaments.length > 1 && (
-                        <select
-                            className={styles.tournamentSelect}
-                            value={selectedTournamentId ?? ''}
-                            onChange={(e) => setSelectedTournamentId(parseInt(e.target.value, 10))}
-                        >
+                        <div className={styles.tournamentPicker}>
                             {tournaments.map((t) => (
-                                <option key={t.id} value={t.id}>{t.name}</option>
+                                <button
+                                    key={t.id}
+                                    className={`${styles.pickerBtn} ${selectedTournamentId === t.id ? styles.pickerBtnActive : ''}`}
+                                    onClick={() => setSelectedTournamentId(t.id)}
+                                >
+                                    {t.name}
+                                </button>
                             ))}
-                        </select>
+                        </div>
                     )}
                 </div>
             </header>
@@ -124,6 +142,31 @@ export default function TraderPage({ params }: { params: Promise<{ wallet: strin
                         </a>
                     </div>
 
+                    {/* Journey timeline */}
+                    {profile.rounds.length > 0 && (
+                        <div className={styles.journey}>
+                            <h3 className={styles.journeyTitle}>Journey</h3>
+                            <div className={styles.journeyTrack}>
+                                {profile.rounds.map((round) => (
+                                    <div
+                                        key={round.roundNumber}
+                                        className={`${styles.journeyNode} ${round.advanced ? styles.journeyAdvanced : ''} ${round.eliminated ? styles.journeyEliminated : ''}`}
+                                        title={`${round.roundName}: ${getStatusLabel(round)}`}
+                                    >
+                                        {round.eliminated ? (
+                                            <Skull size={16} />
+                                        ) : round.advanced ? (
+                                            <ShieldCheck size={16} />
+                                        ) : (
+                                            <Swords size={16} />
+                                        )}
+                                        <span className={styles.journeyLabel}>R{round.roundNumber}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
                     {/* Per-round performance */}
                     {profile.rounds.length === 0 ? (
                         <div className={`card ${styles.emptyCard}`}>
@@ -132,6 +175,11 @@ export default function TraderPage({ params }: { params: Promise<{ wallet: strin
                     ) : (
                         profile.rounds.map((round) => (
                             <div key={round.roundNumber} className={`card ${styles.roundCard}`}>
+                                {/* Status banner */}
+                                <div className={`${styles.statusBanner} ${getStatusClass(round)}`}>
+                                    {getStatusLabel(round)}
+                                </div>
+
                                 <div className={styles.roundHeader}>
                                     <div>
                                         <h2 className={styles.roundTitle}>
@@ -141,9 +189,6 @@ export default function TraderPage({ params }: { params: Promise<{ wallet: strin
                                             Bracket {round.bracketNumber}
                                         </span>
                                     </div>
-                                    <span className={`${styles.statusBadge} ${getStatusClass(round)}`}>
-                                        {getStatusLabel(round)}
-                                    </span>
                                 </div>
 
                                 {/* CPI Score */}

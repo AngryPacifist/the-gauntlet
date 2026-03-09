@@ -1,29 +1,73 @@
 .headerRow {
     display: flex;
     justify-content: space-between;
+    align-items: flex-start;
+    gap: var(--space-lg);
+}
+
+.walletRow {
+    display: flex;
     align-items: center;
-    gap: 1rem;
+    gap: var(--space-sm);
+    margin-top: var(--space-xs);
 }
 
 .walletDisplay {
-    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+    font-family: var(--font-mono);
+    font-size: 0.8125rem;
+    color: var(--text-secondary);
     letter-spacing: 0.02em;
 }
 
-.tournamentSelect {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    color: var(--text-primary);
-    padding: 0.5rem 1rem;
-    border-radius: var(--radius);
-    font-family: inherit;
-    font-size: 0.9rem;
+.copyBtn {
+    background: none;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    color: var(--text-muted);
+    padding: 4px 6px;
     cursor: pointer;
+    transition: all var(--transition-fast);
+    display: flex;
+    align-items: center;
 }
 
-.tournamentSelect:focus {
-    outline: none;
-    border-color: var(--accent-cyan);
+.copyBtn:hover {
+    color: var(--text-primary);
+    border-color: var(--accent-primary);
+}
+
+/* Tournament Picker (segmented control) */
+.tournamentPicker {
+    display: flex;
+    gap: 2px;
+    background: var(--bg-secondary);
+    border-radius: var(--radius-md);
+    padding: 3px;
+    border: 1px solid var(--border-subtle);
+}
+
+.pickerBtn {
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    padding: var(--space-sm) var(--space-md);
+    font-size: 0.8125rem;
+    font-weight: 600;
+    font-family: var(--font-sans);
+    cursor: pointer;
+    border-radius: var(--radius-sm);
+    transition: all var(--transition-fast);
+    white-space: nowrap;
+}
+
+.pickerBtn:hover {
+    color: var(--text-primary);
+}
+
+.pickerBtnActive {
+    background: var(--bg-card);
+    color: var(--text-primary);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
 }
 
 .center {
@@ -32,37 +76,37 @@
     align-items: center;
     justify-content: center;
     min-height: 200px;
-    gap: 1rem;
+    gap: var(--space-md);
 }
 
 .errorCard {
     text-align: center;
-    padding: 2rem;
+    padding: var(--space-2xl);
 }
 
 .hint {
     color: var(--text-muted);
-    font-size: 0.85rem;
-    margin-top: 0.5rem;
+    font-size: 0.8125rem;
+    margin-top: var(--space-sm);
 }
 
 .contextCard {
     display: flex;
     align-items: center;
-    gap: 0.75rem;
-    padding: 1rem 1.5rem;
-    margin-bottom: 1.5rem;
+    gap: var(--space-md);
+    padding: var(--space-md) var(--space-lg);
+    margin-bottom: var(--space-lg);
 }
 
 .contextLabel {
     color: var(--text-muted);
-    font-size: 0.85rem;
+    font-size: 0.8125rem;
     text-transform: uppercase;
     letter-spacing: 0.08em;
 }
 
 .contextLink {
-    color: var(--accent-cyan);
+    color: var(--accent-secondary);
     text-decoration: none;
     font-weight: 500;
 }
@@ -71,80 +115,145 @@
     text-decoration: underline;
 }
 
+/* Journey Timeline */
+.journey {
+    margin-bottom: var(--space-xl);
+}
+
+.journeyTitle {
+    font-size: 0.8125rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-muted);
+    margin-bottom: var(--space-md);
+}
+
+.journeyTrack {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+    position: relative;
+    padding: var(--space-md) 0;
+}
+
+.journeyTrack::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: var(--border-subtle);
+    z-index: 0;
+}
+
+.journeyNode {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    z-index: 1;
+    background: var(--bg-primary);
+    padding: var(--space-sm);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border-subtle);
+    color: var(--text-muted);
+}
+
+.journeyAdvanced {
+    color: var(--status-success);
+    border-color: rgba(0, 230, 118, 0.3);
+    background: var(--status-success-bg);
+}
+
+.journeyEliminated {
+    color: var(--status-danger);
+    border-color: rgba(255, 71, 87, 0.3);
+    background: var(--status-danger-bg);
+}
+
+.journeyLabel {
+    font-size: 0.625rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    font-family: var(--font-mono);
+}
+
+/* Round Cards */
 .emptyCard {
-    padding: 2rem;
+    padding: var(--space-2xl);
     text-align: center;
     color: var(--text-muted);
 }
 
 .roundCard {
-    margin-bottom: 1.5rem;
-    padding: 1.5rem;
+    margin-bottom: var(--space-lg);
+    padding: 0;
+    overflow: hidden;
+    animation: fadeInUp 0.4s cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
+.statusBanner {
+    padding: var(--space-sm) var(--space-lg);
+    font-size: 0.6875rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+}
+
+.statusAdvanced {
+    background: rgba(0, 200, 117, 0.15);
+    color: #00c875;
+}
+
+.statusEliminated {
+    background: rgba(255, 55, 95, 0.15);
+    color: #ff375f;
+}
+
+.statusCompeting {
+    background: rgba(0, 188, 212, 0.15);
+    color: var(--accent-secondary);
 }
 
 .roundHeader {
     display: flex;
     justify-content: space-between;
     align-items: flex-start;
-    margin-bottom: 1.5rem;
+    padding: var(--space-lg);
+    padding-bottom: 0;
 }
 
 .roundTitle {
-    font-size: 1.2rem;
+    font-size: 1.125rem;
     font-weight: 600;
     color: var(--text-primary);
     margin: 0;
 }
 
 .bracketInfo {
-    font-size: 0.85rem;
+    font-size: 0.8125rem;
     color: var(--text-muted);
-    margin-top: 0.25rem;
+    margin-top: 2px;
     display: block;
-}
-
-.statusBadge {
-    padding: 0.35rem 0.75rem;
-    border-radius: var(--radius);
-    font-size: 0.8rem;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-}
-
-.statusAdvanced {
-    background: rgba(0, 200, 117, 0.15);
-    color: #00c875;
-    border: 1px solid rgba(0, 200, 117, 0.3);
-}
-
-.statusEliminated {
-    background: rgba(255, 55, 95, 0.15);
-    color: #ff375f;
-    border: 1px solid rgba(255, 55, 95, 0.3);
-}
-
-.statusCompeting {
-    background: rgba(0, 188, 212, 0.15);
-    color: var(--accent-cyan);
-    border: 1px solid rgba(0, 188, 212, 0.3);
 }
 
 .cpiSection {
     display: flex;
     justify-content: center;
-    margin-bottom: 1.5rem;
+    padding: var(--space-md) var(--space-lg);
 }
 
 .cpiTotal {
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 0.25rem;
+    gap: 2px;
 }
 
 .cpiLabel {
-    font-size: 0.8rem;
+    font-size: 0.75rem;
     color: var(--text-muted);
     text-transform: uppercase;
     letter-spacing: 0.1em;
@@ -153,22 +262,21 @@
 .cpiValue {
     font-size: 2.5rem;
     font-weight: 700;
-    background: linear-gradient(135deg, var(--accent-cyan), var(--accent-magenta));
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
+    font-family: var(--font-mono);
+    color: var(--accent-secondary);
 }
 
 .scoreGrid {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 1rem;
+    gap: var(--space-md);
+    padding: 0 var(--space-lg) var(--space-lg);
 }
 
 .scoreItem {
     display: flex;
     flex-direction: column;
-    gap: 0.35rem;
+    gap: 4px;
 }
 
 .scoreHeader {
@@ -178,19 +286,19 @@
 }
 
 .scoreName {
-    font-size: 0.9rem;
+    font-size: 0.875rem;
     color: var(--text-primary);
     font-weight: 500;
 }
 
 .scoreValue {
-    font-size: 0.9rem;
+    font-size: 0.875rem;
     color: var(--text-secondary);
-    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+    font-family: var(--font-mono);
 }
 
 .scoreWeight {
-    font-size: 0.75rem;
+    font-size: 0.6875rem;
     color: var(--text-muted);
 }
 
@@ -202,5 +310,13 @@
     .headerRow {
         flex-direction: column;
         align-items: flex-start;
+    }
+
+    .tournamentPicker {
+        flex-wrap: wrap;
+    }
+
+    .walletDisplay {
+        font-size: 0.6875rem;
     }
 }

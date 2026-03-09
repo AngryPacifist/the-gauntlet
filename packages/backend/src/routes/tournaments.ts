@@ -237,7 +237,7 @@ router.delete('/:id', async (req, res) => {
     }
 });
 
-// GET /api/tournaments/:id/brackets — Get all brackets for the active round
+// GET /api/tournaments/:id/brackets — Get brackets for a round (defaults to most recent)
 router.get('/:id/brackets', async (req, res) => {
     try {
         const tournamentId = parseInt(req.params.id, 10);
@@ -246,20 +246,32 @@ router.get('/:id/brackets', async (req, res) => {
             return;
         }
 
-        // Find the active (or most recent completed) round
-        const roundRows = await db
-            .select()
-            .from(rounds)
-            .where(eq(rounds.tournamentId, tournamentId))
-            .orderBy(desc(rounds.roundNumber))
-            .limit(1);
+        const roundIdParam = req.query.roundId ? parseInt(req.query.roundId as string, 10) : null;
 
-        if (roundRows.length === 0) {
+        let round;
+        if (roundIdParam && !isNaN(roundIdParam)) {
+            // Fetch specific round
+            const [specificRound] = await db
+                .select()
+                .from(rounds)
+                .where(eq(rounds.id, roundIdParam))
+                .limit(1);
+            round = specificRound || null;
+        } else {
+            // Default: most recent round
+            const roundRows = await db
+                .select()
+                .from(rounds)
+                .where(eq(rounds.tournamentId, tournamentId))
+                .orderBy(desc(rounds.roundNumber))
+                .limit(1);
+            round = roundRows[0] || null;
+        }
+
+        if (!round) {
             res.json({ success: true, data: { round: null, brackets: [] } });
             return;
         }
-
-        const round = roundRows[0];
         const roundBrackets = await db
             .select()
             .from(brackets)

@@ -1,30 +1,54 @@
-import type { Metadata } from 'next';
-import './globals.css';
+'use client';
 
-export const metadata: Metadata = {
-  title: 'Adrena: The Gauntlet — Trading Competition Engine',
-  description:
-    'Bracket-style elimination trading competitions on Adrena. Compete, survive, conquer.',
-};
+import { usePathname } from 'next/navigation';
+import { Swords } from 'lucide-react';
+import './globals.css';
 
 export default function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const pathname = usePathname();
+
+  const navLinks = [
+    { href: '/', label: 'Dashboard' },
+    { href: '/register', label: 'Register' },
+    { href: '/admin', label: 'Admin' },
+  ];
+
   return (
     <html lang="en">
+      <head>
+        <title>Adrena: The Gauntlet — Trading Competition Engine</title>
+        <meta
+          name="description"
+          content="Bracket-style elimination trading competitions on Adrena. Compete, survive, conquer."
+        />
+      </head>
       <body>
         <nav className="nav">
           <div className="container nav__inner">
             <a href="/" className="nav__logo">
-              <span className="nav__logo-icon">⚔️</span>
+              <Swords size={20} strokeWidth={2.5} />
               <span className="nav__logo-text">The Gauntlet</span>
             </a>
             <div className="nav__links">
-              <a href="/" className="nav__link">Dashboard</a>
-              <a href="/register" className="nav__link">Register</a>
-              <a href="/admin" className="nav__link">Admin</a>
+              {navLinks.map((link) => {
+                const isActive =
+                  link.href === '/'
+                    ? pathname === '/'
+                    : pathname.startsWith(link.href);
+                return (
+                  <a
+                    key={link.href}
+                    href={link.href}
+                    className={`nav__link${isActive ? ' nav__link--active' : ''}`}
+                  >
+                    {link.label}
+                  </a>
+                );
+              })}
             </div>
           </div>
         </nav>

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
     listTournaments,
     createTournament,
@@ -9,8 +9,23 @@ import {
     adminStartTournament,
     adminComputeScores,
     adminAdvanceRound,
+    adminCancelTournament,
     type Tournament,
 } from '@/lib/api';
+import {
+    Shield,
+    Lock,
+    Unlock,
+    Plus,
+    Play,
+    BarChart3,
+    ChevronRight,
+    Trash2,
+    Ban,
+    Trophy,
+    ExternalLink,
+    Terminal,
+} from 'lucide-react';
 import styles from './page.module.css';
 
 export default function AdminPage() {
@@ -26,6 +41,16 @@ export default function AdminPage() {
     const [actionLog, setActionLog] = useState<string[]>([]);
     const [actionLoading, setActionLoading] = useState(false);
 
+    // Toast notification
+    const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+    const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    function showToast(message: string, type: 'success' | 'error') {
+        if (toastTimer.current) clearTimeout(toastTimer.current);
+        setToast({ message, type });
+        toastTimer.current = setTimeout(() => setToast(null), 5000);
+    }
+
     useEffect(() => {
         loadTournaments();
     }, []);
@@ -36,7 +61,8 @@ export default function AdminPage() {
             const data = await listTournaments();
             setTournaments(data);
         } catch {
-            addLog('❌ Failed to load tournaments');
+            addLog('Failed to load tournaments');
+            showToast('Failed to load tournaments', 'error');
         } finally {
             setLoading(false);
         }
@@ -52,11 +78,11 @@ export default function AdminPage() {
         try {
             setCreating(true);
             const result = await createTournament(newName.trim(), undefined, adminSecret);
-            addLog(`✅ Created tournament "${newName}" (id: ${result.id})`);
+            addLog(`Created tournament "${newName}" (id: ${result.id})`);
             setNewName('');
             loadTournaments();
         } catch (err) {
-            addLog(`❌ ${err instanceof Error ? err.message : 'Failed to create'}`);
+            addLog(`Error: ${err instanceof Error ? err.message : 'Failed to create'}`);
         } finally {
             setCreating(false);
         }
@@ -64,18 +90,19 @@ export default function AdminPage() {
 
     async function handleStart(tournamentId: number, tournamentName: string) {
         if (!adminSecret) {
-            addLog('❌ Enter admin secret first');
+            addLog('Error: Enter admin secret first');
+            showToast('Enter admin secret first', 'error');
             return;
         }
         try {
             setActionLoading(true);
             const result = await adminStartTournament(tournamentId, adminSecret);
             addLog(
-                `✅ Started "${tournamentName}": Round 1 created with ${result.bracketCount} bracket(s)`,
+                `Started "${tournamentName}": Round 1 created with ${result.bracketCount} bracket(s)`,
             );
             loadTournaments();
         } catch (err) {
-            addLog(`❌ ${err instanceof Error ? err.message : 'Failed to start'}`);
+            addLog(`Error: ${err instanceof Error ? err.message : 'Failed to start'}`);
         } finally {
             setActionLoading(false);
         }
@@ -83,24 +110,25 @@ export default function AdminPage() {
 
     async function handleScore(tournamentId: number, tournamentName: string) {
         if (!adminSecret) {
-            addLog('❌ Enter admin secret first');
+            addLog('Error: Enter admin secret first');
+            showToast('Enter admin secret first', 'error');
             return;
         }
         try {
             setActionLoading(true);
-            // First get the active round
             const data = await getTournamentBrackets(tournamentId);
             if (!data.round) {
-                addLog('❌ No active round found');
+                addLog('Error: No active round found');
+                setActionLoading(false);
                 return;
             }
             const result = await adminComputeScores(data.round.id, adminSecret);
             addLog(
-                `✅ Scored "${tournamentName}" Round ${data.round.roundNumber}: ${result.scoredCount} entries`,
+                `Scored "${tournamentName}" Round ${data.round.roundNumber}: ${result.scoredCount} entries`,
             );
             loadTournaments();
         } catch (err) {
-            addLog(`❌ ${err instanceof Error ? err.message : 'Failed to score'}`);
+            addLog(`Error: ${err instanceof Error ? err.message : 'Failed to score'}`);
         } finally {
             setActionLoading(false);
         }
@@ -108,22 +136,42 @@ export default function AdminPage() {
 
     async function handleAdvance(tournamentId: number, tournamentName: string) {
         if (!adminSecret) {
-            addLog('❌ Enter admin secret first');
+            addLog('Error: Enter admin secret first');
+            showToast('Enter admin secret first', 'error');
             return;
         }
         try {
             setActionLoading(true);
             const result = await adminAdvanceRound(tournamentId, adminSecret);
             if (result.completed) {
-                addLog(`🏆 "${tournamentName}" completed!`);
+                addLog(`"${tournamentName}" completed!`);
             } else {
                 addLog(
-                    `✅ "${tournamentName}": ${result.advanced} advanced, ${result.eliminated} eliminated`,
+                    `"${tournamentName}": ${result.advanced} advanced, ${result.eliminated} eliminated`,
                 );
             }
             loadTournaments();
         } catch (err) {
-            addLog(`❌ ${err instanceof Error ? err.message : 'Failed to advance'}`);
+            addLog(`Error: ${err instanceof Error ? err.message : 'Failed to advance'}`);
+        } finally {
+            setActionLoading(false);
+        }
+    }
+
+    async function handleCancel(tournamentId: number, tournamentName: string) {
+        if (!adminSecret) {
+            addLog('Error: Enter admin secret first');
+            showToast('Enter admin secret first', 'error');
+            return;
+        }
+        if (!confirm(`Cancel "${tournamentName}"? This cannot be undone.`)) return;
+        try {
+            setActionLoading(true);
+            await adminCancelTournament(tournamentId, adminSecret);
+            addLog(`Cancelled "${tournamentName}"`);
+            loadTournaments();
+        } catch (err) {
+            addLog(`Error: ${err instanceof Error ? err.message : 'Failed to cancel'}`);
         } finally {
             setActionLoading(false);
         }
@@ -131,17 +179,18 @@ export default function AdminPage() {
 
     async function handleDelete(tournamentId: number, tournamentName: string) {
         if (!adminSecret) {
-            addLog('❌ Enter admin secret first');
+            addLog('Error: Enter admin secret first');
+            showToast('Enter admin secret first', 'error');
             return;
         }
         if (!confirm(`Delete "${tournamentName}"? This cannot be undone.`)) return;
         try {
             setActionLoading(true);
             await deleteTournament(tournamentId, adminSecret);
-            addLog(`🗑️ Deleted "${tournamentName}"`);
+            addLog(`Deleted "${tournamentName}"`);
             loadTournaments();
         } catch (err) {
-            addLog(`❌ ${err instanceof Error ? err.message : 'Failed to delete'}`);
+            addLog(`Error: ${err instanceof Error ? err.message : 'Failed to delete'}`);
         } finally {
             setActionLoading(false);
         }
@@ -149,8 +198,19 @@ export default function AdminPage() {
 
     return (
         <div className="container">
+            {/* Toast notification */}
+            {toast && (
+                <div className={`${styles.toast} ${styles[`toast_${toast.type}`]}`}>
+                    <span>{toast.message}</span>
+                    <button className={styles.toastClose} onClick={() => setToast(null)}>×</button>
+                </div>
+            )}
+
             <header className="page-header">
-                <h1 className="page-header__title">🛡️ Admin Panel</h1>
+                <h1 className="page-header__title">
+                    <Shield size={24} style={{ verticalAlign: 'middle', marginRight: 8 }} />
+                    Admin Panel
+                </h1>
                 <p className="page-header__subtitle">
                     Create tournaments, manage rounds, and control The Gauntlet.
                 </p>
@@ -168,7 +228,11 @@ export default function AdminPage() {
                         onChange={(e) => setAdminSecret(e.target.value)}
                     />
                     <span className={styles.secretHint}>
-                        {adminSecret ? '🔓 Authenticated' : '🔒 Required for admin actions'}
+                        {adminSecret ? (
+                            <><Unlock size={14} style={{ color: 'var(--status-success)', marginRight: 4 }} /> Authenticated</>
+                        ) : (
+                            <><Lock size={14} style={{ marginRight: 4 }} /> Required for admin actions</>
+                        )}
                     </span>
                 </div>
             </section>
@@ -190,7 +254,8 @@ export default function AdminPage() {
                         className="btn btn--primary"
                         disabled={creating || !newName.trim()}
                     >
-                        {creating ? 'Creating...' : '+ Create'}
+                        <Plus size={14} />
+                        {creating ? 'Creating...' : 'Create'}
                     </button>
                 </form>
             </section>
@@ -227,14 +292,14 @@ export default function AdminPage() {
                                         onClick={() => handleStart(t.id, t.name)}
                                         disabled={actionLoading}
                                     >
-                                        🚀 Start Tournament
+                                        <Play size={14} /> Start Tournament
                                     </button>
                                     <button
                                         className="btn btn--danger"
                                         onClick={() => handleDelete(t.id, t.name)}
                                         disabled={actionLoading}
                                     >
-                                        🗑️ Delete
+                                        <Trash2 size={14} /> Delete
                                     </button>
                                 </>
                             )}
@@ -245,25 +310,34 @@ export default function AdminPage() {
                                         onClick={() => handleScore(t.id, t.name)}
                                         disabled={actionLoading}
                                     >
-                                        📊 Compute Scores
+                                        <BarChart3 size={14} /> Compute Scores
                                     </button>
                                     <button
-                                        className="btn btn--danger"
+                                        className="btn btn--primary"
                                         onClick={() => handleAdvance(t.id, t.name)}
                                         disabled={actionLoading}
                                     >
-                                        ⚡ Advance Round
+                                        <ChevronRight size={14} /> Advance Round
+                                    </button>
+                                    <button
+                                        className="btn btn--danger"
+                                        onClick={() => handleCancel(t.id, t.name)}
+                                        disabled={actionLoading}
+                                    >
+                                        <Ban size={14} /> Cancel
                                     </button>
                                 </>
                             )}
                             {t.status === 'completed' && (
-                                <span className={styles.completedText}>🏆 Tournament is complete</span>
+                                <span className={styles.completedText}>
+                                    <Trophy size={14} style={{ marginRight: 4 }} /> Tournament is complete
+                                </span>
                             )}
                             <a
                                 href={`/tournament/${t.id}`}
                                 className="btn btn--secondary"
                             >
-                                View →
+                                <ExternalLink size={14} /> View
                             </a>
                         </div>
                     </div>
@@ -272,7 +346,10 @@ export default function AdminPage() {
 
             {/* Action Log */}
             <section className={styles.section}>
-                <h2 className={styles.sectionTitle}>Action Log</h2>
+                <h2 className={styles.sectionTitle}>
+                    <Terminal size={16} style={{ marginRight: 6, verticalAlign: 'middle' }} />
+                    Action Log
+                </h2>
                 <div className={styles.logPanel}>
                     {actionLog.length === 0 && (
                         <p className={styles.logEmpty}>No actions yet.</p>

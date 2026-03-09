@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, use } from 'react';
+import { useEffect, useState, useRef, use } from 'react';
 import {
     getTournament,
     getTournamentBrackets,
@@ -9,6 +9,17 @@ import {
     type Round,
     type Bracket,
 } from '@/lib/api';
+import {
+    ArrowLeft,
+    Clock,
+    Users,
+    Layers,
+    Swords,
+    CheckCircle,
+    XCircle,
+    Trophy,
+    ChevronRight,
+} from 'lucide-react';
 import styles from './page.module.css';
 
 export default function TournamentPage({ params }: { params: Promise<{ id: string }> }) {
@@ -22,6 +33,7 @@ export default function TournamentPage({ params }: { params: Promise<{ id: strin
     } | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [selectedRoundId, setSelectedRoundId] = useState<number | null>(null);
 
     // Registration
     const [walletInput, setWalletInput] = useState('');
@@ -35,6 +47,19 @@ export default function TournamentPage({ params }: { params: Promise<{ id: strin
         loadData();
     }, [tournamentId]);
 
+    const initialLoadRef = useRef(true);
+
+    // Load brackets when selected round changes (skip initial — loadData already fetched)
+    useEffect(() => {
+        if (selectedRoundId !== null) {
+            if (initialLoadRef.current) {
+                initialLoadRef.current = false;
+                return;
+            }
+            loadBrackets(selectedRoundId);
+        }
+    }, [selectedRoundId]);
+
     async function loadData() {
         try {
             setLoading(true);
@@ -44,10 +69,23 @@ export default function TournamentPage({ params }: { params: Promise<{ id: strin
             ]);
             setTournament(t);
             setBracketsData(b);
+            // Set selected round to the most recent
+            if (b.round) {
+                setSelectedRoundId(b.round.id);
+            }
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Failed to load tournament');
         } finally {
             setLoading(false);
+        }
+    }
+
+    async function loadBrackets(roundId: number) {
+        try {
+            const b = await getTournamentBrackets(tournamentId, roundId);
+            setBracketsData(b);
+        } catch (err) {
+            console.error('Failed to load brackets for round:', err);
         }
     }
 
@@ -100,8 +138,10 @@ export default function TournamentPage({ params }: { params: Promise<{ id: strin
         return (
             <div className="container">
                 <div className={`card ${styles.errorCard}`}>
-                    <p>⚠️ {error || 'Tournament not found'}</p>
-                    <a href="/" className="btn btn--secondary">← Back</a>
+                    <p>{error || 'Tournament not found'}</p>
+                    <a href="/" className="btn btn--secondary">
+                        <ArrowLeft size={14} /> Back
+                    </a>
                 </div>
             </div>
         );
@@ -109,20 +149,31 @@ export default function TournamentPage({ params }: { params: Promise<{ id: strin
 
     const activeRound = tournament.rounds.find((r) => r.status === 'active');
     const completedRounds = tournament.rounds.filter((r) => r.status === 'completed');
+    const allRounds = tournament.rounds;
+
+    // Determine the advance ratio to calculate elimination line
+    const advanceRatio = tournament.config.advanceRatio;
 
     return (
         <div className="container">
             {/* Header */}
             <header className="page-header">
+                <a href="/" className={styles.backLink}>
+                    <ArrowLeft size={14} /> Back to Dashboard
+                </a>
                 <div className={styles.headerRow}>
                     <div>
                         <h1 className="page-header__title">{tournament.name}</h1>
                         <p className="page-header__subtitle">
-                            {tournament.status === 'registration' && '📋 Registration is open — join now!'}
-                            {tournament.status === 'active' && activeRound && (
-                                <>⚔️ {activeRound.name} — {getTimeRemaining(activeRound.endTime)}</>
+                            {tournament.status === 'registration' && (
+                                <><Clock size={14} style={{ verticalAlign: 'middle', marginRight: 4 }} /> Registration is open — join now</>
                             )}
-                            {tournament.status === 'completed' && '🏆 Tournament completed!'}
+                            {tournament.status === 'active' && activeRound && (
+                                <><Swords size={14} style={{ verticalAlign: 'middle', marginRight: 4 }} /> {activeRound.name} — {getTimeRemaining(activeRound.endTime)}</>
+                            )}
+                            {tournament.status === 'completed' && (
+                                <><Trophy size={14} style={{ verticalAlign: 'middle', marginRight: 4 }} /> Tournament completed</>
+                            )}
                         </p>
                     </div>
                     <span className={`badge badge--${tournament.status}`}>
@@ -134,7 +185,10 @@ export default function TournamentPage({ params }: { params: Promise<{ id: strin
             {/* Stats */}
             <div className={`stat-grid ${styles.stats}`}>
                 <div className="card stat-card">
-                    <div className="stat-card__label">Registered</div>
+                    <div className="stat-card__label">
+                        <Users size={12} style={{ marginRight: 4 }} />
+                        Registered
+                    </div>
                     <div className="stat-card__value stat-card__value--accent">
                         {tournament.registrationCount}
                     </div>
@@ -150,7 +204,10 @@ export default function TournamentPage({ params }: { params: Promise<{ id: strin
                     </div>
                 </div>
                 <div className="card stat-card">
-                    <div className="stat-card__label">Bracket Size</div>
+                    <div className="stat-card__label">
+                        <Layers size={12} style={{ marginRight: 4 }} />
+                        Bracket Size
+                    </div>
                     <div className="stat-card__value">{tournament.config.bracketSize}</div>
                 </div>
             </div>
@@ -178,141 +235,166 @@ export default function TournamentPage({ params }: { params: Promise<{ id: strin
                     </form>
                     {regResult && (
                         <div
-                            className={`${styles.regResult} ${regResult.eligible ? styles.regSuccess : styles.regFail
-                                }`}
+                            className={`${styles.regResult} ${regResult.eligible ? styles.regSuccess : styles.regFail}`}
                         >
-                            {regResult.eligible
-                                ? '✅ Successfully registered! You are eligible for the tournament.'
-                                : `❌ ${regResult.reason}`}
+                            {regResult.eligible ? (
+                                <><CheckCircle size={16} style={{ marginRight: 6, flexShrink: 0 }} /> Successfully registered! You are eligible for the tournament.</>
+                            ) : (
+                                <><XCircle size={16} style={{ marginRight: 6, flexShrink: 0 }} /> {regResult.reason}</>
+                            )}
                         </div>
                     )}
+                </section>
+            )}
+
+            {/* Round Selector Tabs */}
+            {allRounds.length > 0 && (
+                <section className={styles.section}>
+                    <div className={styles.roundTabs}>
+                        {allRounds.map((r) => (
+                            <button
+                                key={r.id}
+                                className={`${styles.roundTab} ${selectedRoundId === r.id ? styles.roundTabActive : ''}`}
+                                onClick={() => setSelectedRoundId(r.id)}
+                            >
+                                <span className={styles.roundTabNumber}>R{r.roundNumber}</span>
+                                <span className={styles.roundTabName}>{r.name}</span>
+                                {r.status === 'active' && (
+                                    <span className={styles.roundTabLive}>LIVE</span>
+                                )}
+                            </button>
+                        ))}
+                    </div>
                 </section>
             )}
 
             {/* Brackets */}
             {bracketsData && bracketsData.brackets.length > 0 && (
                 <section className={styles.section}>
-                    <h2 className={styles.sectionTitle}>
-                        {bracketsData.round
-                            ? `Round ${bracketsData.round.roundNumber}: ${bracketsData.round.name}`
-                            : 'Brackets'}
-                    </h2>
+                    <div className={styles.sectionHeader}>
+                        <h2 className={styles.sectionTitle}>
+                            {bracketsData.round
+                                ? `Round ${bracketsData.round.roundNumber}: ${bracketsData.round.name}`
+                                : 'Brackets'}
+                        </h2>
+                        <a
+                            href={`/leaderboard/${tournamentId}`}
+                            className="btn btn--secondary"
+                            style={{ fontSize: '0.8125rem', padding: '6px 12px' }}
+                        >
+                            Leaderboard <ChevronRight size={14} />
+                        </a>
+                    </div>
 
-                    {bracketsData.round && (
+                    {bracketsData.round && bracketsData.round.status === 'active' && (
                         <p className={styles.roundMeta}>
                             <span className={`badge badge--${bracketsData.round.status}`}>
                                 {bracketsData.round.status}
                             </span>
-                            {bracketsData.round.status === 'active' && (
-                                <span className={styles.countdown}>
-                                    ⏱ {getTimeRemaining(bracketsData.round.endTime)}
-                                </span>
-                            )}
+                            <span className={styles.countdown}>
+                                <Clock size={14} style={{ marginRight: 4 }} />
+                                {getTimeRemaining(bracketsData.round.endTime)}
+                            </span>
                         </p>
                     )}
 
                     <div className={styles.bracketsGrid}>
-                        {bracketsData.brackets.map((bracket) => (
-                            <div key={bracket.id} className={`card ${styles.bracketCard}`}>
-                                <div className={styles.bracketHeader}>
-                                    <h3>Bracket {bracket.bracketNumber}</h3>
-                                    <span className={styles.bracketCount}>
-                                        {bracket.entries.length} traders
-                                    </span>
-                                </div>
+                        {bracketsData.brackets.map((bracket) => {
+                            // Calculate elimination line index
+                            const entryCount = bracket.entries.length;
+                            const advanceCount = Math.ceil(entryCount * advanceRatio);
 
-                                <div className={styles.entriesList}>
-                                    {bracket.entries.map((entry, idx) => (
-                                        <div
-                                            key={entry.id}
-                                            className={`${styles.entryRow} ${entry.eliminated ? styles.entryEliminated : ''
-                                                } ${entry.advanced ? styles.entryAdvanced : ''}`}
-                                        >
-                                            <div className={styles.entryRank}>#{idx + 1}</div>
-                                            <div className={styles.entryInfo}>
-                                                <a href={`/trader/${entry.wallet}`} className="wallet-address">
-                                                    {formatWallet(entry.wallet)}
-                                                </a>
-                                            </div>
-                                            <div className={styles.entryScore}>
-                                                <span className={styles.cpiValue}>
-                                                    {entry.cpiScore.toFixed(1)}
-                                                </span>
-                                                <span className={styles.cpiLabel}>CPI</span>
-                                            </div>
-                                            <div className={styles.entryStatus}>
-                                                {entry.eliminated && (
-                                                    <span className="badge badge--eliminated">OUT</span>
-                                                )}
-                                                {entry.advanced && (
-                                                    <span className="badge badge--advanced">ADV</span>
-                                                )}
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-
-                                {/* Score breakdown bars */}
-                                {bracket.entries.length > 0 && bracket.entries[0].cpiScore > 0 && (
-                                    <div className={styles.scoreBreakdown}>
-                                        <div className={styles.scoreRow}>
-                                            <span className={styles.scoreLabel}>PnL</span>
-                                            <div className="score-bar">
-                                                <div
-                                                    className="score-bar__fill score-bar__fill--pnl"
-                                                    style={{ width: `${bracket.entries[0].pnlScore}%` }}
-                                                />
-                                            </div>
-                                        </div>
-                                        <div className={styles.scoreRow}>
-                                            <span className={styles.scoreLabel}>Risk</span>
-                                            <div className="score-bar">
-                                                <div
-                                                    className="score-bar__fill score-bar__fill--risk"
-                                                    style={{ width: `${bracket.entries[0].riskScore}%` }}
-                                                />
-                                            </div>
-                                        </div>
-                                        <div className={styles.scoreRow}>
-                                            <span className={styles.scoreLabel}>Consistency</span>
-                                            <div className="score-bar">
-                                                <div
-                                                    className="score-bar__fill score-bar__fill--consistency"
-                                                    style={{ width: `${bracket.entries[0].consistencyScore}%` }}
-                                                />
-                                            </div>
-                                        </div>
-                                        <div className={styles.scoreRow}>
-                                            <span className={styles.scoreLabel}>Activity</span>
-                                            <div className="score-bar">
-                                                <div
-                                                    className="score-bar__fill score-bar__fill--activity"
-                                                    style={{ width: `${bracket.entries[0].activityScore}%` }}
-                                                />
-                                            </div>
-                                        </div>
+                            return (
+                                <div key={bracket.id} className={`card ${styles.bracketCard}`}>
+                                    <div className={styles.bracketHeader}>
+                                        <h3>Bracket {bracket.bracketNumber}</h3>
+                                        <span className={styles.bracketCount}>
+                                            {bracket.entries.length} traders
+                                        </span>
                                     </div>
-                                )}
-                            </div>
-                        ))}
-                    </div>
-                </section>
-            )}
 
-            {/* Round History */}
-            {completedRounds.length > 0 && (
-                <section className={styles.section}>
-                    <h2 className={styles.sectionTitle}>Round History</h2>
-                    <div className={styles.roundHistory}>
-                        {completedRounds.map((r) => (
-                            <div key={r.id} className={`card ${styles.roundCard}`}>
-                                <div className={styles.roundInfo}>
-                                    <span className={styles.roundNumber}>Round {r.roundNumber}</span>
-                                    <span className={styles.roundName}>{r.name}</span>
+                                    <div className={styles.entriesList}>
+                                        {bracket.entries.map((entry, idx) => (
+                                            <div key={entry.id}>
+                                                {/* Elimination line */}
+                                                {idx === advanceCount && entryCount > 1 && (
+                                                    <div className={styles.eliminationLine}>
+                                                        <span className={styles.eliminationText}>Elimination Line</span>
+                                                    </div>
+                                                )}
+                                                <div
+                                                    className={`${styles.entryRow} ${entry.eliminated ? styles.entryEliminated : ''
+                                                        } ${entry.advanced ? styles.entryAdvanced : ''}`}
+                                                >
+                                                    <div className={styles.entryRank}>#{idx + 1}</div>
+                                                    <div className={styles.entryInfo}>
+                                                        <a href={`/trader/${entry.wallet}?tournamentId=${tournamentId}`} className="wallet-address">
+                                                            {formatWallet(entry.wallet)}
+                                                        </a>
+                                                    </div>
+                                                    <div className={styles.entryScore}>
+                                                        <span className={styles.cpiValue}>
+                                                            {entry.cpiScore.toFixed(1)}
+                                                        </span>
+                                                        <span className={styles.cpiLabel}>CPI</span>
+                                                    </div>
+                                                    <div className={styles.entryStatus}>
+                                                        {entry.eliminated && (
+                                                            <span className="badge badge--eliminated">OUT</span>
+                                                        )}
+                                                        {entry.advanced && (
+                                                            <span className="badge badge--advanced">ADV</span>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+
+                                    {/* Score breakdown bars for top entry */}
+                                    {bracket.entries.length > 0 && bracket.entries[0].cpiScore > 0 && (
+                                        <div className={styles.scoreBreakdown}>
+                                            <div className={styles.scoreRow}>
+                                                <span className={styles.scoreLabel}>PnL</span>
+                                                <div className="score-bar">
+                                                    <div
+                                                        className="score-bar__fill score-bar__fill--pnl"
+                                                        style={{ width: `${bracket.entries[0].pnlScore}%` }}
+                                                    />
+                                                </div>
+                                            </div>
+                                            <div className={styles.scoreRow}>
+                                                <span className={styles.scoreLabel}>Risk</span>
+                                                <div className="score-bar">
+                                                    <div
+                                                        className="score-bar__fill score-bar__fill--risk"
+                                                        style={{ width: `${bracket.entries[0].riskScore}%` }}
+                                                    />
+                                                </div>
+                                            </div>
+                                            <div className={styles.scoreRow}>
+                                                <span className={styles.scoreLabel}>Consistency</span>
+                                                <div className="score-bar">
+                                                    <div
+                                                        className="score-bar__fill score-bar__fill--consistency"
+                                                        style={{ width: `${bracket.entries[0].consistencyScore}%` }}
+                                                    />
+                                                </div>
+                                            </div>
+                                            <div className={styles.scoreRow}>
+                                                <span className={styles.scoreLabel}>Activity</span>
+                                                <div className="score-bar">
+                                                    <div
+                                                        className="score-bar__fill score-bar__fill--activity"
+                                                        style={{ width: `${bracket.entries[0].activityScore}%` }}
+                                                    />
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
-                                <span className="badge badge--completed">Completed</span>
-                            </div>
-                        ))}
+                            );
+                        })}
                     </div>
                 </section>
             )}

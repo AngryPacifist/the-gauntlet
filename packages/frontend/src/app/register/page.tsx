@@ -1,7 +1,15 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { listTournaments, registerWallet, type Tournament } from '../../lib/api';
+import { listTournaments, registerWallet, type Tournament } from '@/lib/api';
+import {
+    CheckCircle,
+    AlertTriangle,
+    XCircle,
+    ShieldCheck,
+    Clock,
+    Swords,
+} from 'lucide-react';
 import Link from 'next/link';
 
 export default function RegisterPage() {
@@ -19,7 +27,6 @@ export default function RegisterPage() {
         async function load() {
             try {
                 const all = await listTournaments();
-                // Only show tournaments accepting registrations
                 const registering = all.filter((t) => t.status === 'registration');
                 setTournaments(registering);
                 if (registering.length > 0) {
@@ -71,11 +78,10 @@ export default function RegisterPage() {
         <div className="page-container">
             <div className="register-hero">
                 <h1>
-                    <span className="gradient-text">Join the Battle</span>
+                    <span className="gradient-text">Enter The Gauntlet</span>
                 </h1>
                 <p className="hero-subtitle">
-                    Register your Solana wallet to compete in The Gauntlet.
-                    Your trading history will be verified for eligibility.
+                    Register your Solana wallet to compete. Your trading history will be verified for eligibility.
                 </p>
             </div>
 
@@ -83,7 +89,7 @@ export default function RegisterPage() {
                 <div className="loading-state">Loading tournaments...</div>
             ) : tournaments.length === 0 ? (
                 <div className="empty-state">
-                    <div className="empty-icon">🏟️</div>
+                    <ShieldCheck size={48} strokeWidth={1.5} />
                     <h2>No Open Tournaments</h2>
                     <p>There are no tournaments currently accepting registrations. Check back soon!</p>
                     <Link href="/" className="btn btn-secondary">
@@ -138,9 +144,15 @@ export default function RegisterPage() {
                         </form>
 
                         {result && (
-                            <div className={`result-banner result-${result.type}`}>
+                            <div className={`result-banner result-${result.type} animate-in`}>
                                 <span className="result-icon">
-                                    {result.type === 'success' ? '✅' : result.type === 'ineligible' ? '⚠️' : '❌'}
+                                    {result.type === 'success' ? (
+                                        <CheckCircle size={20} />
+                                    ) : result.type === 'ineligible' ? (
+                                        <AlertTriangle size={20} />
+                                    ) : (
+                                        <XCircle size={20} />
+                                    )}
                                 </span>
                                 <span>{result.message}</span>
                             </div>
@@ -152,11 +164,17 @@ export default function RegisterPage() {
                             <h3>Tournament Details</h3>
                             <div className="info-grid">
                                 <div className="info-item">
-                                    <span className="info-label">Format</span>
-                                    <span className="info-value">The Gauntlet ({selectedTournament.config.bracketSize} per bracket)</span>
+                                    <span className="info-label">
+                                        <Swords size={12} style={{ marginRight: 4 }} /> Format
+                                    </span>
+                                    <span className="info-value">
+                                        The Gauntlet ({selectedTournament.config.bracketSize} per bracket)
+                                    </span>
                                 </div>
                                 <div className="info-item">
-                                    <span className="info-label">Round Duration</span>
+                                    <span className="info-label">
+                                        <Clock size={12} style={{ marginRight: 4 }} /> Round Duration
+                                    </span>
                                     <span className="info-value">{selectedTournament.config.roundDurationHours} hours</span>
                                 </div>
                                 <div className="info-item">

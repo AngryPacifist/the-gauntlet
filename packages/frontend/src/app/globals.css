@@ -8,11 +8,11 @@
 /* --- Design Tokens --- */
 :root {
   /* Base colors */
-  --bg-primary: #0a0a0f;
-  --bg-secondary: #12121a;
-  --bg-card: #16161f;
-  --bg-card-hover: #1c1c28;
-  --bg-elevated: #1e1e2a;
+  --bg-primary: #06060b;
+  --bg-secondary: #0e0e16;
+  --bg-card: #111119;
+  --bg-card-hover: #1a1a25;
+  --bg-elevated: #1c1c28;
 
   /* Borders */
   --border-subtle: rgba(255, 255, 255, 0.06);
@@ -29,6 +29,18 @@
   --accent-primary: #6c5ce7;
   --accent-primary-glow: rgba(108, 92, 231, 0.3);
   --accent-secondary: #00d2ff;
+
+  /* Aliases for component compatibility */
+  --accent-cyan: #00d2ff;
+  --accent-magenta: #6c5ce7;
+  --surface: #111119;
+  --border: rgba(255, 255, 255, 0.1);
+  --radius: 10px;
+
+  /* Podium */
+  --accent-gold: #FFD700;
+  --accent-silver: #C0C0C0;
+  --accent-bronze: #CD7F32;
   --accent-secondary-glow: rgba(0, 210, 255, 0.2);
 
   /* Status */
@@ -150,10 +162,8 @@ a:hover {
 }
 
 .nav__logo-text {
-  background: var(--gradient-brand-text);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  color: var(--text-primary);
+  letter-spacing: -0.01em;
 }
 
 .nav__links {
@@ -170,6 +180,22 @@ a:hover {
 
 .nav__link:hover {
   color: var(--text-primary);
+}
+
+.nav__link--active {
+  color: var(--text-primary);
+  position: relative;
+}
+
+.nav__link--active::after {
+  content: '';
+  position: absolute;
+  bottom: -19px;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--gradient-brand);
+  border-radius: 1px;
 }
 
 .container {
@@ -372,6 +398,60 @@ a:hover {
   }
 }
 
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateX(-8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes pulse {
+
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.6;
+  }
+}
+
+.animate-in {
+  animation: fadeInUp 0.4s cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
+.gradient-text {
+  background: var(--gradient-brand-text);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Page container — used by pages without .container */
+.page-container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 var(--space-lg);
+}
+
 /* Page header */
 .page-header {
   padding: var(--space-2xl) 0;
@@ -380,10 +460,7 @@ a:hover {
 .page-header__title {
   font-size: 2rem;
   font-weight: 800;
-  background: var(--gradient-brand-text);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  color: var(--text-primary);
   margin-bottom: var(--space-sm);
 }
 
