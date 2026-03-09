@@ -139,6 +139,42 @@ a:hover {
   flex-shrink: 0;
 }
 
+/* Share Button */
+.share-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  padding: 5px 10px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  font-family: var(--font-sans);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  white-space: nowrap;
+}
+
+.share-btn:hover {
+  color: var(--text-primary);
+  border-color: var(--accent-primary);
+  background: rgba(0, 230, 118, 0.06);
+}
+
+.share-btn--compact {
+  padding: 4px;
+  border: none;
+  background: none;
+  border-radius: var(--radius-sm);
+}
+
+.share-btn--compact:hover {
+  color: var(--accent-primary);
+  background: rgba(0, 230, 118, 0.1);
+}
+
 /* Nav */
 .nav {
   position: sticky;

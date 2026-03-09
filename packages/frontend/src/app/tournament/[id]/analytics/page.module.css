@@ -1,0 +1,379 @@
+/* ============================================================================
+   Analytics Page — CSS Module
+   ============================================================================ */
+
+.backLink {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 0.8125rem;
+    color: var(--text-muted);
+    text-decoration: none;
+    margin-bottom: var(--space-sm);
+    transition: color var(--transition-fast);
+}
+
+.backLink:hover {
+    color: var(--accent-primary);
+}
+
+.headerRow {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: var(--space-md);
+}
+
+.overviewStats {
+    margin-bottom: var(--space-lg);
+}
+
+/* --- Sections --- */
+
+.section {
+    margin-bottom: var(--space-xl);
+}
+
+.sectionTitle {
+    display: flex;
+    align-items: center;
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: var(--space-sm);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+/* --- Elimination Funnel --- */
+
+.funnel {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+    padding: var(--space-sm) 0;
+}
+
+.funnelRow {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+}
+
+.funnelLabel {
+    min-width: 120px;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-align: right;
+    flex-shrink: 0;
+}
+
+.funnelBarContainer {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+}
+
+.funnelBar {
+    height: 28px;
+    background: var(--accent-danger);
+    border-radius: var(--radius-sm);
+    position: relative;
+    min-width: 4px;
+    transition: width 0.4s ease;
+}
+
+.funnelAdvanced {
+    height: 100%;
+    background: var(--accent-primary);
+    border-radius: var(--radius-sm) 0 0 var(--radius-sm);
+    transition: width 0.4s ease;
+}
+
+.funnelCount {
+    font-size: 0.75rem;
+    font-weight: 600;
+    font-family: var(--font-mono);
+    color: var(--text-muted);
+    white-space: nowrap;
+}
+
+.funnelLegend {
+    display: flex;
+    gap: var(--space-md);
+    justify-content: center;
+    margin-top: var(--space-sm);
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+.legendDotAdvanced,
+.legendDotEliminated {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    margin-right: 4px;
+    vertical-align: middle;
+}
+
+.legendDotAdvanced {
+    background: var(--accent-primary);
+}
+
+.legendDotEliminated {
+    background: var(--accent-danger);
+}
+
+/* --- Stats Table --- */
+
+.tableContainer {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+.statsTable {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.8125rem;
+}
+
+.statsTable th {
+    text-align: left;
+    font-size: 0.6875rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-muted);
+    padding: var(--space-xs) var(--space-sm);
+    border-bottom: 1px solid var(--border-subtle);
+}
+
+.statsTable td {
+    padding: var(--space-xs) var(--space-sm);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+    color: var(--text-secondary);
+    font-family: var(--font-mono);
+}
+
+.roundNameCell {
+    font-family: var(--font-sans) !important;
+    font-weight: 600;
+    color: var(--text-primary) !important;
+}
+
+.cpiCell {
+    color: var(--accent-primary) !important;
+    font-weight: 700;
+}
+
+/* --- Histogram --- */
+
+.histogram {
+    display: flex;
+    align-items: flex-end;
+    gap: 4px;
+    height: 200px;
+    padding: var(--space-md) 0;
+}
+
+.histogramColumn {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    height: 100%;
+    justify-content: flex-end;
+    gap: 4px;
+}
+
+.histogramCount {
+    font-size: 0.625rem;
+    font-weight: 700;
+    font-family: var(--font-mono);
+    color: var(--text-muted);
+    min-height: 14px;
+}
+
+.histogramBar {
+    width: 100%;
+    background: linear-gradient(180deg, var(--accent-primary), rgba(0, 230, 118, 0.3));
+    border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+    min-height: 2px;
+    transition: height 0.4s ease;
+}
+
+.histogramLabel {
+    font-size: 0.5625rem;
+    font-family: var(--font-mono);
+    color: var(--text-muted);
+    text-align: center;
+    white-space: nowrap;
+}
+
+/* --- Component Comparison --- */
+
+.insightSubtitle {
+    font-size: 0.8125rem;
+    color: var(--text-muted);
+    margin-bottom: var(--space-md);
+}
+
+.comparison {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+}
+
+.comparisonRow {
+    display: grid;
+    grid-template-columns: 100px 1fr;
+    gap: var(--space-sm);
+    align-items: center;
+}
+
+.comparisonLabel {
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-align: right;
+}
+
+.comparisonBars {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.comparisonBarGroup {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+}
+
+.barAdvanced {
+    height: 14px;
+    background: var(--accent-primary);
+    border-radius: var(--radius-sm);
+    min-width: 2px;
+    transition: width 0.4s ease;
+}
+
+.barEliminated {
+    height: 14px;
+    background: var(--accent-danger);
+    border-radius: var(--radius-sm);
+    min-width: 2px;
+    transition: width 0.4s ease;
+}
+
+.barValue {
+    font-size: 0.6875rem;
+    font-weight: 700;
+    font-family: var(--font-mono);
+    color: var(--text-muted);
+}
+
+/* --- Top Performers --- */
+
+.performersGrid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: var(--space-sm);
+}
+
+.performerCard {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: var(--space-sm) var(--space-md) !important;
+}
+
+.performerRank {
+    font-size: 1.25rem;
+    flex-shrink: 0;
+    width: 32px;
+    text-align: center;
+}
+
+.performerInfo {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.performerWallet {
+    font-size: 0.8125rem;
+    font-weight: 600;
+    font-family: var(--font-mono);
+    color: var(--accent-primary);
+    text-decoration: none;
+    transition: color var(--transition-fast);
+}
+
+.performerWallet:hover {
+    color: var(--text-primary);
+}
+
+.performerRound {
+    font-size: 0.6875rem;
+    color: var(--text-muted);
+}
+
+.performerCpi {
+    font-size: 1.25rem;
+    font-weight: 800;
+    font-family: var(--font-mono);
+    color: var(--accent-primary);
+    flex-shrink: 0;
+}
+
+/* --- Responsive --- */
+
+@media (max-width: 768px) {
+    .headerRow {
+        flex-direction: column;
+        gap: var(--space-sm);
+    }
+
+    .funnelRow {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 4px;
+    }
+
+    .funnelLabel {
+        text-align: left;
+        min-width: unset;
+    }
+
+    .comparisonRow {
+        grid-template-columns: 80px 1fr;
+    }
+
+    .performersGrid {
+        grid-template-columns: 1fr;
+    }
+
+    .histogram {
+        height: 150px;
+    }
+}
+
+@media (max-width: 480px) {
+    .histogramLabel {
+        font-size: 0.5rem;
+    }
+
+    .comparisonRow {
+        grid-template-columns: 1fr;
+    }
+
+    .comparisonLabel {
+        text-align: left;
+    }
+}

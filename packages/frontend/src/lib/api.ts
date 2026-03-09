@@ -177,6 +177,52 @@ export async function getLeaderboard(
     return apiFetch(`/api/brackets/leaderboard/${tournamentId}`);
 }
 
+// --- Analytics Types ---
+
+export interface RoundStats {
+    roundNumber: number;
+    roundName: string;
+    traderCount: number;
+    eliminatedCount: number;
+    advancedCount: number;
+    avgCpi: number;
+    minCpi: number;
+    maxCpi: number;
+    avgPnl: number;
+    avgRisk: number;
+    avgConsistency: number;
+    avgActivity: number;
+}
+
+export interface TournamentAnalytics {
+    tournament: {
+        id: number;
+        name: string;
+        status: string;
+        totalRounds: number;
+        totalTraders: number;
+        totalRegistrations: number;
+    };
+    roundStats: RoundStats[];
+    scoreDistribution: Array<{ bucket: string; count: number }>;
+    componentInsights: {
+        advancedAvg: { pnl: number; risk: number; consistency: number; activity: number };
+        eliminatedAvg: { pnl: number; risk: number; consistency: number; activity: number };
+    } | null;
+    topPerformers: Array<{
+        wallet: string;
+        cpiScore: number;
+        roundNumber: number;
+        roundName: string;
+    }>;
+}
+
+export async function getTournamentAnalytics(
+    tournamentId: number,
+): Promise<TournamentAnalytics> {
+    return apiFetch(`/api/brackets/analytics/${tournamentId}`);
+}
+
 // --- Admin Functions ---
 
 export async function createTournament(

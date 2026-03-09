@@ -14,6 +14,7 @@ import {
     Trophy,
 } from 'lucide-react';
 import Link from 'next/link';
+import ShareButton from '@/components/ShareButton';
 
 type SortKey = 'rank' | 'cpiScore' | 'pnlScore' | 'riskScore' | 'consistencyScore' | 'activityScore' | 'lastRound';
 type SortDir = 'asc' | 'desc';
@@ -166,6 +167,7 @@ export default function LeaderboardPage({ params }: { params: Promise<{ id: stri
                             <SortHeader label="Activity" sortKeyProp="activityScore" />
                             <SortHeader label="Last Rd" sortKeyProp="lastRound" />
                             <th className="col-status">Status</th>
+                            <th style={{ width: 32 }}></th>
                         </tr>
                     </thead>
                     <tbody>
@@ -210,6 +212,12 @@ export default function LeaderboardPage({ params }: { params: Promise<{ id: stri
                                         ) : (
                                             <span className="status-chip chip-active">Active</span>
                                         )}
+                                    </td>
+                                    <td>
+                                        <ShareButton
+                                            compact
+                                            text={`\u{1F4CA} Ranked #${displayRank} in ${tournament.name} on @AdrenaProtocol | CPI: ${entry.cpiScore.toFixed(1)}\n\n#AdrenaGauntlet`}
+                                        />
                                     </td>
                                 </tr>
                             );

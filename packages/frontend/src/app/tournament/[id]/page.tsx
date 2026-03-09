@@ -19,8 +19,10 @@ import {
     XCircle,
     Trophy,
     ChevronRight,
+    BarChart3,
 } from 'lucide-react';
 import Link from 'next/link';
+import ShareButton from '@/components/ShareButton';
 import styles from './page.module.css';
 
 export default function TournamentPage({ params }: { params: Promise<{ id: string }> }) {
@@ -194,9 +196,14 @@ export default function TournamentPage({ params }: { params: Promise<{ id: strin
                             )}
                         </p>
                     </div>
-                    <span className={`badge badge--${tournament.status}`}>
-                        {tournament.status}
-                    </span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-sm)' }}>
+                        <ShareButton
+                            text={`\u{2694}\u{FE0F} Check out ${tournament.name} — a Battle Royale trading competition on @AdrenaProtocol!\n\n${tournament.registrationCount} traders competing across ${allRounds.length} round${allRounds.length !== 1 ? 's' : ''}\n\n#AdrenaGauntlet`}
+                        />
+                        <span className={`badge badge--${tournament.status}`}>
+                            {tournament.status}
+                        </span>
+                    </div>
                 </div>
             </header>
 
@@ -295,13 +302,24 @@ export default function TournamentPage({ params }: { params: Promise<{ id: strin
                                 ? `Round ${bracketsData.round.roundNumber}: ${bracketsData.round.name}`
                                 : 'Brackets'}
                         </h2>
-                        <Link
-                            href={`/leaderboard/${tournamentId}`}
-                            className="btn btn--secondary"
-                            style={{ fontSize: '0.8125rem', padding: '6px 12px' }}
-                        >
-                            Leaderboard <ChevronRight size={14} />
-                        </Link>
+                        <div style={{ display: 'flex', gap: 'var(--space-xs)' }}>
+                            {allRounds.some(r => r.status === 'completed') && (
+                                <Link
+                                    href={`/tournament/${tournamentId}/analytics`}
+                                    className="btn btn--secondary"
+                                    style={{ fontSize: '0.8125rem', padding: '6px 12px' }}
+                                >
+                                    <BarChart3 size={14} /> Analytics
+                                </Link>
+                            )}
+                            <Link
+                                href={`/leaderboard/${tournamentId}`}
+                                className="btn btn--secondary"
+                                style={{ fontSize: '0.8125rem', padding: '6px 12px' }}
+                            >
+                                Leaderboard <ChevronRight size={14} />
+                            </Link>
+                        </div>
                     </div>
 
                     {bracketsData.round && bracketsData.round.status === 'active' && (
