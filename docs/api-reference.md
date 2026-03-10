@@ -208,7 +208,7 @@ Config overrides are merged with the existing config — you only need to send t
 DELETE /api/tournaments/:id
 ```
 
-Deletes a tournament and all its registrations. **Admin-only. Only works during `registration` status.**
+Deletes a tournament and **all associated data** (registrations, rounds, brackets, entries, score snapshots). **Admin-only. Works in any status.** Performs a full cascade delete in FK dependency order.
 
 **Headers:** `X-Admin-Secret: your-secret`
 
@@ -227,7 +227,6 @@ Deletes a tournament and all its registrations. **Admin-only. Only works during 
 **Errors:**
 - `401` if admin secret is missing/wrong
 - `404` if tournament not found
-- `409` if tournament is not in `registration` status
 
 ---
 
@@ -385,6 +384,72 @@ Returns all participants ranked across the tournament. Sorting priority:
 
 ---
 
+### Get Tournament Analytics
+
+```
+GET /api/brackets/analytics/:tournamentId
+```
+
+Returns aggregate post-tournament analytics: per-round statistics, CPI score distribution, component insights (advanced vs eliminated), and top performers. Useful for analyzing completed tournaments.
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "tournament": {
+      "id": 1,
+      "name": "Season 1",
+      "status": "completed",
+      "totalRounds": 3,
+      "totalTraders": 30,
+      "totalRegistrations": 35
+    },
+    "roundStats": [
+      {
+        "roundNumber": 1,
+        "roundName": "First Blood",
+        "traderCount": 30,
+        "eliminatedCount": 15,
+        "advancedCount": 15,
+        "avgCpi": 52.3,
+        "minCpi": 18.7,
+        "maxCpi": 82.1,
+        "avgPnl": 45.2,
+        "avgRisk": 68.4,
+        "avgConsistency": 42.8,
+        "avgActivity": 55.1
+      }
+    ],
+    "scoreDistribution": [
+      { "bucket": "0-10", "count": 2 },
+      { "bucket": "10-20", "count": 5 },
+      { "bucket": "20-30", "count": 8 }
+    ],
+    "componentInsights": {
+      "advancedAvg": { "pnl": 58.3, "risk": 72.1, "consistency": 55.4, "activity": 62.0 },
+      "eliminatedAvg": { "pnl": 32.1, "risk": 64.8, "consistency": 30.2, "activity": 48.5 }
+    },
+    "topPerformers": [
+      {
+        "wallet": "AbcXyz...",
+        "cpiScore": 82.1,
+        "roundNumber": 1,
+        "roundName": "First Blood"
+      }
+    ]
+  }
+}
+```
+
+**Notes:**
+- Returns empty arrays and `null` insights if no rounds have been scored yet.
+- `componentInsights` is `null` if no entries have CPI > 0.
+- `scoreDistribution` uses 10-point buckets from 0-10 through 90-100.
+- `topPerformers` returns up to 5 entries, ranked by single-round CPI.
+
+---
+
 ## Admin Endpoints
 
 All admin endpoints require the `X-Admin-Secret` header matching the `ADMIN_SECRET` environment variable. Returns `401 Unauthorized` if the secret is missing or incorrect.
@@ -516,13 +581,40 @@ The tournament completes if 3 or fewer traders remain or 3 rounds have been play
 
 ---
 
+### Cancel Tournament
+
+```
+POST /api/admin/cancel/:id
+```
+
+Cancels an active or registration-phase tournament. Cannot cancel tournaments that are already `completed` or `cancelled`.
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "id": 1,
+    "status": "cancelled"
+  }
+}
+```
+
+**Errors:**
+- `401` if admin secret is missing/wrong
+- `404` if tournament not found
+- `409` if tournament is already `completed` or `cancelled`
+
+---
+
 ## Error Codes
 
-| Status | Meaning                              |
-|--------|--------------------------------------|
-| 200    | Success                              |
-| 201    | Created (registration, tournament)   |
-| 400    | Bad request (missing/invalid params) |
-| 401    | Unauthorized (admin secret required) |
-| 404    | Resource not found                   |
-| 500    | Internal server error                |
+| Status | Meaning                                          |
+|--------|--------------------------------------------------|
+| 200    | Success                                          |
+| 201    | Created (registration, tournament)               |
+| 400    | Bad request (missing/invalid params)             |
+| 401    | Unauthorized (admin secret required)             |
+| 404    | Resource not found                               |
+| 409    | Conflict (invalid status transition)             |
+| 500    | Internal server error                            |

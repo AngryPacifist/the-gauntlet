@@ -42,6 +42,25 @@ Full methodology: [docs/competition-design.md](docs/competition-design.md)
 
 ---
 
+## Screenshots
+
+### Dashboard
+![Tournament dashboard showing active, registration, and completed tournaments](docs/screenshots/dashboard.png)
+
+### Bracket View — Round 1 (First Blood)
+![Round 1 brackets with 8 traders each, showing CPI scores, ADV/OUT status, and elimination line](docs/screenshots/round1.png)
+
+### Bracket View — Round 2 (The Crucible)
+![Round 2 brackets with 4 advancing traders, expanded score breakdowns showing PnL, Risk, Consistency, Activity](docs/screenshots/round2.png)
+
+### Leaderboard
+![Full tournament leaderboard ranked by CPI across rounds, with sortable columns and share buttons](docs/screenshots/leaderboard.png)
+
+### Post-Tournament Analytics
+![Analytics page with elimination funnel, round-by-round performance table, CPI distribution histogram, winner differentiation chart, and top performers](docs/screenshots/analytics.png)
+
+---
+
 ## Quick Start
 
 ### Prerequisites
@@ -79,9 +98,20 @@ npm run dev
 
 ---
 
+## Key Features
+
+- **Bracket Elimination** — Traders compete in groups. Bottom 50% eliminated each round.
+- **Multi-Dimensional Scoring** — CPI combines PnL, Risk, Consistency, and Activity.
+- **Anti-Gaming Filters** — Dust trade, wash trade, and duration filters prevent abuse.
+- **Automated Rounds** — Scheduler auto-scores every 15 minutes and auto-advances when rounds end.
+- **Share-to-X** — One-click tweet sharing from tournament, leaderboard, and trader profile pages.
+- **Post-Tournament Analytics** — Elimination funnel, CPI distribution histograms, component insights, and top performers.
+
+---
+
 ## API
 
-14 endpoints covering tournaments, registration, brackets, trader profiles, leaderboards, and admin actions.
+17 endpoints covering tournaments, registration, brackets, trader profiles, leaderboards, analytics, and admin actions.
 
 Full reference: [docs/api-reference.md](docs/api-reference.md)
 
@@ -94,14 +124,14 @@ adrena-the-gauntlet/
 ├── packages/
 │   ├── backend/           # Express API server
 │   │   └── src/
-│   │       ├── routes/    # API route handlers
+│   │       ├── routes/    # API route handlers (tournaments, registration, brackets, admin)
 │   │       ├── services/  # Business logic (tournament, scoring, scheduler, Adrena client)
 │   │       └── db/        # Schema, migrations, connection
 │   └── frontend/          # Next.js dashboard
 │       └── src/
+│           ├── components/ # Shared components (ShareButton)
 │           ├── lib/       # API client
-│           └── app/       # Pages (dashboard, tournament, admin, register, leaderboard, trader)
-├── scripts/               # Test scripts
+│           └── app/       # Pages (dashboard, tournament, analytics, admin, register, leaderboard, trader)
 ├── docs/                  # Documentation
 │   ├── competition-design.md
 │   ├── api-reference.md

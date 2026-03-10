@@ -135,8 +135,8 @@ adrena-the-gauntlet/
 │   │       ├── routes/
 │   │       │   ├── tournaments.ts    # Tournament CRUD (list, get, create, edit, delete)
 │   │       │   ├── registration.ts   # Wallet registration
-│   │       │   ├── admin.ts          # Admin actions (start, score, advance)
-│   │       │   └── brackets.ts       # Bracket details, trader profiles, leaderboard
+│   │       │   ├── admin.ts          # Admin actions (start, score, advance, cancel)
+│   │       │   └── brackets.ts       # Bracket details, trader profiles, leaderboard, analytics
 │   │       └── services/
 │   │           ├── tournament-manager.ts  # Tournament lifecycle logic
 │   │           ├── scoring-engine.ts      # CPI computation
@@ -144,22 +144,25 @@ adrena-the-gauntlet/
 │   │           └── adrena-client.ts       # Adrena API client
 │   └── frontend/
 │       └── src/
+│           ├── components/
+│           │   └── ShareButton.tsx    # Share-to-X one-click tweet component
 │           ├── lib/api.ts            # Typed API client
 │           └── app/
 │               ├── layout.tsx        # Root layout with navigation
 │               ├── page.tsx          # Dashboard (tournament list)
 │               ├── admin/page.tsx    # Admin panel
 │               ├── register/page.tsx # Public registration
-│               ├── tournament/[id]/page.tsx   # Tournament detail
-│               ├── leaderboard/[id]/page.tsx  # Leaderboard
-│               └── trader/[wallet]/page.tsx   # Trader profile
-├── scripts/                          # Test scripts
+│               ├── tournament/[id]/page.tsx           # Tournament detail
+│               ├── tournament/[id]/analytics/page.tsx # Post-tournament analytics
+│               ├── leaderboard/[id]/page.tsx          # Leaderboard
+│               └── trader/[wallet]/page.tsx           # Trader profile
 ├── docs/
 │   ├── competition-design.md         # Competition mechanics
 │   ├── api-reference.md              # API documentation
 │   ├── deployment-guide.md           # This file
 │   └── testing-report.md             # Test results
 ├── .env                              # Environment variables (not committed)
+├── .env.example                      # Example environment variables
 └── package.json                      # Monorepo root with npm workspaces
 ```
 
