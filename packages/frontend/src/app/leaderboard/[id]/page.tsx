@@ -101,9 +101,9 @@ export default function LeaderboardPage({ params }: { params: Promise<{ id: stri
         return '';
     }
 
-    if (loading) return <div className="page-container"><div className="loading-state">Loading leaderboard...</div></div>;
-    if (error) return <div className="page-container"><div className="error-state">{error}</div></div>;
-    if (!tournament || !leaderboard) return <div className="page-container"><div className="error-state">Not found</div></div>;
+    if (loading) return <div className="container"><div className="loading-state">Loading leaderboard...</div></div>;
+    if (error) return <div className="container"><div className="error-state">{error}</div></div>;
+    if (!tournament || !leaderboard) return <div className="container"><div className="error-state">Not found</div></div>;
 
     const sortedEntries = getSortedEntries();
 
@@ -127,7 +127,7 @@ export default function LeaderboardPage({ params }: { params: Promise<{ id: stri
     }
 
     return (
-        <div className="page-container">
+        <div className="container">
             <div className="page-header">
                 <div>
                     <Link href={`/tournament/${tournamentId}`} className="back-link">

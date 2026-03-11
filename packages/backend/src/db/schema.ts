@@ -12,6 +12,7 @@ import {
     timestamp,
     jsonb,
     date,
+    index,
     uniqueIndex,
 } from 'drizzle-orm/pg-core';
 
@@ -134,7 +135,7 @@ export const dailyCategoryScores = pgTable('daily_category_scores', {
     uniqueDailyScore: uniqueIndex('idx_daily_category_unique').on(
         table.tournamentId, table.wallet, table.category, table.scoreDate,
     ),
-    leaderboardIdx: uniqueIndex('idx_daily_category_leaderboard').on(
+    leaderboardIdx: index('idx_daily_category_leaderboard').on(
         table.tournamentId, table.category, table.scoreDate,
     ),
 }));

@@ -7,9 +7,7 @@
         "dev": "tsx watch src/index.ts",
         "build": "tsc",
         "start": "node dist/index.js",
-        "db:setup": "tsx src/db/migrate.ts",
-        "test": "vitest run",
-        "test:watch": "vitest"
+        "db:setup": "tsx src/db/migrate.ts"
     },
     "dependencies": {
         "cors": "^2.8.5",
@@ -27,7 +25,6 @@
         "@types/pg": "^8.11.10",
         "drizzle-kit": "^0.30.0",
         "tsx": "^4.19.2",
-        "typescript": "^5.7.0",
-        "vitest": "^2.1.0"
+        "typescript": "^5.7.0"
     }
 }

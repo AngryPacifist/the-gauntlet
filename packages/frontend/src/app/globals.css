@@ -535,8 +535,8 @@ a:hover {
   background-clip: text;
 }
 
-/* Page container — used by pages without .container */
-.page-container {
+/* Page container */
+.container {
   max-width: 1200px;
   margin: 0 auto;
   padding: 0 var(--space-lg);

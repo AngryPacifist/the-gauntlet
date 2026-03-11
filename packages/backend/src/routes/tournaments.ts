@@ -15,7 +15,7 @@ import {
     getTournamentState,
 } from '../services/tournament-manager.js';
 import { db } from '../db/index.js';
-import { tournaments, rounds, brackets, bracketEntries, registrations, scoreSnapshots } from '../db/schema.js';
+import { tournaments, rounds, brackets, bracketEntries, registrations, scoreSnapshots, dailyCategoryScores } from '../db/schema.js';
 import { eq, desc, inArray } from 'drizzle-orm';
 import type { TournamentConfig } from '../types.js';
 
@@ -251,7 +251,14 @@ router.delete('/:id', async (req, res) => {
         // 8. Delete registrations (FK → tournaments)
         await db.delete(registrations).where(eq(registrations.tournamentId, id));
 
-        // 9. Delete the tournament
+        // 9. Delete daily category scores (FK → tournaments)
+        await db.delete(dailyCategoryScores).where(eq(dailyCategoryScores.tournamentId, id));
+
+        // 10. Delete trade cache entries (no FK, but tied to tournament context)
+        // Note: tradeCache doesn't have a tournamentId column — it's wallet-scoped,
+        // not tournament-scoped. Skipping to avoid deleting cache shared across tournaments.
+
+        // 11. Delete the tournament
         await db.delete(tournaments).where(eq(tournaments.id, id));
 
         console.log(`[API] Deleted tournament ${id} ("${tournament.name}") — full cascade`);

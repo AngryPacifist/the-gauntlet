@@ -11,7 +11,7 @@ import adminRoutes from './routes/admin.js';
 import bracketsRoutes from './routes/brackets.js';
 import seasonsRoutes from './routes/seasons.js';
 import categoriesRoutes from './routes/categories.js';
-import { startScheduler } from './services/scheduler.js';
+import { startScheduler, stopScheduler } from './services/scheduler.js';
 
 const app = express();
 const PORT = parseInt(process.env.PORT ?? '3001', 10);
@@ -61,7 +61,7 @@ app.use((err: Error, _req: express.Request, res: express.Response, _next: expres
 });
 
 // Start server
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
     console.log(`
 ╔══════════════════════════════════════════════════╗
 ║                                                  ║
@@ -77,5 +77,23 @@ app.listen(PORT, () => {
     // Start automated tournament scheduler
     startScheduler();
 });
+
+// Graceful shutdown
+function shutdown(signal: string) {
+    console.log(`\n[Server] Received ${signal}, shutting down gracefully...`);
+    stopScheduler();
+    server.close(() => {
+        console.log('[Server] HTTP server closed');
+        process.exit(0);
+    });
+    // Force exit after 10 seconds if server doesn't close
+    setTimeout(() => {
+        console.error('[Server] Forced shutdown after timeout');
+        process.exit(1);
+    }, 10_000);
+}
+
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));
 
 export default app;

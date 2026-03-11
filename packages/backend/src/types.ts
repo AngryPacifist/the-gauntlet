@@ -86,22 +86,6 @@ export interface AdrenaPositionResponse {
     data: AdrenaPosition[];
 }
 
-export interface AdrenaPoolStats {
-    start_date: string;
-    end_date: string;
-    daily_volume_usd: number;
-    total_volume_usd: number;
-    daily_fee_usd: number;
-    total_fee_usd: number;
-    pool_name: string;
-}
-
-export interface AdrenaPoolStatsResponse {
-    success: boolean;
-    error: string | null;
-    data: AdrenaPoolStats;
-}
-
 // --- Database Row Types ---
 
 export interface TournamentRow {
@@ -175,18 +159,6 @@ export interface BracketDetail extends BracketRow {
     entries: BracketEntryRow[];
 }
 
-export interface TraderProfile {
-    wallet: string;
-    tournament: {
-        id: number;
-        name: string;
-    };
-    currentRound: number;
-    scores: CPIScores | null;
-    eliminated: boolean;
-    advanced: boolean;
-    positions: AdrenaPosition[];
-}
 
 // --- Season Types ---
 

@@ -348,7 +348,7 @@ export async function saveDailyCategoryScores(
             tournamentId,
             seasonId,
             wallet,
-            category: 'top_bottom_fisher',
+            category: 'fisher',
             scoreDate: dateStr,
             score: details.totalPoints,
             details,

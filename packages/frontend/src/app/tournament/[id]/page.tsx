@@ -20,6 +20,7 @@ import {
     Trophy,
     ChevronRight,
     BarChart3,
+    Compass,
 } from 'lucide-react';
 import Link from 'next/link';
 import ShareButton from '@/components/ShareButton';
@@ -343,6 +344,13 @@ export default function TournamentPage({ params }: { params: Promise<{ id: strin
                                 style={{ fontSize: '0.8125rem', padding: '6px 12px' }}
                             >
                                 Leaderboard <ChevronRight size={14} />
+                            </Link>
+                            <Link
+                                href={`/categories/${tournamentId}`}
+                                className="btn btn--secondary"
+                                style={{ fontSize: '0.8125rem', padding: '6px 12px' }}
+                            >
+                                <Compass size={14} /> Categories
                             </Link>
                         </div>
                     </div>

@@ -3,12 +3,11 @@
 //
 // Wraps the Adrena public API at datapi.adrena.trade.
 // Primary endpoint for competitions: GET /position (trade history per wallet)
-// Secondary: GET /pool-high-level-stats (pool analytics)
 //
 // Reference: resources/adrena-api-reference.md
 // ============================================================================
 
-import type { AdrenaPosition, AdrenaPoolStats } from '../types.js';
+import type { AdrenaPosition } from '../types.js';
 
 const DEFAULT_BASE_URL = 'https://datapi.adrena.trade';
 
@@ -94,30 +93,7 @@ export class AdrenaClient {
         return positions;
     }
 
-    // --------------------------------------------------------------------------
-    // GET /pool-high-level-stats — Aggregated pool statistics
-    //
-    // Returns daily and total volume/fees for the pool.
-    // Optional params: end_date (ISO 8601), pool_name (defaults to "main")
-    // --------------------------------------------------------------------------
-    async getPoolStats(endDate?: string, poolName?: string): Promise<AdrenaPoolStats> {
-        const params = new URLSearchParams();
-        if (endDate) params.set('end_date', endDate);
-        if (poolName) params.set('pool_name', poolName);
 
-        const queryString = params.toString();
-        const url = queryString
-            ? `${this.baseUrl}/pool-high-level-stats?${queryString}`
-            : `${this.baseUrl}/pool-high-level-stats`;
-
-        const response = await this.fetchWithRetry(url);
-
-        if (!response.success) {
-            throw new Error(`Adrena API error (GET /pool-high-level-stats): ${response.error ?? 'Unknown error'}`);
-        }
-
-        return response.data as AdrenaPoolStats;
-    }
 
     // --------------------------------------------------------------------------
     // Helper: Filter positions to only those within a specific time window.

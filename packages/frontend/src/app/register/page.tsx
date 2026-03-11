@@ -75,7 +75,7 @@ export default function RegisterPage() {
     const selectedTournament = tournaments.find((t) => t.id === selectedTournamentId);
 
     return (
-        <div className="page-container">
+        <div className="container">
             <div className="register-hero">
                 <h1>
                     <span className="gradient-text">Enter The Gauntlet</span>

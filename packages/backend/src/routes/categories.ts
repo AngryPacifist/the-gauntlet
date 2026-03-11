@@ -120,7 +120,7 @@ router.get('/:tournamentId/fisher', async (req, res) => {
             .where(
                 and(
                     eq(dailyCategoryScores.tournamentId, tournamentId),
-                    eq(dailyCategoryScores.category, 'top_bottom_fisher'),
+                    eq(dailyCategoryScores.category, 'fisher'),
                 ),
             )
             .groupBy(dailyCategoryScores.wallet)
@@ -155,7 +155,7 @@ router.get('/:tournamentId/fisher/:date', async (req, res) => {
             .where(
                 and(
                     eq(dailyCategoryScores.tournamentId, tournamentId),
-                    eq(dailyCategoryScores.category, 'top_bottom_fisher'),
+                    eq(dailyCategoryScores.category, 'fisher'),
                     eq(dailyCategoryScores.scoreDate, dateStr),
                 ),
             )
