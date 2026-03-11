@@ -47,11 +47,8 @@ Full methodology: [docs/competition-design.md](docs/competition-design.md)
 ### Dashboard
 ![Tournament dashboard showing active, registration, and completed tournaments](docs/screenshots/dashboard.png)
 
-### Bracket View — Round 1 (First Blood)
+### Bracket View — First Blood
 ![Round 1 brackets with 8 traders each, showing CPI scores, ADV/OUT status, and elimination line](docs/screenshots/round1.png)
-
-### Bracket View — Round 2 (The Crucible)
-![Round 2 brackets with 4 advancing traders, expanded score breakdowns showing PnL, Risk, Consistency, Activity](docs/screenshots/round2.png)
 
 ### Leaderboard
 ![Full tournament leaderboard ranked by CPI across rounds, with sortable columns and share buttons](docs/screenshots/leaderboard.png)
