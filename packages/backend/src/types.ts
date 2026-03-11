@@ -7,27 +7,30 @@
 export type TournamentStatus = 'registration' | 'active' | 'completed' | 'cancelled';
 export type RoundStatus = 'pending' | 'active' | 'completed';
 export type RoundName = 'First Blood' | 'The Crucible' | 'Sudden Death' | 'Endgame';
+export type RoundType = 'main' | 'consolation';
+
+export const CONSOLATION_ROUND_NAMES = ['Redemption Arc', 'Last Stand', 'Final Reckoning'] as const;
 
 export interface TournamentConfig {
-    bracketSize: number;         // Traders per bracket in Round 1 (default: 8)
-    advanceRatio: number;        // Fraction that advance per round (default: 0.5)
-    roundDurationHours: number;  // Duration of each round in hours (default: 72)
-    minHistoricalTrades: number; // Minimum closed trades for eligibility (default: 5)
-    minPositionCollateral: number; // Minimum collateral to count a trade (USD, default: 10)
-    minTradeDurationSec: number;   // Minimum trade duration to count (seconds, default: 120)
-    maxDaysInactive: number;       // Max days since last trade for eligibility (default: 30)
-    useHistoricalWindow: boolean;  // If true, scoring uses historical window instead of round dates (default: false)
-    historicalWindowDays: number;  // Number of days for historical window (default: 90)
+    bracketSize: number;              // Traders per bracket in Round 1 (default: 8)
+    advanceRatio: number;             // Fraction that advance per round (default: 0.5)
+    roundDurations: number[];         // Duration of each round in hours [R1, R2, R3] (default: [72, 48, 48])
+    minPositionCollateral: number;    // Minimum collateral to count a trade (USD, default: 25)
+    minTradeDurationSec: number;      // Minimum trade duration to count (seconds, default: 120)
+    leveragePenaltyThreshold: number; // Leverage above this is penalized (default: 30)
+    supportedAssetCount: number;      // Number of tradeable assets on Adrena (default: 4)
+    useHistoricalWindow: boolean;     // If true, scoring uses historical window instead of round dates (default: false)
+    historicalWindowDays: number;     // Number of days for historical window (default: 90)
 }
 
 export const DEFAULT_TOURNAMENT_CONFIG: TournamentConfig = {
     bracketSize: 8,
     advanceRatio: 0.5,
-    roundDurationHours: 72,
-    minHistoricalTrades: 5,
-    minPositionCollateral: 10,
+    roundDurations: [72, 48, 48],
+    minPositionCollateral: 25,
     minTradeDurationSec: 120,
-    maxDaysInactive: 30,
+    leveragePenaltyThreshold: 30,
+    supportedAssetCount: 4,
     useHistoricalWindow: false,
     historicalWindowDays: 90,
 };
@@ -114,10 +117,11 @@ export interface RoundRow {
     id: number;
     tournament_id: number;
     round_number: number;
-    name: RoundName;
+    name: string;
     start_time: Date;
     end_time: Date;
     status: RoundStatus;
+    type: RoundType;
 }
 
 export interface BracketRow {
@@ -144,7 +148,6 @@ export interface RegistrationRow {
     tournament_id: number;
     wallet: string;
     registered_at: Date;
-    eligible: boolean;
 }
 
 export interface ScoreSnapshotRow {

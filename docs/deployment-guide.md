@@ -108,10 +108,10 @@ The migration script (`packages/backend/src/db/migrate.ts`) creates these tables
 | Table              | Purpose                                        |
 |--------------------|------------------------------------------------|
 | `tournaments`      | Tournament metadata, config, status             |
-| `rounds`           | Round details (name, timestamps, status)        |
+| `rounds`           | Round details (name, type, timestamps, status)  |
 | `brackets`         | Bracket groupings within a round                |
 | `bracket_entries`  | Individual trader entries with scores           |
-| `registrations`    | Wallet registrations with eligibility           |
+| `registrations`    | Wallet registrations for tournaments            |
 | `score_snapshots`  | Audit trail of score computations               |
 | `trade_cache`      | Cached position data from the Adrena API        |
 

@@ -41,7 +41,7 @@ export default function TournamentPage({ params }: { params: Promise<{ id: strin
     // Registration
     const [walletInput, setWalletInput] = useState('');
     const [regResult, setRegResult] = useState<{
-        eligible: boolean;
+        registered: boolean;
         reason?: string;
     } | null>(null);
     const [registering, setRegistering] = useState(false);
@@ -117,12 +117,12 @@ export default function TournamentPage({ params }: { params: Promise<{ id: strin
             setRegResult(null);
             const result = await registerWallet(tournamentId, walletInput.trim());
             setRegResult(result);
-            if (result.eligible) {
+            if (result.registered) {
                 loadData();
             }
         } catch (err) {
             setRegResult({
-                eligible: false,
+                registered: false,
                 reason: err instanceof Error ? err.message : 'Registration failed',
             });
         } finally {
@@ -219,10 +219,6 @@ export default function TournamentPage({ params }: { params: Promise<{ id: strin
                     </div>
                 </div>
                 <div className="card stat-card">
-                    <div className="stat-card__label">Eligible</div>
-                    <div className="stat-card__value">{tournament.eligibleCount}</div>
-                </div>
-                <div className="card stat-card">
                     <div className="stat-card__label">Current Round</div>
                     <div className="stat-card__value">
                         {activeRound ? activeRound.roundNumber : completedRounds.length || '—'}
@@ -260,10 +256,10 @@ export default function TournamentPage({ params }: { params: Promise<{ id: strin
                     </form>
                     {regResult && (
                         <div
-                            className={`${styles.regResult} ${regResult.eligible ? styles.regSuccess : styles.regFail}`}
+                            className={`${styles.regResult} ${regResult.registered ? styles.regSuccess : styles.regFail}`}
                         >
-                            {regResult.eligible ? (
-                                <><CheckCircle size={16} style={{ marginRight: 6, flexShrink: 0 }} /> Successfully registered! You are eligible for the tournament.</>
+                            {regResult.registered ? (
+                                <><CheckCircle size={16} style={{ marginRight: 6, flexShrink: 0 }} /> Successfully registered! You're in the tournament.</>
                             ) : (
                                 <><XCircle size={16} style={{ marginRight: 6, flexShrink: 0 }} /> {regResult.reason}</>
                             )}

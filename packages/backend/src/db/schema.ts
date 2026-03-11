@@ -5,7 +5,6 @@
 import {
     pgTable,
     serial,
-    text,
     varchar,
     integer,
     boolean,
@@ -32,6 +31,7 @@ export const rounds = pgTable('rounds', {
     tournamentId: integer('tournament_id').notNull().references(() => tournaments.id),
     roundNumber: integer('round_number').notNull(),
     name: varchar('name', { length: 50 }).notNull(),
+    type: varchar('type', { length: 20 }).notNull().default('main'),
     startTime: timestamp('start_time', { withTimezone: true }).notNull(),
     endTime: timestamp('end_time', { withTimezone: true }).notNull(),
     status: varchar('status', { length: 20 }).notNull().default('pending'),
@@ -67,7 +67,6 @@ export const registrations = pgTable('registrations', {
     tournamentId: integer('tournament_id').notNull().references(() => tournaments.id),
     wallet: varchar('wallet', { length: 44 }).notNull(),
     registeredAt: timestamp('registered_at', { withTimezone: true }).notNull().defaultNow(),
-    eligible: boolean('eligible').notNull().default(false),
 });
 
 // --- Score Snapshots (history of score computations for audit trail) ---

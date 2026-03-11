@@ -8,11 +8,11 @@ Traders register with their wallet, compete in timed rounds, and are scored on a
 
 ## How It Works
 
-1. **Registration** — Traders submit their Solana wallet address. Eligibility is checked against their Adrena trading history.
-2. **Bracket Formation** — Eligible traders are shuffled into brackets of 8.
-3. **Trading Rounds** — Each round runs for 72 hours. Traders trade as they normally would on Adrena.
+1. **Registration** — Traders submit their Solana wallet address. Zero-barrier sign-up: any valid wallet is accepted.
+2. **Bracket Formation** — Registered traders are shuffled into brackets of 8.
+3. **Trading Rounds** — Each round runs for a configurable duration (default: 72h, 48h, 48h). Traders trade as they normally would on Adrena.
 4. **Scoring** — At the end of each round, positions are fetched from the Adrena API and a CPI score is computed.
-5. **Elimination** — The bottom 50% of each bracket is eliminated. The top 50% advance to the next round in new brackets.
+5. **Elimination** — The bottom 50% of each bracket is eliminated. Eliminated traders enter "Fallen Fighters" consolation brackets. The top 50% advance in new brackets.
 6. **Completion** — After 3 rounds (or when 3 or fewer traders remain), the tournament ends.
 
 ### CPI Scoring
@@ -21,10 +21,10 @@ Traders register with their wallet, compete in timed rounds, and are scored on a
 CPI = (0.35 x PnL) + (0.25 x Risk) + (0.25 x Consistency) + (0.15 x Activity)
 ```
 
-- **PnL**: ROI normalized across account sizes. Measures profitability.
-- **Risk**: Penalizes liquidations and excessive leverage. Measures discipline.
-- **Consistency**: Low variance in daily returns = higher score.
-- **Activity**: Trade count, volume, and market diversity.
+- **PnL**: ROI (PnL / notional USD exposure). Measures profitability.
+- **Risk**: Penalizes liquidations and leverage above configurable threshold (default 30x).
+- **Consistency**: Profitable days ratio + win rate bonus. Rewards steady green days.
+- **Activity**: Trade count, volume, and market diversity (variety weighted 40%).
 
 Full methodology: [docs/competition-design.md](docs/competition-design.md)
 
@@ -101,7 +101,9 @@ npm run dev
 ## Key Features
 
 - **Bracket Elimination** — Traders compete in groups. Bottom 50% eliminated each round.
+- **Fallen Fighters** — Eliminated traders enter consolation brackets for continued engagement.
 - **Multi-Dimensional Scoring** — CPI combines PnL, Risk, Consistency, and Activity.
+- **Configurable Rounds** — Per-round durations, leverage thresholds, and asset counts.
 - **Anti-Gaming Filters** — Dust trade, wash trade, and duration filters prevent abuse.
 - **Automated Rounds** — Scheduler auto-scores every 15 minutes and auto-advances when rounds end.
 - **Share-to-X** — One-click tweet sharing from tournament, leaderboard, and trader profile pages.

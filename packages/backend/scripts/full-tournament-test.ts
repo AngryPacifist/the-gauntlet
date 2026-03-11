@@ -83,9 +83,7 @@ async function main(): Promise<void> {
             name: `Backtest Sim ${new Date().toISOString().slice(0, 16)}`,
             config: {
                 bracketSize: 8,
-                roundDurationHours: 72,
-                minHistoricalTrades: 3,
-                maxDaysInactive: 365,
+                roundDurations: [72, 48, 48],
                 useHistoricalWindow: true,
                 historicalWindowDays: 365,
             },
@@ -101,8 +99,8 @@ async function main(): Promise<void> {
     console.log(`  Tournament #${tournamentId} (bracketSize: 8, backtest: 365 days)\n`);
 
     // ── Step 2: Register wallets ───────────────────────────────────────
-    console.log('Step 2: Registering wallets (live Adrena API validation)...');
-    const results: Array<{ wallet: string; eligible: boolean; reason?: string }> = [];
+    console.log('Step 2: Registering wallets...');
+    const results: Array<{ wallet: string; registered: boolean; reason?: string }> = [];
 
     for (const wallet of LEADERBOARD_WALLETS) {
         const regRes = await backendFetch('/register', {
@@ -111,21 +109,21 @@ async function main(): Promise<void> {
         });
 
         if (regRes.success) {
-            const data = regRes.data as { eligible: boolean; reason?: string };
-            results.push({ wallet, eligible: data.eligible, reason: data.reason });
-            const label = data.eligible ? 'ELIGIBLE' : `INELIGIBLE: ${data.reason}`;
+            const data = regRes.data as { registered: boolean; reason?: string };
+            results.push({ wallet, registered: data.registered, reason: data.reason });
+            const label = data.registered ? 'REGISTERED' : `REJECTED: ${data.reason}`;
             console.log(`  ${wallet.slice(0, 10)}... => ${label}`);
         } else {
-            results.push({ wallet, eligible: false, reason: regRes.error });
+            results.push({ wallet, registered: false, reason: regRes.error });
             console.log(`  ${wallet.slice(0, 10)}... => ERROR: ${regRes.error}`);
         }
     }
 
-    const eligible = results.filter((r) => r.eligible);
-    console.log(`\n  Eligible: ${eligible.length} / ${LEADERBOARD_WALLETS.length}\n`);
+    const registered = results.filter((r) => r.registered);
+    console.log(`\n  Registered: ${registered.length} / ${LEADERBOARD_WALLETS.length}\n`);
 
-    if (eligible.length < 2) {
-        console.log('  Not enough eligible wallets. Aborting.');
+    if (registered.length < 2) {
+        console.log('  Not enough registered wallets. Aborting.');
         return;
     }
 

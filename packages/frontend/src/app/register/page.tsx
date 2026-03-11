@@ -19,7 +19,7 @@ export default function RegisterPage() {
     const [loading, setLoading] = useState(false);
     const [tournamentsLoading, setTournamentsLoading] = useState(true);
     const [result, setResult] = useState<{
-        type: 'success' | 'ineligible' | 'error';
+        type: 'success' | 'rejected' | 'error';
         message: string;
     } | null>(null);
 
@@ -50,16 +50,16 @@ export default function RegisterPage() {
 
         try {
             const res = await registerWallet(selectedTournamentId, wallet.trim());
-            if (res.eligible) {
+            if (res.registered) {
                 setResult({
                     type: 'success',
-                    message: 'Registration successful! Your wallet is eligible and has been registered.',
+                    message: 'Registration successful! You\'re in the tournament.',
                 });
                 setWallet('');
             } else {
                 setResult({
-                    type: 'ineligible',
-                    message: res.reason || 'Your wallet is not eligible for this tournament.',
+                    type: 'rejected',
+                    message: res.reason || 'Could not register for this tournament.',
                 });
             }
         } catch (err) {
@@ -139,7 +139,7 @@ export default function RegisterPage() {
                                 className="btn btn-primary btn-lg"
                                 disabled={loading || !wallet.trim() || !selectedTournamentId}
                             >
-                                {loading ? 'Checking eligibility...' : 'Register'}
+                                {loading ? 'Registering...' : 'Register'}
                             </button>
                         </form>
 
@@ -148,7 +148,7 @@ export default function RegisterPage() {
                                 <span className="result-icon">
                                     {result.type === 'success' ? (
                                         <CheckCircle size={20} />
-                                    ) : result.type === 'ineligible' ? (
+                                    ) : result.type === 'rejected' ? (
                                         <AlertTriangle size={20} />
                                     ) : (
                                         <XCircle size={20} />
@@ -175,19 +175,15 @@ export default function RegisterPage() {
                                     <span className="info-label">
                                         <Clock size={12} style={{ marginRight: 4 }} /> Round Duration
                                     </span>
-                                    <span className="info-value">{selectedTournament.config.roundDurationHours} hours</span>
+                                    <span className="info-value">{selectedTournament.config.roundDurations?.join(' / ') ?? '72'} hours</span>
                                 </div>
                                 <div className="info-item">
                                     <span className="info-label">Elimination Rate</span>
                                     <span className="info-value">{(1 - selectedTournament.config.advanceRatio) * 100}% per round</span>
                                 </div>
                                 <div className="info-item">
-                                    <span className="info-label">Min. Historical Trades</span>
-                                    <span className="info-value">{selectedTournament.config.minHistoricalTrades} closed positions</span>
-                                </div>
-                                <div className="info-item">
-                                    <span className="info-label">Max Inactivity</span>
-                                    <span className="info-value">{selectedTournament.config.maxDaysInactive} days</span>
+                                    <span className="info-label">Min. Collateral</span>
+                                    <span className="info-value">${selectedTournament.config.minPositionCollateral}</span>
                                 </div>
                                 <div className="info-item">
                                     <span className="info-label">Anti-Wash Filter</span>

@@ -7,7 +7,16 @@
 //      + (0.25 × Consistency Score) + (0.15 × Activity Score)
 //
 // Each sub-score is normalized to 0-100.
-// See implementation_plan.md for full methodology and rationale.
+//
+// Changelog (ZeDef feedback, March 2026):
+//   - PnL: ROI denominator switched from collateral_amount to entry_size
+//     (entry_size is immutable at position open; collateral is gameable)
+//   - Risk: leverage penalty threshold raised from 10x to configurable
+//     (default 30x; respects tactical high-leverage trading on Adrena)
+//   - Consistency: std-dev of daily ROIs replaced with profitable days ratio
+//     (avoids perverse incentive to trade conservatively on big winning days)
+//   - Activity: variety score weight doubled (20→40), trade count reduced
+//     (50→30). Asset count is dynamic via config, not hardcoded to 4.
 // ============================================================================
 
 import type {
@@ -26,6 +35,7 @@ export function computeCPI(
     roundStart: Date,
     roundEnd: Date,
     weights: CPIWeights = DEFAULT_CPI_WEIGHTS,
+    config?: Partial<TournamentConfig>,
 ): CPIScores {
     // If trader has zero valid positions, all scores are 0
     if (positions.length === 0) {
@@ -38,10 +48,13 @@ export function computeCPI(
         };
     }
 
+    const leverageThreshold = config?.leveragePenaltyThreshold ?? 30;
+    const assetCount = Math.max(config?.supportedAssetCount ?? 4, 1);
+
     const pnlScore = computePnlScore(positions);
-    const riskScore = computeRiskScore(positions);
-    const consistencyScore = computeConsistencyScore(positions, roundStart, roundEnd);
-    const activityScore = computeActivityScore(positions);
+    const riskScore = computeRiskScore(positions, leverageThreshold);
+    const consistencyScore = computeConsistencyScore(positions);
+    const activityScore = computeActivityScore(positions, assetCount);
 
     const cpiScore =
         weights.pnl * pnlScore +
@@ -61,11 +74,12 @@ export function computeCPI(
 // --------------------------------------------------------------------------
 // PnL Score (35% weight)
 //
-// Measures net profitability relative to capital at risk (ROI).
-// Using ROI normalizes for account size — a $500 account earning $50 (10%)
-// scores higher than a $50,000 account earning $500 (1%).
+// Measures net profitability relative to position size (ROI).
+// Using entry_size × entry_price as the denominator (notional USD exposure)
+// instead of collateral_amount because collateral is gameable — traders can
+// remove collateral mid-trade. entry_size is immutable at position open.
 //
-// ROI = Total Net PnL / Total Collateral Deployed
+// ROI = Total Net PnL (USD) / Total Notional Exposure (USD)
 // PnL Score = normalize(ROI, -100%, +200%) → 0-100
 //
 // Only CLOSED positions contribute to PnL (open positions have pnl = null).
@@ -85,13 +99,18 @@ function computePnlScore(positions: AdrenaPosition[]): number {
     // Sum PnL across closed positions (pnl field is non-null for closed positions)
     const totalPnl = closedPositions.reduce((sum, p) => sum + (p.pnl ?? 0), 0);
 
-    // Sum collateral across ALL positions (open + closed) — this is total capital deployed
-    const totalCollateral = positions.reduce((sum, p) => sum + p.collateral_amount, 0);
+    // Sum notional exposure across ALL positions (open + closed) in USD.
+    // entry_size is in token units; multiply by entry_price to get USD value.
+    // This is the denominator for ROI — total USD exposure the trader committed.
+    const totalExposureUsd = positions.reduce(
+        (sum, p) => sum + p.entry_size * p.entry_price,
+        0,
+    );
 
-    if (totalCollateral === 0) return 0;
+    if (totalExposureUsd === 0) return 0;
 
-    // ROI as a percentage
-    const roi = (totalPnl / totalCollateral) * 100;
+    // ROI as a percentage (PnL in USD / total USD exposure)
+    const roi = (totalPnl / totalExposureUsd) * 100;
 
     // Normalize to 0-100 scale:
     // -100% ROI → 0 score
@@ -110,12 +129,16 @@ function computePnlScore(positions: AdrenaPosition[]): number {
 // Penalizes: liquidations, excessive leverage.
 //
 // Liquidation Penalty = (liquidated count / total count) × 100
-// Leverage Penalty = max(0, (avg_leverage - 10) × 2)
-//     Penalty starts above 10x. At 10x: 0 penalty. At 50x: 80 penalty.
+// Leverage Penalty = max(0, (avg_leverage - threshold) × 2)
+//     Default threshold: 30x (configurable per tournament).
+//     At 30x: 0 penalty. At 50x: 40 penalty. At 100x: 140 → clamped.
 //
 // Risk Score = 100 - Liquidation Penalty - Leverage Penalty
 // --------------------------------------------------------------------------
-function computeRiskScore(positions: AdrenaPosition[]): number {
+function computeRiskScore(
+    positions: AdrenaPosition[],
+    leverageThreshold: number,
+): number {
     if (positions.length === 0) return 0;
 
     // Liquidation penalty
@@ -125,7 +148,7 @@ function computeRiskScore(positions: AdrenaPosition[]): number {
     // Average leverage penalty
     const avgLeverage =
         positions.reduce((sum, p) => sum + p.entry_leverage, 0) / positions.length;
-    const leveragePenalty = Math.max(0, (avgLeverage - 10) * 2);
+    const leveragePenalty = Math.max(0, (avgLeverage - leverageThreshold) * 2);
 
     const rawScore = 100 - liquidationPenalty - leveragePenalty;
     return clamp(rawScore, 0, 100);
@@ -135,24 +158,22 @@ function computeRiskScore(positions: AdrenaPosition[]): number {
 // Consistency Score (25% weight)
 //
 // Measures trading consistency across the round.
-// Rewards traders who perform steadily across all days rather than
-// having one lucky day and two terrible days.
+// Rewards traders who perform steadily across multiple days.
 //
-// Computed by:
-// 1. Group closed positions by the DAY they were closed
-// 2. Compute daily ROI for each day
-// 3. Lower standard deviation of daily ROIs = higher score
-// 4. Bonus for win rate (% of trades that were profitable)
+// Replaced std-dev approach (which penalized big winning days) with:
+//   Profitable Days Ratio = (days with net positive PnL / total trading days) × 80
+//   Win Rate Bonus = (winning trades / total trades) × 20
 //
-// Consistency Raw = 100 - (StdDev(daily ROIs) × 4)
-//   Scaling factor 4: a StdDev of 25% across days maps to 0 base score
-// Win Rate Bonus = (winning / total) × 20 (up to 20 bonus points)
+// "Trading day" = a calendar day with at least one closed position.
+// This measures "of the days you traded, how many were green" — not
+// "what fraction of the round did you trade" (that's Activity's job).
+//
+// Edge cases:
+//   - 0 closed positions: returns 30 (if open positions exist) or 0
+//   - 1 trading day with profit: 80 + win rate bonus
+//   - 1 trading day with loss: 0 + win rate bonus
 // --------------------------------------------------------------------------
-function computeConsistencyScore(
-    positions: AdrenaPosition[],
-    roundStart: Date,
-    roundEnd: Date,
-): number {
+function computeConsistencyScore(positions: AdrenaPosition[]): number {
     const closedPositions = positions.filter(
         (p) => (p.status === 'close' || p.status === 'liquidate') && p.exit_date
     );
@@ -163,7 +184,7 @@ function computeConsistencyScore(
         return positions.length > 0 ? 30 : 0;
     }
 
-    // --- Daily ROI calculation ---
+    // --- Profitable days ratio ---
     // Group positions by the calendar day they were closed
     const dailyGroups = new Map<string, AdrenaPosition[]>();
 
@@ -174,30 +195,28 @@ function computeConsistencyScore(
         dailyGroups.set(exitDay, group);
     }
 
-    // Compute ROI for each day
-    const dailyROIs: number[] = [];
+    // Count days with net positive PnL
+    let profitableDays = 0;
+    const totalTradingDays = dailyGroups.size;
+
     for (const [, dayPositions] of dailyGroups) {
         const dayPnl = dayPositions.reduce((sum, p) => sum + (p.pnl ?? 0), 0);
-        const dayCollateral = dayPositions.reduce((sum, p) => sum + p.collateral_amount, 0);
-        if (dayCollateral > 0) {
-            dailyROIs.push((dayPnl / dayCollateral) * 100);
+        if (dayPnl > 0) {
+            profitableDays++;
         }
     }
 
-    // If only 1 day of trading, std dev is 0 — that's fine, they get full base points
-    let consistencyRaw = 100;
-    if (dailyROIs.length > 1) {
-        const stdDev = standardDeviation(dailyROIs);
-        // Scaling: StdDev of 25% maps to 0 base score
-        consistencyRaw = 100 - stdDev * 4;
-    }
+    // Profitable days score: 0-80 range
+    const profitableDaysScore = totalTradingDays > 0
+        ? (profitableDays / totalTradingDays) * 80
+        : 0;
 
     // --- Win rate bonus ---
     const winningTrades = closedPositions.filter((p) => (p.pnl ?? 0) > 0).length;
     const winRate = winningTrades / closedPositions.length;
     const winRateBonus = winRate * 20; // Up to 20 bonus points
 
-    return clamp(consistencyRaw + winRateBonus, 0, 100);
+    return clamp(profitableDaysScore + winRateBonus, 0, 100);
 }
 
 // --------------------------------------------------------------------------
@@ -206,17 +225,23 @@ function computeConsistencyScore(
 // Measures active participation. Prevents "open one trade, get lucky, sit"
 // strategy. Capped to avoid rewarding trade spam.
 //
-// Trade Count Score = min(count / 10, 1) × 50   (max at 10+ trades)
+// Trade Count Score = min(count / 10, 1) × 30   (max at 10+ trades)
 // Volume Score = min(volume / 10000, 1) × 30    (max at $10K+ volume)
-// Variety Score = (unique symbols / 4) × 20      (max at 4+ symbols)
+// Variety Score = min(symbols / N, 1) × 40       (max at N unique symbols)
 //
-// Supported symbols on Adrena: SOL, BTC, JITOSOL, BONK — so 4 is the max.
+// N = supportedAssetCount from tournament config (default: 4).
+// Variety weight doubled from 20→40 per ZeDef feedback: pushes traders
+// to try all assets on the platform, directly serving Adrena's goal of
+// broad market engagement.
 // --------------------------------------------------------------------------
-function computeActivityScore(positions: AdrenaPosition[]): number {
+function computeActivityScore(
+    positions: AdrenaPosition[],
+    supportedAssetCount: number,
+): number {
     if (positions.length === 0) return 0;
 
     // Trade count (capped at 10)
-    const tradeCountScore = Math.min(positions.length / 10, 1) * 50;
+    const tradeCountScore = Math.min(positions.length / 10, 1) * 30;
 
     // Total volume (entry_size × entry_price gives notional value in USD)
     const totalVolume = positions.reduce(
@@ -225,9 +250,9 @@ function computeActivityScore(positions: AdrenaPosition[]): number {
     );
     const volumeScore = Math.min(totalVolume / 10000, 1) * 30;
 
-    // Symbol variety
+    // Symbol variety (dynamic asset count, not hardcoded)
     const uniqueSymbols = new Set(positions.map((p) => p.symbol));
-    const varietyScore = Math.min(uniqueSymbols.size / 4, 1) * 20;
+    const varietyScore = Math.min(uniqueSymbols.size / supportedAssetCount, 1) * 40;
 
     return clamp(tradeCountScore + volumeScore + varietyScore, 0, 100);
 }
@@ -242,12 +267,4 @@ function clamp(value: number, min: number, max: number): number {
 
 function round2(value: number): number {
     return Math.round(value * 100) / 100;
-}
-
-function standardDeviation(values: number[]): number {
-    if (values.length <= 1) return 0;
-    const mean = values.reduce((sum, v) => sum + v, 0) / values.length;
-    const squaredDiffs = values.map((v) => Math.pow(v - mean, 2));
-    const avgSquaredDiff = squaredDiffs.reduce((sum, v) => sum + v, 0) / values.length;
-    return Math.sqrt(avgSquaredDiff);
 }

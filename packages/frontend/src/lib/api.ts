@@ -45,11 +45,11 @@ export interface Tournament {
     config: {
         bracketSize: number;
         advanceRatio: number;
-        roundDurationHours: number;
-        minHistoricalTrades: number;
+        roundDurations: number[];
         minPositionCollateral: number;
         minTradeDurationSec: number;
-        maxDaysInactive: number;
+        leveragePenaltyThreshold: number;
+        supportedAssetCount: number;
         useHistoricalWindow: boolean;
         historicalWindowDays: number;
     };
@@ -62,6 +62,7 @@ export interface Round {
     tournamentId: number;
     roundNumber: number;
     name: string;
+    type: 'main' | 'consolation';
     startTime: string;
     endTime: string;
     status: 'pending' | 'active' | 'completed';
@@ -90,7 +91,6 @@ export interface Bracket {
 export interface TournamentState extends Tournament {
     rounds: Round[];
     registrationCount: number;
-    eligibleCount: number;
 }
 
 export interface LeaderboardEntry {
@@ -147,7 +147,7 @@ export async function getTournamentBrackets(
 export async function registerWallet(
     tournamentId: number,
     wallet: string,
-): Promise<{ eligible: boolean; reason?: string }> {
+): Promise<{ registered: boolean; reason?: string }> {
     return apiFetch('/api/register', {
         method: 'POST',
         body: JSON.stringify({ tournamentId, wallet }),
@@ -156,7 +156,7 @@ export async function registerWallet(
 
 export async function getRegistrations(
     tournamentId: number,
-): Promise<Array<{ id: number; wallet: string; eligible: boolean; registeredAt: string }>> {
+): Promise<Array<{ id: number; wallet: string; registeredAt: string }>> {
     return apiFetch(`/api/register/${tournamentId}`);
 }
 

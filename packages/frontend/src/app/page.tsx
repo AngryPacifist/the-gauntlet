@@ -148,11 +148,11 @@ export default function DashboardPage() {
                     <Clock size={10} style={{ marginRight: 3 }} />
                     Round Duration
                   </span>
-                  <span className={styles.metaValue}>{t.config.roundDurationHours}h</span>
+                  <span className={styles.metaValue}>{t.config.roundDurations?.[0] ?? 72}h</span>
                 </div>
                 <div className={styles.metaItem}>
-                  <span className={styles.metaLabel}>Min Trades</span>
-                  <span className={styles.metaValue}>{t.config.minHistoricalTrades}</span>
+                  <span className={styles.metaLabel}>Min Collateral</span>
+                  <span className={styles.metaValue}>${t.config.minPositionCollateral}</span>
                 </div>
               </div>
 

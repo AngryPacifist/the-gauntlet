@@ -197,3 +197,22 @@ The simulation used historical data via backtest mode. Before launching a produc
 2. **Run a 1-round pilot** (72 hours) with real-time scoring
 3. **Collect feedback** on: scoring fairness, UI clarity, elimination experience
 4. **Iterate** on weights and thresholds based on pilot results
+
+---
+
+## Addendum: Scoring Formula Changes (Post-Test, March 11, 2026)
+
+> **Important:** The test results above are unmodified and reflect the scoring engine as it existed on March 8, 2026. The following changes were made **after** the test was conducted, based on feedback from the Adrena team (ZeDef). These changes have **not been validated with a new test run yet.**
+
+| Component | At Time of Test | Changed To | Rationale |
+|-----------|----------------|------------|-----------|
+| **Registration** | Eligibility checks (min trades, max inactivity) | Zero-barrier sign-up (any wallet) | Maximize participant pool |
+| **PnL denominator** | `collateral_amount` | `entry_size × entry_price` (USD exposure) | Collateral is mutable mid-trade |
+| **Risk threshold** | 10x leverage | 30x (configurable) | Respects Adrena's high-leverage culture |
+| **Consistency** | `100 - StdDev(daily ROIs) × 4` | Profitable days ratio (0-80) + win rate bonus (0-20) | Std-dev penalized big winning days |
+| **Activity weights** | Count 50%, Volume 30%, Variety 20% | Count 30%, Volume 30%, Variety 40% | Variety drives engagement across all assets |
+| **Asset count** | Hardcoded 4 | Configurable `supportedAssetCount` | Future-proofs for new assets |
+| **Min collateral** | $10 | $25 | Higher floor reduces dust trade noise |
+| **Consolation brackets** | Not implemented | "Fallen Fighters" bracket for eliminated traders | Maintains engagement after elimination |
+
+A new test run using the updated scoring engine is required before production deployment.

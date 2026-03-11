@@ -22,21 +22,18 @@ registration -> active -> completed
 The tournament is created with a configurable set of parameters. During registration:
 
 - Traders submit their Solana wallet address.
-- The engine fetches the wallet's historical positions from the Adrena API.
-- Eligibility is checked:
-  - Must have at least `minHistoricalTrades` closed positions (default: 5).
-  - Most recent trade must be within `maxDaysInactive` days (default: 30).
-- Eligible wallets are registered. Ineligible wallets are still recorded with the reason for rejection.
+- **Zero-barrier sign-up**: any valid Solana wallet is accepted. No eligibility checks (trade history, recency) are performed at registration time.
+- Quality filters (minimum activity, prize eligibility) are evaluated at prize distribution time, not sign-up.
 
 ### 2. Tournament Start
 
 An admin triggers the start. Registration closes and brackets are created:
 
-1. All eligible registrations are collected.
+1. All registered wallets are collected.
 2. Wallets are shuffled randomly (Fisher-Yates algorithm).
 3. Wallets are split into groups of `bracketSize` (default: 8).
 4. If the last group has fewer than 2 traders, it is merged with the previous group.
-5. Round 1 begins immediately with a timer of `roundDurationHours` (default: 72 hours).
+5. Round 1 begins immediately. Its duration is taken from `roundDurations[0]` (default: 72 hours).
 
 ### 3. Round Progression
 
@@ -51,11 +48,21 @@ Each round follows this flow:
 3. **Advancement**: An admin triggers round advancement.
    - Each bracket is ranked by CPI score (descending).
    - The top `advanceRatio` (default: 50%) advance to the next round.
-   - The rest are eliminated.
+   - The rest are **eliminated from the main bracket** but auto-enter a **consolation bracket** ("Fallen Fighters").
    - Advancing wallets are re-shuffled into new brackets for the next round.
    - Round 2+ brackets use half the original bracket size for more focused competition.
 
-### 4. Completion
+### 4. Consolation Brackets (Fallen Fighters)
+
+Eliminated traders are not removed from competition entirely. They enter parallel consolation brackets:
+
+- Consolation rounds follow the same scoring and elimination rules.
+- They compete for a smaller prize pool.
+- Eliminated from consolation = truly out (no further recursive consolation).
+- Consolation rounds run simultaneously alongside main rounds.
+- Round names: "Redemption Arc", "Last Stand", "Final Reckoning".
+
+### 5. Completion
 
 A tournament completes when either:
 - 3 or fewer traders remain after a round, or
@@ -69,12 +76,22 @@ The remaining traders are the finalists.
 
 Each round has a thematic name:
 
+**Main bracket:**
+
 | Round | Name           |
 |-------|----------------|
 | 1     | First Blood    |
 | 2     | The Crucible   |
 | 3     | Sudden Death   |
 | Final | Endgame        |
+
+**Consolation bracket (Fallen Fighters):**
+
+| Round | Name              |
+|-------|-------------------|
+| 1     | Redemption Arc    |
+| 2     | Last Stand        |
+| 3     | Final Reckoning   |
 
 ---
 
@@ -88,42 +105,46 @@ CPI = (0.35 x PnL) + (0.25 x Risk) + (0.25 x Consistency) + (0.15 x Activity)
 
 ### PnL Score (35%)
 
-Measures net profitability relative to capital at risk.
+Measures net profitability relative to notional exposure (ROI).
 
-- **ROI** = Total Net PnL / Total Collateral Deployed.
+- **ROI** = Total Net PnL (USD) / Total Notional Exposure (USD)
+- Notional exposure = `entry_size × entry_price` (immutable at position open; cannot be gamed).
 - Normalized linearly from -100% ROI (score 0) to +200% ROI (score 100).
 - Only closed/liquidated positions contribute to realized PnL.
 - If a trader has only open positions, PnL score defaults to 50 (neutral).
 
-This uses ROI rather than absolute PnL to normalize across account sizes. A small account earning 10% outscores a large account earning 1%.
+Uses `entry_size × entry_price` instead of `collateral_amount` as the denominator because collateral can be removed mid-trade, making it gameable.
 
 ### Risk Score (25%)
 
 Measures risk management discipline. Starts at 100 and is reduced by penalties:
 
 - **Liquidation penalty**: `(liquidated count / total count) x 100`
-- **Leverage penalty**: `max(0, (average_leverage - 10) x 2)`. Penalty begins above 10x leverage.
+- **Leverage penalty**: `max(0, (average_leverage - threshold) x 2)`. Threshold is configurable (default: 30x).
 
-A trader with no liquidations and moderate leverage scores near 100. A trader who gets repeatedly liquidated at 50x leverage scores near 0.
+The 30x default was chosen to respect Adrena's trading style — many legitimate strategies use 10-25x leverage on the platform.
 
 ### Consistency Score (25%)
 
-Measures steady performance across days rather than one lucky spike.
+Measures consistent profitable performance across trading days.
 
 - Closed positions are grouped by the calendar day they were closed.
-- Daily ROI is computed for each day.
-- **Base score**: `100 - StdDev(daily ROIs) x 4`. Low standard deviation = high consistency.
-- **Win rate bonus**: `(winning trades / total trades) x 20`. Up to 20 bonus points.
+- **Profitable days ratio** (0-80 points): `(days with net positive PnL / total trading days) × 80`
+- **Win rate bonus** (0-20 points): `(winning trades / total trades) × 20`
 
-If a trader has only 1 day of activity, StdDev is 0 and they receive the full base score. If they have only open positions, they receive a baseline of 30.
+This replaced the previous standard-deviation approach, which perversely penalized big winning days. The profitable-days ratio rewards traders who are green on most days they trade, without punishing outsized wins.
+
+If a trader has only open positions, they receive a baseline of 30.
 
 ### Activity Score (15%)
 
 Measures active participation. Prevents "open one trade, sit idle" strategies:
 
-- **Trade count**: `min(count / 10, 1) x 50`. Maxes out at 10+ trades.
+- **Trade count**: `min(count / 10, 1) x 30`. Maxes out at 10+ trades.
 - **Volume**: `min(volume / $10,000, 1) x 30`. Maxes out at $10K+ notional volume.
-- **Variety**: `min(unique_symbols / 4, 1) x 20`. Adrena supports SOL, BTC, JITOSOL, BONK.
+- **Variety**: `min(unique_symbols / N, 1) x 40`. N = `supportedAssetCount` from config (default: 4).
+
+Variety is heavily weighted (40%) to push traders toward using all available assets on Adrena, directly serving the platform's goal of broad market engagement.
 
 ---
 
@@ -133,7 +154,7 @@ Before scoring, positions are filtered to prevent manipulation:
 
 | Filter                   | Default    | Purpose                                          |
 |--------------------------|------------|--------------------------------------------------|
-| `minPositionCollateral`  | $10 USD    | Excludes dust trades (negligible risk)            |
+| `minPositionCollateral`  | $25 USD    | Excludes dust trades (negligible risk)            |
 | `minTradeDurationSec`    | 120 seconds| Excludes wash trades (open-close-repeat gaming)   |
 | Round time window        | Per round  | Only counts positions opened during the round     |
 
@@ -143,15 +164,17 @@ Before scoring, positions are filtered to prevent manipulation:
 
 All parameters are configurable per tournament:
 
-| Parameter              | Default | Description                                           |
-|------------------------|---------|-------------------------------------------------------|
-| `bracketSize`          | 8       | Traders per bracket in Round 1                        |
-| `advanceRatio`         | 0.5     | Fraction of bracket that advances each round          |
-| `roundDurationHours`   | 72      | Duration of each round                                |
-| `minHistoricalTrades`  | 5       | Minimum closed trades for registration eligibility    |
-| `minPositionCollateral`| 10      | Minimum collateral (USD) for a position to count      |
-| `minTradeDurationSec`  | 120     | Minimum duration (seconds) for a position to count    |
-| `maxDaysInactive`      | 30      | Maximum days since last trade for eligibility          |
+| Parameter                  | Default      | Description                                         |
+|----------------------------|--------------|-----------------------------------------------------|
+| `bracketSize`              | 8            | Traders per bracket in Round 1                      |
+| `advanceRatio`             | 0.5          | Fraction of bracket that advances each round        |
+| `roundDurations`           | [72, 48, 48] | Duration of each round in hours (per-round array)   |
+| `minPositionCollateral`    | 25           | Minimum collateral (USD) for a position to count    |
+| `minTradeDurationSec`      | 120          | Minimum duration (seconds) for a position to count  |
+| `leveragePenaltyThreshold` | 30           | Leverage above this is penalized in Risk score      |
+| `supportedAssetCount`      | 4            | Number of tradeable assets (for Activity variety)   |
+| `useHistoricalWindow`      | false        | Use historical window instead of round dates        |
+| `historicalWindowDays`     | 90           | Days for historical window (for backtesting)        |
 
 ---
 

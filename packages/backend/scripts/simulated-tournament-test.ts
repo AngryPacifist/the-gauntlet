@@ -41,7 +41,7 @@ interface TestReport {
     }>;
     tournamentResults?: {
         tournamentId: number;
-        registrationEligible: boolean;
+        registered: boolean;
         roundId?: number;
         scores?: {
             cpiScore: number;
@@ -101,9 +101,7 @@ async function runValidation(): Promise<void> {
             name: `Validation Test ${new Date().toISOString().slice(0, 16)}`,
             config: {
                 bracketSize: 4,
-                roundDurationHours: 72,
-                minHistoricalTrades: 3,
-                maxDaysInactive: 60,
+                roundDurations: [72, 48, 48],
             },
         }),
     });
@@ -128,9 +126,9 @@ async function runValidation(): Promise<void> {
     console.log(`  PASS: Tournament #${tournamentId}\n`);
 
     // ---------------------------------------------------------------------------
-    // Test 3: Register wallet (eligibility check with real Adrena data)
+    // Test 3: Register wallet (zero-barrier registration)
     // ---------------------------------------------------------------------------
-    console.log('Test 3: Register wallet (real Adrena API call)...');
+    console.log('Test 3: Register wallet...');
     const regRes = await apiFetch('/register', {
         method: 'POST',
         body: JSON.stringify({ tournamentId, wallet: TEST_WALLET }),
@@ -147,22 +145,22 @@ async function runValidation(): Promise<void> {
         return;
     }
 
-    const regData = regRes.data as { eligible: boolean; reason?: string };
+    const regData = regRes.data as { registered: boolean; reason?: string };
     report.tests.push({
         name: 'Register Wallet',
-        status: regData.eligible ? 'pass' : 'fail',
-        details: regData.eligible
-            ? 'Wallet is eligible (has sufficient trading history)'
-            : `Wallet ineligible: ${regData.reason}`,
+        status: regData.registered ? 'pass' : 'fail',
+        details: regData.registered
+            ? 'Wallet registered successfully'
+            : `Registration rejected: ${regData.reason}`,
     });
     report.tournamentResults = {
         tournamentId,
-        registrationEligible: regData.eligible,
+        registered: regData.registered,
     };
-    console.log(`  ${regData.eligible ? 'PASS' : 'FAIL'}: ${regData.eligible ? 'Eligible' : regData.reason}\n`);
+    console.log(`  ${regData.registered ? 'PASS' : 'FAIL'}: ${regData.registered ? 'Registered' : regData.reason}\n`);
 
-    if (!regData.eligible) {
-        console.log('  Cannot proceed without eligible registration.');
+    if (!regData.registered) {
+        console.log('  Cannot proceed without registration.');
         writeReport(report);
         return;
     }
@@ -176,7 +174,7 @@ async function runValidation(): Promise<void> {
         body: JSON.stringify({ tournamentId, wallet: TEST_WALLET }),
     });
 
-    const dupRejected = !dupRes.success || (dupRes.data && !(dupRes.data as { eligible: boolean }).eligible);
+    const dupRejected = !dupRes.success || (dupRes.data && !(dupRes.data as { registered: boolean }).registered);
     report.tests.push({
         name: 'Duplicate Registration Rejection',
         status: dupRejected ? 'pass' : 'fail',
@@ -185,7 +183,7 @@ async function runValidation(): Promise<void> {
     console.log(`  ${dupRejected ? 'PASS' : 'FAIL'}\n`);
 
     // ---------------------------------------------------------------------------
-    // Test 5: Start tournament (need 2+ eligible wallets — expected to fail with 1)
+    // Test 5: Start tournament (need 2+ registered wallets — expected to fail with 1)
     // We test this to verify the error message is correct.
     // ---------------------------------------------------------------------------
     console.log('Test 5: Start tournament (expected: needs more wallets)...');

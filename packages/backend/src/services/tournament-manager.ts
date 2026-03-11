@@ -9,7 +9,17 @@
 //   2. startTournament: Close registration, create Round 1 brackets
 //   3. computeRoundScores: Score all traders in the current round
 //   4. advanceRound: Eliminate bottom half, promote top half to next round
+//      Creates "Fallen Fighters" consolation brackets for eliminated traders
 //   5. completeTournament: Finalize results
+//
+// Changelog (ZeDef feedback, March 2026):
+//   - Registration: eligibility barrier removed. Anyone with a valid wallet
+//     can register. Quality filters move to prize distribution time.
+//   - Round durations: configurable per-round via roundDurations[] array
+//   - Consolation brackets: eliminated traders auto-enter "Fallen Fighters"
+//     parallel brackets to maintain engagement and platform volume.
+//   - Config: leveragePenaltyThreshold + supportedAssetCount passed to
+//     scoring engine.
 // ============================================================================
 
 import { eq, and } from 'drizzle-orm';
@@ -28,13 +38,33 @@ import type {
     TournamentConfig,
     RoundName,
     CPIScores,
-    AdrenaPosition,
 } from '../types.js';
-import { DEFAULT_TOURNAMENT_CONFIG, DEFAULT_CPI_WEIGHTS } from '../types.js';
+import { DEFAULT_TOURNAMENT_CONFIG, DEFAULT_CPI_WEIGHTS, CONSOLATION_ROUND_NAMES } from '../types.js';
 
 const ROUND_NAMES: RoundName[] = ['First Blood', 'The Crucible', 'Sudden Death', 'Endgame'];
 
 const adrenaClient = new AdrenaClient();
+
+// --------------------------------------------------------------------------
+// Helper: merge stored config with defaults for backward compatibility
+// Old tournaments may not have new config fields (leveragePenaltyThreshold,
+// supportedAssetCount, roundDurations). This ensures they get default values.
+// --------------------------------------------------------------------------
+function resolveConfig(stored: unknown): TournamentConfig {
+    return { ...DEFAULT_TOURNAMENT_CONFIG, ...(stored as Partial<TournamentConfig>) };
+}
+
+// --------------------------------------------------------------------------
+// Helper: get round duration for a given round number from config
+// If more rounds than durations, use the last duration.
+// --------------------------------------------------------------------------
+function getRoundDuration(config: TournamentConfig, roundNumber: number): number {
+    const durations = config.roundDurations;
+    if (!durations || durations.length === 0) {
+        return 72; // fallback
+    }
+    return durations[Math.min(roundNumber - 1, durations.length - 1)];
+}
 
 // --------------------------------------------------------------------------
 // 1. Create a new tournament
@@ -61,13 +91,13 @@ export async function createTournament(
 // --------------------------------------------------------------------------
 // 2. Register a wallet for a tournament
 //
-// Checks eligibility: wallet must have >= minHistoricalTrades closed positions
-// and must have traded within maxDaysInactive days.
+// Zero-barrier registration: anyone with a valid Solana wallet can register.
+// No eligibility checks (trade history, recency) — those move to prize time.
 // --------------------------------------------------------------------------
 export async function registerWallet(
     tournamentId: number,
     wallet: string,
-): Promise<{ eligible: boolean; reason?: string }> {
+): Promise<{ registered: boolean; reason?: string }> {
     // Check tournament exists and is in registration phase
     const [tournament] = await db
         .select()
@@ -76,10 +106,10 @@ export async function registerWallet(
         .limit(1);
 
     if (!tournament) {
-        return { eligible: false, reason: 'Tournament not found' };
+        return { registered: false, reason: 'Tournament not found' };
     }
     if (tournament.status !== 'registration') {
-        return { eligible: false, reason: 'Tournament is not accepting registrations' };
+        return { registered: false, reason: 'Tournament is not accepting registrations' };
     }
 
     // Check if already registered
@@ -95,80 +125,24 @@ export async function registerWallet(
         .limit(1);
 
     if (existing) {
-        return { eligible: false, reason: 'Wallet already registered' };
+        return { registered: false, reason: 'Wallet already registered' };
     }
 
-    // Check eligibility: fetch historical positions from Adrena
-    const config = tournament.config as TournamentConfig;
-    let positions: AdrenaPosition[];
-    try {
-        positions = await adrenaClient.getPositions(wallet);
-    } catch (apiError) {
-        // Adrena API may error for wallets that have never traded on the platform.
-        // Treat this as "0 positions found" — the wallet is simply ineligible.
-        console.warn(
-            `[TournamentManager] Adrena API error for wallet ${wallet}:`,
-            apiError instanceof Error ? apiError.message : apiError,
-        );
-        positions = [];
-    }
-
-    // Count closed positions
-    const closedPositions = positions.filter(
-        (p: AdrenaPosition) => p.status === 'close' || p.status === 'liquidate',
-    );
-
-    if (closedPositions.length < config.minHistoricalTrades) {
-        // Register but mark as ineligible
-        await db.insert(registrations).values({
-            tournamentId,
-            wallet,
-            eligible: false,
-        });
-        return {
-            eligible: false,
-            reason: `Need at least ${config.minHistoricalTrades} closed trades. Found ${closedPositions.length}.`,
-        };
-    }
-
-    // Check recency: most recent trade must be within maxDaysInactive days
-    const mostRecentTradeDate = closedPositions.reduce((latest: Date, p: AdrenaPosition) => {
-        const exitDate = p.exit_date ? new Date(p.exit_date) : new Date(p.entry_date);
-        return exitDate > latest ? exitDate : latest;
-    }, new Date(0));
-
-    const daysSinceLastTrade = Math.floor(
-        (Date.now() - mostRecentTradeDate.getTime()) / (1000 * 60 * 60 * 24),
-    );
-
-    if (daysSinceLastTrade > config.maxDaysInactive) {
-        await db.insert(registrations).values({
-            tournamentId,
-            wallet,
-            eligible: false,
-        });
-        return {
-            eligible: false,
-            reason: `Last trade was ${daysSinceLastTrade} days ago. Must be within ${config.maxDaysInactive} days.`,
-        };
-    }
-
-    // Eligible! Register.
+    // Register — no eligibility check, no API call
     await db.insert(registrations).values({
         tournamentId,
         wallet,
-        eligible: true,
     });
 
     console.log(`[TournamentManager] Registered wallet ${wallet} for tournament ${tournamentId}`);
-    return { eligible: true };
+    return { registered: true };
 }
 
 // --------------------------------------------------------------------------
 // 3. Start the tournament: close registration, create Round 1 brackets
 //
 // Bracket creation algorithm:
-//   1. Get all eligible registrations
+//   1. Get all registrations (no eligibility filter — all participate)
 //   2. Shuffle them randomly (Fisher-Yates)
 //   3. Split into groups of bracketSize
 //   4. If the last group has fewer than 2 traders, merge with previous group
@@ -188,25 +162,20 @@ export async function startTournament(
         throw new Error(`Cannot start tournament in "${tournament.status}" status`);
     }
 
-    const config = tournament.config as TournamentConfig;
+    const config = resolveConfig(tournament.config);
 
-    // Get all eligible registrations
-    const eligibleRegs = await db
+    // Get all registrations — no eligibility filter
+    const allRegs = await db
         .select()
         .from(registrations)
-        .where(
-            and(
-                eq(registrations.tournamentId, tournamentId),
-                eq(registrations.eligible, true),
-            ),
-        );
+        .where(eq(registrations.tournamentId, tournamentId));
 
-    if (eligibleRegs.length < 2) {
-        throw new Error(`Need at least 2 eligible traders. Found ${eligibleRegs.length}.`);
+    if (allRegs.length < 2) {
+        throw new Error(`Need at least 2 registered traders. Found ${allRegs.length}.`);
     }
 
     // Shuffle wallets (Fisher-Yates)
-    const wallets = eligibleRegs.map((r) => r.wallet);
+    const wallets = allRegs.map((r) => r.wallet);
     for (let i = wallets.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
         [wallets[i], wallets[j]] = [wallets[j], wallets[i]];
@@ -214,7 +183,8 @@ export async function startTournament(
 
     // Create Round 1
     const now = new Date();
-    const roundEnd = new Date(now.getTime() + config.roundDurationHours * 60 * 60 * 1000);
+    const durationHours = getRoundDuration(config, 1);
+    const roundEnd = new Date(now.getTime() + durationHours * 60 * 60 * 1000);
 
     const [round] = await db
         .insert(rounds)
@@ -222,6 +192,7 @@ export async function startTournament(
             tournamentId,
             roundNumber: 1,
             name: ROUND_NAMES[0],
+            type: 'main',
             startTime: now,
             endTime: roundEnd,
             status: 'active',
@@ -281,7 +252,7 @@ export async function startTournament(
 // For each bracket entry:
 //   1. Fetch positions from Adrena API
 //   2. Filter to round window + apply competition rules
-//   3. Compute CPI
+//   3. Compute CPI (with config for leverage threshold + asset count)
 //   4. Update bracket_entries with scores
 //   5. Save score snapshot for audit trail
 // --------------------------------------------------------------------------
@@ -303,7 +274,7 @@ export async function computeRoundScores(roundId: number): Promise<number> {
         .limit(1);
 
     if (!tournament) throw new Error('Tournament not found');
-    const config = tournament.config as TournamentConfig;
+    const config = resolveConfig(tournament.config);
 
     // Get all brackets in this round
     const roundBrackets = await db
@@ -354,12 +325,13 @@ export async function computeRoundScores(roundId: number): Promise<number> {
                     config.minTradeDurationSec,
                 );
 
-                // Compute CPI
+                // Compute CPI — pass config for leverage threshold + asset count
                 const scores: CPIScores = computeCPI(
                     validPositions,
                     round.startTime,
                     round.endTime,
                     DEFAULT_CPI_WEIGHTS,
+                    config,
                 );
 
                 // Update bracket entry with scores
@@ -399,16 +371,25 @@ export async function computeRoundScores(roundId: number): Promise<number> {
 // --------------------------------------------------------------------------
 // 5. Advance to the next round
 //
-// For each bracket:
+// For each bracket in the active MAIN round:
 //   1. Rank entries by CPI score (descending)
 //   2. Top advanceRatio (default 50%) advance
 //   3. Bottom entries eliminated
-//   4. Create next round with new brackets from advancing wallets
+//   4. Create next MAIN round with new brackets from advancing wallets
+//   5. Create CONSOLATION round ("Fallen Fighters") from eliminated wallets
+//      if there are ≥2 eliminated traders
+//
+// Consolation rounds:
+//   - Eliminated traders from the main bracket enter a parallel bracket
+//   - They compete for a smaller prize pool
+//   - Consolation rounds follow the same scoring/elimination rules
+//   - Eliminated from consolation = truly out (no recursion)
 // --------------------------------------------------------------------------
 export async function advanceRound(
     tournamentId: number,
-): Promise<{ nextRoundId: number; advanced: number; eliminated: number } | { completed: true }> {
-    // Get current active round
+    roundType: 'main' | 'consolation' = 'main',
+): Promise<{ nextRoundId: number; advanced: number; eliminated: number; consolationRoundId?: number } | { completed: true }> {
+    // Get tournament
     const [tournament] = await db
         .select()
         .from(tournaments)
@@ -416,9 +397,10 @@ export async function advanceRound(
         .limit(1);
 
     if (!tournament) throw new Error('Tournament not found');
-    const config = tournament.config as TournamentConfig;
+    const config = resolveConfig(tournament.config);
 
-    const activeRound = await db
+    // Get active round of the specified type
+    const activeRounds = await db
         .select()
         .from(rounds)
         .where(
@@ -426,11 +408,11 @@ export async function advanceRound(
                 eq(rounds.tournamentId, tournamentId),
                 eq(rounds.status, 'active'),
             ),
-        )
-        .limit(1);
+        );
 
-    if (activeRound.length === 0) throw new Error('No active round found');
-    const currentRound = activeRound[0];
+    // Find the active round matching the requested type
+    const currentRound = activeRounds.find(r => (r.type ?? 'main') === roundType);
+    if (!currentRound) throw new Error(`No active ${roundType} round found`);
 
     // Get brackets and entries for current round
     const currentBrackets = await db
@@ -439,7 +421,7 @@ export async function advanceRound(
         .where(eq(brackets.roundId, currentRound.id));
 
     const advancingWallets: string[] = [];
-    let eliminatedCount = 0;
+    const eliminatedWallets: string[] = [];
 
     for (const bracket of currentBrackets) {
         const entries = await db
@@ -467,7 +449,7 @@ export async function advanceRound(
             if (isAdvancing) {
                 advancingWallets.push(entries[i].wallet);
             } else {
-                eliminatedCount++;
+                eliminatedWallets.push(entries[i].wallet);
             }
         }
     }
@@ -480,6 +462,55 @@ export async function advanceRound(
 
     // Determine next round number
     const nextRoundNumber = currentRound.roundNumber + 1;
+
+    // --- Handle consolation rounds differently ---
+    if (roundType === 'consolation') {
+        // Consolation: eliminated from consolation = truly out. No further consolation.
+        if (advancingWallets.length <= 3 || nextRoundNumber > 3) {
+            // Consolation complete — don't touch the main tournament status
+            console.log(
+                `[TournamentManager] Consolation bracket completed for tournament ${tournamentId}. ` +
+                `${advancingWallets.length} consolation finalists.`,
+            );
+            return { completed: true };
+        }
+
+        // Create next consolation round
+        const consolationName = CONSOLATION_ROUND_NAMES[
+            Math.min(nextRoundNumber - 1, CONSOLATION_ROUND_NAMES.length - 1)
+        ];
+        const now = new Date();
+        const durationHours = getRoundDuration(config, nextRoundNumber);
+        const roundEnd = new Date(now.getTime() + durationHours * 60 * 60 * 1000);
+
+        const [nextConsolation] = await db
+            .insert(rounds)
+            .values({
+                tournamentId,
+                roundNumber: nextRoundNumber,
+                name: consolationName,
+                type: 'consolation',
+                startTime: now,
+                endTime: roundEnd,
+                status: 'active',
+            })
+            .returning({ id: rounds.id });
+
+        await createBracketsForWallets(nextConsolation.id, advancingWallets, config);
+
+        console.log(
+            `[TournamentManager] Consolation advanced to Round ${nextRoundNumber} "${consolationName}": ` +
+            `${advancingWallets.length} continue, ${eliminatedWallets.length} out`,
+        );
+
+        return {
+            nextRoundId: nextConsolation.id,
+            advanced: advancingWallets.length,
+            eliminated: eliminatedWallets.length,
+        };
+    }
+
+    // --- Main round logic ---
 
     // If 3 or fewer traders remain, or we've done 3 rounds, tournament is complete
     if (advancingWallets.length <= 3 || nextRoundNumber > 3) {
@@ -496,10 +527,11 @@ export async function advanceRound(
         return { completed: true };
     }
 
-    // Create next round
+    // Create next main round
     const roundName = ROUND_NAMES[Math.min(nextRoundNumber - 1, ROUND_NAMES.length - 1)];
     const now = new Date();
-    const roundEnd = new Date(now.getTime() + config.roundDurationHours * 60 * 60 * 1000);
+    const durationHours = getRoundDuration(config, nextRoundNumber);
+    const roundEnd = new Date(now.getTime() + durationHours * 60 * 60 * 1000);
 
     const [nextRound] = await db
         .insert(rounds)
@@ -507,42 +539,110 @@ export async function advanceRound(
             tournamentId,
             roundNumber: nextRoundNumber,
             name: roundName,
+            type: 'main',
             startTime: now,
             endTime: roundEnd,
             status: 'active',
         })
         .returning({ id: rounds.id });
 
-    // Shuffle advancing wallets and create new brackets
-    for (let i = advancingWallets.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [advancingWallets[i], advancingWallets[j]] = [advancingWallets[j], advancingWallets[i]];
+    // Create brackets for advancing wallets
+    const mainBracketCount = await createBracketsForWallets(nextRound.id, advancingWallets, config);
+
+    console.log(
+        `[TournamentManager] Advanced to Round ${nextRoundNumber} "${roundName}": ` +
+        `${advancingWallets.length} advanced, ${eliminatedWallets.length} eliminated, ` +
+        `${mainBracketCount} brackets`,
+    );
+
+    // --- Fallen Fighters: consolation bracket for eliminated traders ---
+    let consolationRoundId: number | undefined;
+
+    if (eliminatedWallets.length >= 2) {
+        const consolationRoundNumber = 1; // Consolation rounds have their own numbering
+        const consolationName = CONSOLATION_ROUND_NAMES[0];
+        const consolationEnd = new Date(now.getTime() + durationHours * 60 * 60 * 1000);
+
+        const [consolationRound] = await db
+            .insert(rounds)
+            .values({
+                tournamentId,
+                roundNumber: consolationRoundNumber,
+                name: consolationName,
+                type: 'consolation',
+                startTime: now,
+                endTime: consolationEnd,
+                status: 'active',
+            })
+            .returning({ id: rounds.id });
+
+        const consolationBracketCount = await createBracketsForWallets(
+            consolationRound.id,
+            eliminatedWallets,
+            config,
+        );
+
+        consolationRoundId = consolationRound.id;
+
+        console.log(
+            `[TournamentManager] Created Fallen Fighters "${consolationName}": ` +
+            `${eliminatedWallets.length} eliminated traders, ${consolationBracketCount} brackets`,
+        );
     }
 
-    // For Round 2+, use half the bracket size (more intimate brackets)
-    const nextBracketSize = Math.max(2, Math.ceil(config.bracketSize / 2));
-    const nextBracketGroups: string[][] = [];
+    const result: { nextRoundId: number; advanced: number; eliminated: number; consolationRoundId?: number } = {
+        nextRoundId: nextRound.id,
+        advanced: advancingWallets.length,
+        eliminated: eliminatedWallets.length,
+    };
 
-    for (let i = 0; i < advancingWallets.length; i += nextBracketSize) {
-        nextBracketGroups.push(advancingWallets.slice(i, i + nextBracketSize));
+    if (consolationRoundId !== undefined) {
+        result.consolationRoundId = consolationRoundId;
+    }
+
+    return result;
+}
+
+// --------------------------------------------------------------------------
+// Helper: Create brackets for a list of wallets in a given round
+// Shuffles wallets, splits into bracket groups, merges small trailing group
+// --------------------------------------------------------------------------
+async function createBracketsForWallets(
+    roundId: number,
+    wallets: string[],
+    config: TournamentConfig,
+): Promise<number> {
+    // Shuffle wallets (Fisher-Yates)
+    const shuffled = [...wallets];
+    for (let i = shuffled.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+
+    // Use half bracket size for rounds beyond Round 1
+    const bracketSize = Math.max(2, Math.ceil(config.bracketSize / 2));
+    const groups: string[][] = [];
+
+    for (let i = 0; i < shuffled.length; i += bracketSize) {
+        groups.push(shuffled.slice(i, i + bracketSize));
     }
 
     // Merge last group if too small
-    if (nextBracketGroups.length > 1 && nextBracketGroups[nextBracketGroups.length - 1].length < 2) {
-        const lastGroup = nextBracketGroups.pop()!;
-        nextBracketGroups[nextBracketGroups.length - 1].push(...lastGroup);
+    if (groups.length > 1 && groups[groups.length - 1].length < 2) {
+        const lastGroup = groups.pop()!;
+        groups[groups.length - 1].push(...lastGroup);
     }
 
-    for (let i = 0; i < nextBracketGroups.length; i++) {
+    for (let i = 0; i < groups.length; i++) {
         const [bracket] = await db
             .insert(brackets)
             .values({
-                roundId: nextRound.id,
+                roundId,
                 bracketNumber: i + 1,
             })
             .returning({ id: brackets.id });
 
-        for (const wallet of nextBracketGroups[i]) {
+        for (const wallet of groups[i]) {
             await db.insert(bracketEntries).values({
                 bracketId: bracket.id,
                 wallet,
@@ -550,17 +650,7 @@ export async function advanceRound(
         }
     }
 
-    console.log(
-        `[TournamentManager] Advanced to Round ${nextRoundNumber} "${roundName}": ` +
-        `${advancingWallets.length} advanced, ${eliminatedCount} eliminated, ` +
-        `${nextBracketGroups.length} brackets`,
-    );
-
-    return {
-        nextRoundId: nextRound.id,
-        advanced: advancingWallets.length,
-        eliminated: eliminatedCount,
-    };
+    return groups.length;
 }
 
 // --------------------------------------------------------------------------
@@ -589,7 +679,6 @@ export async function getTournamentState(tournamentId: number) {
         ...tournament,
         rounds: tournamentRounds,
         registrationCount: regCount.length,
-        eligibleCount: regCount.filter((r) => r.eligible).length,
     };
 }
 
@@ -668,6 +757,7 @@ export async function getTraderProfile(tournamentId: number, wallet: string) {
         rounds: roundEntries.map((re) => ({
             roundNumber: re.round.roundNumber,
             roundName: re.round.name,
+            roundType: (re.round as { type?: string }).type ?? 'main',
             bracketNumber: re.bracket.bracketNumber,
             scores: {
                 pnlScore: re.entry.pnlScore,

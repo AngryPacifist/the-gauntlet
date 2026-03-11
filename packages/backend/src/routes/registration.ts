@@ -3,6 +3,9 @@
 //
 // POST /api/register   — Register a wallet for a tournament
 // GET  /api/register/:tournamentId — Get all registrations for a tournament
+//
+// Updated: zero-barrier registration. No eligibility checks at registration
+// time. Anyone with a valid Solana wallet can register.
 // ============================================================================
 
 import { Router } from 'express';
@@ -40,9 +43,10 @@ router.post('/', async (req, res) => {
 
         const result = await registerWallet(tournamentId, wallet);
 
-        if (result.eligible) {
+        if (result.registered) {
             res.status(201).json({ success: true, data: result });
         } else {
+            // Not registered (duplicate, wrong phase, etc.)
             res.status(200).json({ success: true, data: result });
         }
     } catch (error) {

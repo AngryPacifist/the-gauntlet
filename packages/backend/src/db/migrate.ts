@@ -25,6 +25,7 @@ CREATE TABLE IF NOT EXISTS rounds (
   tournament_id INTEGER NOT NULL REFERENCES tournaments(id),
   round_number INTEGER NOT NULL,
   name VARCHAR(50) NOT NULL,
+  type VARCHAR(20) NOT NULL DEFAULT 'main',
   start_time TIMESTAMPTZ NOT NULL,
   end_time TIMESTAMPTZ NOT NULL,
   status VARCHAR(20) NOT NULL DEFAULT 'pending'
@@ -57,7 +58,6 @@ CREATE TABLE IF NOT EXISTS registrations (
   tournament_id INTEGER NOT NULL REFERENCES tournaments(id),
   wallet VARCHAR(44) NOT NULL,
   registered_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  eligible BOOLEAN NOT NULL DEFAULT false,
   UNIQUE(tournament_id, wallet)
 );
 
@@ -85,6 +85,7 @@ CREATE INDEX IF NOT EXISTS idx_bracket_entries_bracket ON bracket_entries(bracke
 CREATE INDEX IF NOT EXISTS idx_bracket_entries_wallet ON bracket_entries(wallet);
 CREATE INDEX IF NOT EXISTS idx_registrations_tournament ON registrations(tournament_id);
 CREATE INDEX IF NOT EXISTS idx_registrations_wallet ON registrations(wallet);
+CREATE INDEX IF NOT EXISTS idx_rounds_type ON rounds(type);
 CREATE INDEX IF NOT EXISTS idx_score_snapshots_entry ON score_snapshots(bracket_entry_id);
 CREATE INDEX IF NOT EXISTS idx_trade_cache_wallet ON trade_cache(wallet);
 `;

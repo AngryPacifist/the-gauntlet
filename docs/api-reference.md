@@ -68,11 +68,11 @@ Returns all tournaments, ordered by creation date (newest first).
       "config": {
         "bracketSize": 8,
         "advanceRatio": 0.5,
-        "roundDurationHours": 72,
-        "minHistoricalTrades": 5,
-        "minPositionCollateral": 10,
+        "roundDurations": [72, 48, 48],
+        "minPositionCollateral": 25,
         "minTradeDurationSec": 120,
-        "maxDaysInactive": 30
+        "leveragePenaltyThreshold": 30,
+        "supportedAssetCount": 4
       },
       "createdAt": "2026-03-08T04:00:00.000Z",
       "updatedAt": "2026-03-08T04:00:00.000Z"
@@ -108,13 +108,13 @@ Returns tournament details including rounds and registration counts.
         "tournamentId": 1,
         "roundNumber": 1,
         "name": "First Blood",
+        "type": "main",
         "startTime": "2026-03-08T05:00:00.000Z",
         "endTime": "2026-03-11T05:00:00.000Z",
         "status": "active"
       }
     ],
-    "registrationCount": 24,
-    "eligibleCount": 16
+    "registrationCount": 24
   }
 }
 ```
@@ -139,6 +139,7 @@ Returns the most recent round and all its brackets with entries, sorted by CPI d
       "tournamentId": 1,
       "roundNumber": 1,
       "name": "First Blood",
+      "type": "main",
       "startTime": "...",
       "endTime": "...",
       "status": "active"
@@ -186,7 +187,7 @@ Updates a tournament's name and/or config. **Admin-only. Only works during `regi
   "name": "Season 1 — Updated",
   "config": {
     "bracketSize": 16,
-    "roundDurationHours": 48
+    "roundDurations": [48, 48, 48]
   }
 }
 ```
@@ -236,7 +237,7 @@ Deletes a tournament and **all associated data** (registrations, rounds, bracket
 POST /api/register
 ```
 
-Registers a wallet for a tournament. Checks eligibility against the Adrena API.
+Registers a wallet for a tournament. Zero-barrier sign-up — any valid Solana wallet is accepted without eligibility checks.
 
 **Request body:**
 ```json
@@ -246,23 +247,23 @@ Registers a wallet for a tournament. Checks eligibility against the Adrena API.
 }
 ```
 
-**Success response (eligible):**
+**Success response (registered):**
 ```json
 {
   "success": true,
   "data": {
-    "eligible": true
+    "registered": true
   }
 }
 ```
 
-**Success response (ineligible):**
+**Success response (rejected):**
 ```json
 {
   "success": true,
   "data": {
-    "eligible": false,
-    "reason": "Need at least 5 closed trades. Found 0."
+    "registered": false,
+    "reason": "Wallet already registered"
   }
 }
 ```
@@ -271,7 +272,6 @@ Registers a wallet for a tournament. Checks eligibility against the Adrena API.
 - Wallet must be 32-44 characters (Solana base58 address format).
 - Tournament must exist and be in `registration` status.
 - Duplicate registrations are rejected.
-- The Adrena API is queried for historical positions. If the API errors (e.g. wallet unknown), the wallet is treated as having 0 positions.
 
 ---
 
@@ -292,8 +292,7 @@ Returns all registrations for a tournament.
       "id": 1,
       "tournamentId": 1,
       "wallet": "AbcXyz...",
-      "registeredAt": "2026-03-08T04:30:00.000Z",
-      "eligible": true
+      "registeredAt": "2026-03-08T04:30:00.000Z"
     }
   ]
 }
@@ -330,6 +329,7 @@ Returns a trader's performance across all rounds in a tournament.
       {
         "roundNumber": 1,
         "roundName": "First Blood",
+        "roundType": "main",
         "bracketNumber": 2,
         "scores": {
           "pnlScore": 72.5,
@@ -471,7 +471,9 @@ X-Admin-Secret: <your-admin-secret>
   "name": "Season 1",
   "config": {
     "bracketSize": 16,
-    "roundDurationHours": 48
+    "roundDurations": [48, 48, 48],
+    "leveragePenaltyThreshold": 30,
+    "supportedAssetCount": 4
   }
 }
 ```
@@ -494,7 +496,7 @@ The `config` object is optional. Any omitted fields use the defaults listed in t
 POST /api/admin/start
 ```
 
-Closes registration, shuffles eligible wallets, creates Round 1 brackets, and sets the tournament status to `active`.
+Closes registration, shuffles all registered wallets, creates Round 1 brackets, and sets the tournament status to `active`.
 
 **Request body:**
 ```json
@@ -516,7 +518,7 @@ Closes registration, shuffles eligible wallets, creates Round 1 brackets, and se
 
 **Errors:**
 - Tournament must be in `registration` status.
-- At least 2 eligible traders are required.
+- At least 2 registered traders are required.
 
 ---
 
@@ -546,14 +548,17 @@ Scoring continues even if individual trader API calls fail. Failures are logged 
 POST /api/admin/advance
 ```
 
-Ranks each bracket by CPI, eliminates the bottom half, and creates the next round with the advancing traders.
+Ranks each bracket by CPI, eliminates the bottom half, creates the next round with advancing traders, and creates a consolation bracket ("Fallen Fighters") for eliminated traders.
 
 **Request body:**
 ```json
 {
-  "tournamentId": 1
+  "tournamentId": 1,
+  "roundType": "main"
 }
 ```
+
+`roundType` is optional (defaults to `"main"`). Use `"consolation"` to advance the consolation bracket independently.
 
 **Response (next round created):**
 ```json
@@ -562,10 +567,13 @@ Ranks each bracket by CPI, eliminates the bottom half, and creates the next roun
   "data": {
     "nextRoundId": 2,
     "advanced": 8,
-    "eliminated": 8
+    "eliminated": 8,
+    "consolationRoundId": 3
   }
 }
 ```
+
+`consolationRoundId` is present only when ≥2 traders were eliminated and a consolation bracket was created.
 
 **Response (tournament completed):**
 ```json

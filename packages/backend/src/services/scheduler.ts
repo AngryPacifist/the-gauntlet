@@ -6,6 +6,10 @@
 //   2. Round advancement: check if any active round's endTime has passed,
 //      and if so, advance the tournament to the next round
 //
+// Updated to handle multiple active rounds per tournament (main + consolation).
+// A tournament can have both a main active round and a consolation active round
+// running simultaneously.
+//
 // Wired into the server lifecycle via start() and stop() functions.
 // ============================================================================
 
@@ -21,9 +25,8 @@ let advanceTask: cron.ScheduledTask | null = null;
 // --------------------------------------------------------------------------
 // Score Refresh: runs every 15 minutes
 //
-// Finds all active rounds and triggers score computation for each.
-// This replaces the manual "Score Round" button in the admin panel
-// during live tournaments.
+// Finds ALL active rounds (main + consolation) and triggers score
+// computation for each. A tournament can have 2 active rounds at once.
 // --------------------------------------------------------------------------
 async function refreshScores(): Promise<void> {
     try {
@@ -36,8 +39,8 @@ async function refreshScores(): Promise<void> {
         if (activeTournaments.length === 0) return;
 
         for (const tournament of activeTournaments) {
-            // Find the active round for this tournament
-            const [activeRound] = await db
+            // Find ALL active rounds for this tournament (not just one)
+            const activeRounds = await db
                 .select()
                 .from(rounds)
                 .where(
@@ -45,18 +48,18 @@ async function refreshScores(): Promise<void> {
                         eq(rounds.tournamentId, tournament.id),
                         eq(rounds.status, 'active'),
                     ),
-                )
-                .limit(1);
+                );
 
-            if (!activeRound) continue;
+            for (const activeRound of activeRounds) {
+                const roundType = (activeRound.type ?? 'main') as string;
+                console.log(
+                    `[Scheduler] Refreshing scores for tournament ${tournament.id} ` +
+                    `("${tournament.name}"), ${roundType} round ${activeRound.roundNumber}`,
+                );
 
-            console.log(
-                `[Scheduler] Refreshing scores for tournament ${tournament.id} ` +
-                `("${tournament.name}"), round ${activeRound.roundNumber}`,
-            );
-
-            const scoredCount = await computeRoundScores(activeRound.id);
-            console.log(`[Scheduler] Scored ${scoredCount} entries`);
+                const scoredCount = await computeRoundScores(activeRound.id);
+                console.log(`[Scheduler] Scored ${scoredCount} entries`);
+            }
         }
     } catch (error) {
         console.error('[Scheduler] Error refreshing scores:', error);
@@ -67,7 +70,7 @@ async function refreshScores(): Promise<void> {
 // Round Advancement: runs every minute
 //
 // Checks if any active round's endTime has passed. If so, triggers
-// round advancement (eliminate bottom 50%, create next round).
+// round advancement. Handles main and consolation rounds independently.
 // --------------------------------------------------------------------------
 async function checkRoundAdvancement(): Promise<void> {
     try {
@@ -81,7 +84,8 @@ async function checkRoundAdvancement(): Promise<void> {
         const now = new Date();
 
         for (const tournament of activeTournaments) {
-            const [activeRound] = await db
+            // Get ALL active rounds (main + consolation)
+            const activeRounds = await db
                 .select()
                 .from(rounds)
                 .where(
@@ -89,34 +93,41 @@ async function checkRoundAdvancement(): Promise<void> {
                         eq(rounds.tournamentId, tournament.id),
                         eq(rounds.status, 'active'),
                     ),
-                )
-                .limit(1);
-
-            if (!activeRound) continue;
-
-            // Check if round has ended
-            if (new Date(activeRound.endTime) <= now) {
-                console.log(
-                    `[Scheduler] Round ${activeRound.roundNumber} of tournament ` +
-                    `${tournament.id} ("${tournament.name}") has ended. ` +
-                    `Computing final scores and advancing...`,
                 );
 
-                // Compute final scores before advancing
-                await computeRoundScores(activeRound.id);
-
-                // Advance to next round
-                const result = await advanceRound(tournament.id);
-
-                if ('completed' in result) {
+            for (const activeRound of activeRounds) {
+                // Check if round has ended
+                if (new Date(activeRound.endTime) <= now) {
+                    const roundType = (activeRound.type ?? 'main') as 'main' | 'consolation';
                     console.log(
-                        `[Scheduler] Tournament ${tournament.id} completed!`,
+                        `[Scheduler] ${roundType} round ${activeRound.roundNumber} of tournament ` +
+                        `${tournament.id} ("${tournament.name}") has ended. ` +
+                        `Computing final scores and advancing...`,
                     );
-                } else {
-                    console.log(
-                        `[Scheduler] Advanced to round ${result.nextRoundId}: ` +
-                        `${result.advanced} advanced, ${result.eliminated} eliminated`,
-                    );
+
+                    // Compute final scores before advancing
+                    await computeRoundScores(activeRound.id);
+
+                    // Advance to next round — pass the round type so main/consolation
+                    // are handled independently
+                    const result = await advanceRound(tournament.id, roundType);
+
+                    if ('completed' in result) {
+                        if (roundType === 'main') {
+                            console.log(
+                                `[Scheduler] Tournament ${tournament.id} completed!`,
+                            );
+                        } else {
+                            console.log(
+                                `[Scheduler] Consolation bracket for tournament ${tournament.id} completed!`,
+                            );
+                        }
+                    } else {
+                        console.log(
+                            `[Scheduler] ${roundType} advanced to round ${result.nextRoundId}: ` +
+                            `${result.advanced} advanced, ${result.eliminated} eliminated`,
+                        );
+                    }
                 }
             }
         }
