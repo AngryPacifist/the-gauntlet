@@ -105,17 +105,21 @@ NEXT_PUBLIC_API_URL=https://api.yourdomain.com
 
 The migration script (`packages/backend/src/db/migrate.ts`) creates these tables:
 
-| Table              | Purpose                                        |
-|--------------------|------------------------------------------------|
-| `tournaments`      | Tournament metadata, config, status             |
-| `rounds`           | Round details (name, type, timestamps, status)  |
-| `brackets`         | Bracket groupings within a round                |
-| `bracket_entries`  | Individual trader entries with scores           |
-| `registrations`    | Wallet registrations for tournaments            |
-| `score_snapshots`  | Audit trail of score computations               |
-| `trade_cache`      | Cached position data from the Adrena API        |
+| Table                  | Purpose                                        |
+|------------------------|------------------------------------------------|
+| `tournaments`          | Tournament metadata, config, status. Nullable `season_id` and `week_number` link to seasons. |
+| `rounds`               | Round details (name, type, timestamps, status)  |
+| `brackets`             | Bracket groupings within a round                |
+| `bracket_entries`      | Individual trader entries with scores           |
+| `registrations`        | Wallet registrations for tournaments            |
+| `score_snapshots`      | Audit trail of score computations               |
+| `trade_cache`          | Cached position data from the Adrena API        |
+| `seasons`              | Season metadata, config, status, current week   |
+| `season_standings`     | Aggregate points per wallet per season          |
+| `daily_category_scores`| Daily All Around and Fisher scores per wallet   |
+| `pyth_ohlc_cache`      | Cached daily OHLC candles from Pyth Benchmarks  |
 
-Indexes are created on foreign keys and commonly queried columns. See the migration file for the full schema.
+Indexes are created on foreign keys and commonly queried columns. All migration SQL is idempotent (`CREATE TABLE IF NOT EXISTS`, `ADD COLUMN IF NOT EXISTS`). See the migration file for the full schema.
 
 ---
 
@@ -136,17 +140,22 @@ adrena-the-gauntlet/
 │   │       │   ├── tournaments.ts    # Tournament CRUD (list, get, create, edit, delete)
 │   │       │   ├── registration.ts   # Wallet registration
 │   │       │   ├── admin.ts          # Admin actions (start, score, advance, cancel)
-│   │       │   └── brackets.ts       # Bracket details, trader profiles, leaderboard, analytics
+│   │       │   ├── brackets.ts       # Bracket details, trader profiles, leaderboard, analytics
+│   │       │   ├── seasons.ts        # Season CRUD + lifecycle (start, advance, complete)
+│   │       │   └── categories.ts     # Daily category leaderboards + manual scoring
 │   │       └── services/
 │   │           ├── tournament-manager.ts  # Tournament lifecycle logic
 │   │           ├── scoring-engine.ts      # CPI computation
-│   │           ├── scheduler.ts           # Automated scoring + round advancement
-│   │           └── adrena-client.ts       # Adrena API client
+│   │           ├── scheduler.ts           # Automated scoring + round/category advancement
+│   │           ├── adrena-client.ts       # Adrena API client
+│   │           ├── season-manager.ts      # Season lifecycle (create, start, advance, qualify, complete)
+│   │           ├── category-engine.ts     # All Around + Fisher daily scoring
+│   │           └── pyth-client.ts         # Pyth Benchmarks OHLC fetcher with DB cache
 │   └── frontend/
 │       └── src/
 │           ├── components/
 │           │   └── ShareButton.tsx    # Share-to-X one-click tweet component
-│           ├── lib/api.ts            # Typed API client
+│           ├── lib/api.ts            # Typed API client (tournaments + seasons + categories)
 │           └── app/
 │               ├── layout.tsx        # Root layout with navigation
 │               ├── page.tsx          # Dashboard (tournament list)
@@ -155,7 +164,9 @@ adrena-the-gauntlet/
 │               ├── tournament/[id]/page.tsx           # Tournament detail
 │               ├── tournament/[id]/analytics/page.tsx # Post-tournament analytics
 │               ├── leaderboard/[id]/page.tsx          # Leaderboard
-│               └── trader/[wallet]/page.tsx           # Trader profile
+│               ├── trader/[wallet]/page.tsx           # Trader profile
+│               ├── season/[id]/page.tsx               # Season detail + standings
+│               └── categories/[tournamentId]/page.tsx # Category leaderboards
 ├── docs/
 │   ├── competition-design.md         # Competition mechanics
 │   ├── api-reference.md              # API documentation

@@ -107,11 +107,12 @@ export default function LeaderboardPage({ params }: { params: Promise<{ id: stri
 
     const sortedEntries = getSortedEntries();
 
-    function SortHeader({ label, sortKeyProp }: { label: string; sortKeyProp: SortKey }) {
+    function SortHeader({ label, sortKeyProp, className }: { label: string; sortKeyProp: SortKey; className?: string }) {
         const isActive = sortKey === sortKeyProp;
         return (
             <th
                 onClick={() => handleSort(sortKeyProp)}
+                className={className}
                 style={{ cursor: 'pointer', userSelect: 'none' }}
             >
                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
@@ -158,14 +159,14 @@ export default function LeaderboardPage({ params }: { params: Promise<{ id: stri
                 <table className="leaderboard-table">
                     <thead>
                         <tr>
-                            <SortHeader label="#" sortKeyProp="rank" />
+                            <SortHeader label="#" sortKeyProp="rank" className="col-rank" />
                             <th className="col-wallet">Wallet</th>
-                            <SortHeader label="CPI" sortKeyProp="cpiScore" />
-                            <SortHeader label="PnL" sortKeyProp="pnlScore" />
-                            <SortHeader label="Risk" sortKeyProp="riskScore" />
-                            <SortHeader label="Consistency" sortKeyProp="consistencyScore" />
-                            <SortHeader label="Activity" sortKeyProp="activityScore" />
-                            <SortHeader label="Last Rd" sortKeyProp="lastRound" />
+                            <SortHeader label="CPI" sortKeyProp="cpiScore" className="col-score" />
+                            <SortHeader label="PnL" sortKeyProp="pnlScore" className="col-score" />
+                            <SortHeader label="Risk" sortKeyProp="riskScore" className="col-score" />
+                            <SortHeader label="Consistency" sortKeyProp="consistencyScore" className="col-score" />
+                            <SortHeader label="Activity" sortKeyProp="activityScore" className="col-score" />
+                            <SortHeader label="Last Rd" sortKeyProp="lastRound" className="col-round" />
                             <th className="col-status">Status</th>
                             <th style={{ width: 32 }}></th>
                         </tr>

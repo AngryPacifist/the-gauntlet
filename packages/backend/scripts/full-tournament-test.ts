@@ -1,19 +1,23 @@
 /**
- * Full Tournament Simulation — Using Real Adrena Leaderboard Wallets
+ * Adrena: The Gauntlet — Comprehensive Integration Test
  *
- * Wallets sourced from the Adrena Mutagen Leaderboard (app.adrena.trade).
- * Runs a complete tournament lifecycle: create, register, start, score, advance.
+ * Single integrated flow testing both Phase 1 (tournament lifecycle) and
+ * Phase 2 (season lifecycle, category endpoints).
  *
- * Uses `useHistoricalWindow: true` so the scoring engine uses a configurable
- * historical window instead of the round dates. This allows simulation testing
- * with real historical position data.
+ * Flow:
+ *   1. Create season (with backtest tournament config)
+ *   2. Start season → auto-creates Week 1 tournament
+ *   3. Register 30 real Adrena wallets for Week 1 tournament
+ *   4. Start → Score → Display → Advance the tournament
+ *   5. Verify season status, standings
+ *   6. Verify category endpoints
+ *   7. Verify admin auth rejection
  *
  * Usage:
- *   npx tsx scripts/full-tournament-test.ts 2>&1 | Out-File -Encoding utf8 scripts/tournament-output.txt
+ *   npx tsx packages/backend/scripts/full-tournament-test.ts 2>&1
  */
 
 import 'dotenv/config';
-import { fileURLToPath } from 'url';
 
 const BACKEND_API = 'http://localhost:3001/api';
 const ADMIN_SECRET = process.env.ADMIN_SECRET || '';
@@ -22,6 +26,8 @@ if (!ADMIN_SECRET) {
     console.error('ERROR: ADMIN_SECRET not set in .env');
     process.exit(1);
 }
+
+// Wallets sourced from the Adrena Mutagen Leaderboard (app.adrena.trade)
 const LEADERBOARD_WALLETS = [
     'DaVA8ciisvFhW5fLfmHYEDfNDXjKJv8NtBdYUzZ2iY86',
     'ErVgLQB4hwGe9xegP6R83E6WE1tcRokcsEY1WT9xa9po',
@@ -71,35 +77,56 @@ async function backendFetch(
 }
 
 async function main(): Promise<void> {
-    console.log('=== Adrena: The Gauntlet — Full Tournament Simulation ===');
+    console.log('=== Adrena: The Gauntlet — Comprehensive Integration Test ===');
     console.log(`Timestamp: ${new Date().toISOString()}`);
     console.log(`Wallets: ${LEADERBOARD_WALLETS.length} (from Adrena Mutagen Leaderboard)\n`);
 
-    // ── Step 1: Create tournament ──────────────────────────────────────
-    console.log('Step 1: Creating tournament...');
-    const createRes = await backendFetch('/tournaments', {
+    // ── Step 1: Create season ─────────────────────────────────────────────
+    console.log('Step 1: Creating season...');
+    const createSeasonRes = await backendFetch('/seasons', {
         method: 'POST',
         body: JSON.stringify({
-            name: `Backtest Sim ${new Date().toISOString().slice(0, 16)}`,
+            name: 'Integration Test Season',
             config: {
-                bracketSize: 8,
-                roundDurations: [72, 48, 48],
-                useHistoricalWindow: true,
-                historicalWindowDays: 365,
+                weekCount: 3,
+                qualificationSlots: 4,
+                tournamentConfig: {
+                    bracketSize: 8,
+                    roundDurations: [72, 48, 48],
+                    useHistoricalWindow: true,
+                    historicalWindowDays: 365,
+                },
             },
         }),
     });
 
-    if (!createRes.success) {
-        console.log(`  FAILED: ${createRes.error}`);
+    if (!createSeasonRes.success) {
+        console.log(`  FAILED: ${createSeasonRes.error}`);
         return;
     }
 
-    const tournamentId = (createRes.data as { id: number }).id;
-    console.log(`  Tournament #${tournamentId} (bracketSize: 8, backtest: 365 days)\n`);
+    const seasonId = (createSeasonRes.data as { id: number }).id;
+    console.log(`  Season #${seasonId} created (3 weeks, 4 qualification slots)\n`);
 
-    // ── Step 2: Register wallets ───────────────────────────────────────
-    console.log('Step 2: Registering wallets...');
+    // ── Step 2: Start season → creates Week 1 tournament ──────────────────
+    console.log('Step 2: Starting season (creates Week 1 tournament)...');
+    const startSeasonRes = await backendFetch(`/seasons/${seasonId}/start`, { method: 'POST' });
+
+    if (!startSeasonRes.success) {
+        console.log(`  FAILED: ${startSeasonRes.error}`);
+        return;
+    }
+
+    const tournamentId = (startSeasonRes.data as { tournamentId: number }).tournamentId;
+    console.log(`  Season started → Week 1 tournament #${tournamentId}\n`);
+
+    // Verify season status
+    const seasonDetailRes = await backendFetch(`/seasons/${seasonId}`);
+    const seasonDetail = seasonDetailRes.data as { name: string; status: string; currentWeek: number };
+    console.log(`  Season status: "${seasonDetail.name}" — ${seasonDetail.status}, week ${seasonDetail.currentWeek}\n`);
+
+    // ── Step 3: Register wallets ──────────────────────────────────────────
+    console.log('Step 3: Registering wallets...');
     const results: Array<{ wallet: string; registered: boolean; reason?: string }> = [];
 
     for (const wallet of LEADERBOARD_WALLETS) {
@@ -127,8 +154,8 @@ async function main(): Promise<void> {
         return;
     }
 
-    // ── Step 3: Start tournament ───────────────────────────────────────
-    console.log('Step 3: Starting tournament...');
+    // ── Step 4: Start tournament ──────────────────────────────────────────
+    console.log('Step 4: Starting tournament...');
     const startRes = await backendFetch('/admin/start', {
         method: 'POST',
         body: JSON.stringify({ tournamentId }),
@@ -141,10 +168,10 @@ async function main(): Promise<void> {
 
     const startData = startRes.data as { roundId: number; bracketCount: number };
     console.log(`  Round #${startData.roundId} — ${startData.bracketCount} bracket(s)`);
-    console.log(`  (Backtest mode: scoring will use 365-day historical window)\n`);
+    console.log(`  (Backtest mode: scoring uses 365-day historical window)\n`);
 
-    // ── Step 4: Compute CPI scores ─────────────────────────────────────
-    console.log('Step 4: Computing CPI scores (fetching live position data)...');
+    // ── Step 5: Compute CPI scores ────────────────────────────────────────
+    console.log('Step 5: Computing CPI scores (fetching live position data)...');
     console.log('  This takes ~30s — fetching positions for each trader from the Adrena API...');
     const scoreRes = await backendFetch(`/admin/score/${startData.roundId}`, {
         method: 'POST',
@@ -158,8 +185,8 @@ async function main(): Promise<void> {
     const scoreData = scoreRes.data as { scoredCount: number };
     console.log(`  Scored ${scoreData.scoredCount} trader(s)\n`);
 
-    // ── Step 5: Display round 1 results ────────────────────────────────
-    console.log('Step 5: Round 1 Results\n');
+    // ── Step 6: Display round 1 results ───────────────────────────────────
+    console.log('Step 6: Round 1 Results\n');
     const bracketRes = await backendFetch(`/tournaments/${tournamentId}/brackets`);
 
     if (!bracketRes.success) {
@@ -201,8 +228,8 @@ async function main(): Promise<void> {
         console.log('');
     }
 
-    // ── Step 6: Advance round ──────────────────────────────────────────
-    console.log('Step 6: Advancing round (eliminating bottom 50%)...');
+    // ── Step 7: Advance round ─────────────────────────────────────────────
+    console.log('Step 7: Advancing round (eliminating bottom 50%)...');
     const advanceRes = await backendFetch('/admin/advance', {
         method: 'POST',
         body: JSON.stringify({ tournamentId }),
@@ -227,7 +254,63 @@ async function main(): Promise<void> {
         console.log(`  Next round: #${advanceData.nextRoundId}\n`);
     }
 
-    console.log('=== SIMULATION COMPLETE ===');
+    // ── Step 8: Season verification ───────────────────────────────────────
+    console.log('Step 8: Season verification...');
+
+    // Season detail
+    const postRoundDetail = await backendFetch(`/seasons/${seasonId}`);
+    const prd = postRoundDetail.data as { name: string; status: string; currentWeek: number };
+    console.log(`  Season: "${prd.name}" — ${prd.status}, week ${prd.currentWeek}`);
+
+    // Standings
+    const standingsRes = await backendFetch(`/seasons/${seasonId}/standings`);
+    const standings = standingsRes.data as unknown[];
+    console.log(`  Standings: ${standingsRes.success ? `${standings?.length ?? 0} entries` : `FAILED: ${standingsRes.error}`}`);
+
+    // List seasons
+    const listRes = await backendFetch('/seasons');
+    const seasonList = listRes.data as unknown[];
+    console.log(`  Total seasons: ${listRes.success ? seasonList?.length : `FAILED: ${listRes.error}`}\n`);
+
+    // ── Step 9: Category endpoints ────────────────────────────────────────
+    console.log('Step 9: Category endpoints...');
+    const today = new Date().toISOString().split('T')[0];
+
+    const endpoints = [
+        { label: 'All Around (cumulative)', path: `/categories/${tournamentId}/all-around` },
+        { label: `All Around (${today})`, path: `/categories/${tournamentId}/all-around/${today}` },
+        { label: 'Fisher (cumulative)', path: `/categories/${tournamentId}/fisher` },
+        { label: `Fisher (${today})`, path: `/categories/${tournamentId}/fisher/${today}` },
+    ];
+
+    for (const ep of endpoints) {
+        const r = await backendFetch(ep.path);
+        const d = r.data as unknown[];
+        console.log(`  ${ep.label}: ${r.success ? `${d?.length ?? 0} entries` : `FAILED: ${r.error}`}`);
+    }
+
+    // ── Step 10: Admin auth rejection ─────────────────────────────────────
+    console.log('\nStep 10: Admin auth rejection...');
+
+    // Season create without secret
+    const noAuthSeason = await fetch(`${BACKEND_API}/seasons`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: 'Hack Attempt', config: {} }),
+    });
+    const noAuthSeasonJson = await noAuthSeason.json() as { success: boolean; error?: string };
+    console.log(`  POST /seasons (no secret): ${!noAuthSeasonJson.success ? `Rejected ✓` : 'ALLOWED (bug!)'}`);
+
+    // Tournament create without secret
+    const noAuthTournament = await fetch(`${BACKEND_API}/tournaments`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: 'Should Fail' }),
+    });
+    const noAuthTournamentJson = await noAuthTournament.json() as { success: boolean; error?: string };
+    console.log(`  POST /tournaments (no secret): ${!noAuthTournamentJson.success ? `Rejected ✓` : 'ALLOWED (bug!)'}`);
+
+    console.log('\n=== COMPREHENSIVE TEST COMPLETE ===');
 }
 
 main().catch(console.error);

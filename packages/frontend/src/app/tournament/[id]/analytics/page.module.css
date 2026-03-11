@@ -362,6 +362,10 @@
     .histogram {
         height: 150px;
     }
+
+    .categoryGrid {
+        grid-template-columns: 1fr;
+    }
 }
 
 @media (max-width: 480px) {
@@ -376,4 +380,128 @@
     .comparisonLabel {
         text-align: left;
     }
+}
+
+/* --- Season Banner --- */
+
+.seasonBanner {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+    padding: var(--space-md) var(--space-lg) !important;
+    margin-bottom: var(--space-lg);
+    background: rgba(108, 92, 231, 0.08) !important;
+    border-color: rgba(108, 92, 231, 0.2) !important;
+}
+
+.seasonName {
+    font-weight: 700;
+    font-size: 0.9rem;
+    display: block;
+}
+
+.seasonName a {
+    color: var(--accent-primary);
+    text-decoration: none;
+}
+
+.seasonName a:hover {
+    text-decoration: underline;
+}
+
+.seasonDetail {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+/* --- Funnel Group Labels --- */
+
+.funnelGroupLabel {
+    font-size: 0.6875rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-muted);
+    margin-bottom: var(--space-xs);
+    margin-top: var(--space-md);
+    padding-bottom: var(--space-xs);
+    border-bottom: 1px solid var(--border-subtle);
+}
+
+.funnelGroupLabel:first-child {
+    margin-top: 0;
+}
+
+/* --- Consolation Funnel Variants --- */
+
+.funnelBarConsolation {
+    background: rgba(255, 165, 2, 0.25) !important;
+}
+
+.funnelAdvancedConsolation {
+    background: var(--status-warning) !important;
+}
+
+/* --- Daily Categories --- */
+
+.categoryGrid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-md);
+}
+
+.categoryCard {
+    padding: var(--space-lg) !important;
+}
+
+.categoryTitle {
+    font-size: 1rem;
+    font-weight: 700;
+    margin-bottom: var(--space-xs);
+}
+
+.categoryDesc {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    margin-bottom: var(--space-md);
+}
+
+.categoryList {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+}
+
+.categoryEntry {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: var(--space-xs) 0;
+    border-bottom: 1px solid var(--border-subtle);
+}
+
+.categoryEntry:last-child {
+    border-bottom: none;
+}
+
+.categoryRank {
+    width: 28px;
+    text-align: center;
+    flex-shrink: 0;
+    font-size: 0.9rem;
+}
+
+.categoryScore {
+    font-family: var(--font-mono);
+    font-size: 0.8125rem;
+    font-weight: 700;
+    color: var(--accent-secondary);
+    margin-left: auto;
+}
+
+.categoryDate {
+    font-family: var(--font-mono);
+    font-size: 0.6875rem;
+    color: var(--text-muted);
+    flex-shrink: 0;
 }

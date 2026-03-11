@@ -268,26 +268,55 @@ export default function TournamentPage({ params }: { params: Promise<{ id: strin
                 </section>
             )}
 
-            {/* Round Selector Tabs */}
-            {allRounds.length > 0 && (
-                <section className={styles.section}>
-                    <div className={styles.roundTabs}>
-                        {allRounds.map((r) => (
-                            <button
-                                key={r.id}
-                                className={`${styles.roundTab} ${selectedRoundId === r.id ? styles.roundTabActive : ''}`}
-                                onClick={() => setSelectedRoundId(r.id)}
-                            >
-                                <span className={styles.roundTabNumber}>R{r.roundNumber}</span>
-                                <span className={styles.roundTabName}>{r.name}</span>
-                                {r.status === 'active' && (
-                                    <span className={styles.roundTabLive}>LIVE</span>
-                                )}
-                            </button>
-                        ))}
-                    </div>
-                </section>
-            )}
+            {/* Round Selector Tabs — split into Main Bracket and Fallen Fighters */}
+            {allRounds.length > 0 && (() => {
+                const mainRounds = allRounds.filter((r) => (r.type ?? 'main') === 'main');
+                const consolationRounds = allRounds.filter((r) => r.type === 'consolation');
+                return (
+                    <section className={styles.section}>
+                        {mainRounds.length > 0 && (
+                            <>
+                                <div className={styles.roundGroupLabel}>Main Bracket</div>
+                                <div className={styles.roundTabs}>
+                                    {mainRounds.map((r) => (
+                                        <button
+                                            key={r.id}
+                                            className={`${styles.roundTab} ${selectedRoundId === r.id ? styles.roundTabActive : ''}`}
+                                            onClick={() => setSelectedRoundId(r.id)}
+                                        >
+                                            <span className={styles.roundTabNumber}>R{r.roundNumber}</span>
+                                            <span className={styles.roundTabName}>{r.name}</span>
+                                            {r.status === 'active' && (
+                                                <span className={styles.roundTabLive}>LIVE</span>
+                                            )}
+                                        </button>
+                                    ))}
+                                </div>
+                            </>
+                        )}
+                        {consolationRounds.length > 0 && (
+                            <>
+                                <div className={`${styles.roundGroupLabel} ${styles.roundGroupLabelConsolation}`}>Fallen Fighters</div>
+                                <div className={styles.roundTabs}>
+                                    {consolationRounds.map((r) => (
+                                        <button
+                                            key={r.id}
+                                            className={`${styles.roundTab} ${styles.roundTabConsolation} ${selectedRoundId === r.id ? styles.roundTabActive : ''}`}
+                                            onClick={() => setSelectedRoundId(r.id)}
+                                        >
+                                            <span className={styles.roundTabNumber}>R{r.roundNumber}</span>
+                                            <span className={styles.roundTabName}>{r.name}</span>
+                                            {r.status === 'active' && (
+                                                <span className={styles.roundTabLive}>LIVE</span>
+                                            )}
+                                        </button>
+                                    ))}
+                                </div>
+                            </>
+                        )}
+                    </section>
+                );
+            })()}
 
             {/* Brackets */}
             {bracketsData && bracketsData.brackets.length > 0 && (

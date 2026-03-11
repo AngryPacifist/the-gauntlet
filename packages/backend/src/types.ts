@@ -187,3 +187,92 @@ export interface TraderProfile {
     advanced: boolean;
     positions: AdrenaPosition[];
 }
+
+// --- Season Types ---
+
+export type SeasonStatus = 'registration' | 'active' | 'final' | 'completed';
+
+export interface SeasonPointsScheme {
+    winner: number;
+    second: number;
+    third: number;
+    finalist: number;
+    eliminatedR2: number;
+    eliminatedR1: number;
+    consolationWinner: number;
+    registered: number;
+}
+
+export interface SeasonConfig {
+    weekCount: number;
+    qualificationSlots: number;
+    tournamentConfig: TournamentConfig;
+    pointsScheme: SeasonPointsScheme;
+}
+
+export const DEFAULT_SEASON_POINTS: SeasonPointsScheme = {
+    winner: 25,
+    second: 18,
+    third: 15,
+    finalist: 12,
+    eliminatedR2: 8,
+    eliminatedR1: 4,
+    consolationWinner: 6,
+    registered: 1,
+};
+
+export const DEFAULT_SEASON_CONFIG: SeasonConfig = {
+    weekCount: 7,
+    qualificationSlots: 8,
+    tournamentConfig: DEFAULT_TOURNAMENT_CONFIG,
+    pointsScheme: DEFAULT_SEASON_POINTS,
+};
+
+// --- Daily Category Types ---
+
+export interface AllAroundAssetScore {
+    symbol: string;
+    bestROI: number;
+    points: number;
+    positionId: number;
+}
+
+export interface AllAroundDetails {
+    assetScores: AllAroundAssetScore[];
+    totalPoints: number;
+}
+
+export interface FisherEntryDetail {
+    symbol: string;
+    entryPrice: number;
+    dayLow: number;
+    dayHigh: number;
+    proximity: number;
+    roi: number;
+    rank: number | null;
+    rankPoints: number;
+    positionId: number;
+}
+
+export interface FisherDetails {
+    longEntry: FisherEntryDetail | null;
+    shortEntry: FisherEntryDetail | null;
+    totalPoints: number;
+}
+
+export interface OHLCBar {
+    open: number;
+    high: number;
+    low: number;
+    close: number;
+}
+
+// --- Pyth Symbol Mapping ---
+// Verified against live Pyth Benchmarks API + Adrena liquidity-info endpoint.
+// Adrena position `symbol` field → Pyth TradingView `symbol` query param.
+export const ADRENA_TO_PYTH_SYMBOL: Record<string, string> = {
+    SOL: 'Crypto.SOL/USD',
+    BTC: 'Crypto.BTC/USD',
+    BONK: 'Crypto.BONK/USD',
+    JITOSOL: 'Crypto.JITOSOL/USD',
+};

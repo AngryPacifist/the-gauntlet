@@ -182,6 +182,7 @@ export async function getLeaderboard(
 export interface RoundStats {
     roundNumber: number;
     roundName: string;
+    roundType: 'main' | 'consolation';
     traderCount: number;
     eliminatedCount: number;
     advancedCount: number;
@@ -202,6 +203,13 @@ export interface TournamentAnalytics {
         totalRounds: number;
         totalTraders: number;
         totalRegistrations: number;
+        season: {
+            id: number;
+            name: string;
+            weekNumber: number;
+            currentWeek: number;
+            status: string;
+        } | null;
     };
     roundStats: RoundStats[];
     scoreDistribution: Array<{ bucket: string; count: number }>;
@@ -215,6 +223,10 @@ export interface TournamentAnalytics {
         roundNumber: number;
         roundName: string;
     }>;
+    categoryData: {
+        allAround: Array<{ wallet: string; score: number; scoreDate: string }>;
+        fisher: Array<{ wallet: string; score: number; scoreDate: string }>;
+    };
 }
 
 export async function getTournamentAnalytics(
@@ -299,4 +311,137 @@ export async function adminCancelTournament(
         method: 'POST',
         headers: { 'X-Admin-Secret': adminSecret },
     });
+}
+
+// --- Season Types ---
+
+export interface Season {
+    id: number;
+    name: string;
+    status: 'registration' | 'active' | 'final' | 'completed';
+    config: {
+        weekCount: number;
+        qualificationSlots: number;
+        tournamentConfig: Tournament['config'];
+        pointsScheme: {
+            winner: number;
+            second: number;
+            third: number;
+            finalist: number;
+            eliminatedR2: number;
+            eliminatedR1: number;
+            consolationWinner: number;
+            registered: number;
+        };
+    };
+    currentWeek: number;
+    createdAt: string;
+    updatedAt: string;
+}
+
+export interface SeasonWithTournaments extends Season {
+    tournaments: Tournament[];
+}
+
+export interface SeasonStanding {
+    id: number;
+    seasonId: number;
+    wallet: string;
+    totalPoints: number;
+    weeksParticipated: number;
+    bestPlacement: number | null;
+    qualifiedForFinal: boolean;
+}
+
+// --- Category Types ---
+
+export interface CategoryLeaderboardEntry {
+    wallet: string;
+    totalScore: number;
+    daysScored: number;
+}
+
+export interface DailyCategoryScore {
+    id: number;
+    tournamentId: number;
+    seasonId: number | null;
+    wallet: string;
+    category: string;
+    scoreDate: string;
+    score: number;
+    details: unknown;
+    computedAt: string;
+}
+
+// --- Season API Functions ---
+
+export async function listSeasons(): Promise<Season[]> {
+    return apiFetch<Season[]>('/api/seasons');
+}
+
+export async function getSeason(id: number): Promise<SeasonWithTournaments> {
+    return apiFetch<SeasonWithTournaments>(`/api/seasons/${id}`);
+}
+
+export async function getSeasonStandings(seasonId: number): Promise<SeasonStanding[]> {
+    return apiFetch<SeasonStanding[]>(`/api/seasons/${seasonId}/standings`);
+}
+
+export async function adminCreateSeason(
+    name: string,
+    config: Partial<Season['config']>,
+    adminSecret: string,
+): Promise<{ id: number }> {
+    return apiFetch('/api/seasons', {
+        method: 'POST',
+        body: JSON.stringify({ name, config }),
+        headers: { 'X-Admin-Secret': adminSecret },
+    });
+}
+
+export async function adminStartSeason(
+    seasonId: number,
+    adminSecret: string,
+): Promise<{ tournamentId: number }> {
+    return apiFetch(`/api/seasons/${seasonId}/start`, {
+        method: 'POST',
+        headers: { 'X-Admin-Secret': adminSecret },
+    });
+}
+
+export async function adminAdvanceSeason(
+    seasonId: number,
+    adminSecret: string,
+): Promise<{ nextTournamentId?: number; seasonStatus: string }> {
+    return apiFetch(`/api/seasons/${seasonId}/advance`, {
+        method: 'POST',
+        headers: { 'X-Admin-Secret': adminSecret },
+    });
+}
+
+export async function adminCompleteSeason(
+    seasonId: number,
+    adminSecret: string,
+): Promise<{ seasonId: number; status: string }> {
+    return apiFetch(`/api/seasons/${seasonId}/complete`, {
+        method: 'POST',
+        headers: { 'X-Admin-Secret': adminSecret },
+    });
+}
+
+// --- Category API Functions ---
+
+export async function getCategoryLeaderboard(
+    tournamentId: number,
+    category: 'all-around' | 'fisher',
+): Promise<CategoryLeaderboardEntry[]> {
+    return apiFetch<CategoryLeaderboardEntry[]>(`/api/categories/${tournamentId}/${category}`);
+}
+
+export async function getDailyScores(
+    tournamentId: number,
+    category: 'all-around' | 'fisher',
+    date: string,
+): Promise<DailyCategoryScore[]> {
+    return apiFetch<DailyCategoryScore[]>(`/api/categories/${tournamentId}/${category}/${date}`);
 }

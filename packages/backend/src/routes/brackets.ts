@@ -13,8 +13,8 @@ import {
     getTraderProfile,
 } from '../services/tournament-manager.js';
 import { db } from '../db/index.js';
-import { tournaments, rounds, brackets, bracketEntries, registrations } from '../db/schema.js';
-import { eq, desc, count } from 'drizzle-orm';
+import { tournaments, rounds, brackets, bracketEntries, registrations, seasons, dailyCategoryScores } from '../db/schema.js';
+import { eq, desc, count, and } from 'drizzle-orm';
 
 const router = Router();
 
@@ -131,6 +131,7 @@ router.get('/analytics/:tournamentId', async (req, res) => {
         const roundStats: Array<{
             roundNumber: number;
             roundName: string;
+            roundType: string;
             traderCount: number;
             eliminatedCount: number;
             advancedCount: number;
@@ -199,6 +200,7 @@ router.get('/analytics/:tournamentId', async (req, res) => {
                 roundStats.push({
                     roundNumber: round.roundNumber,
                     roundName: round.name,
+                    roundType: round.type,
                     traderCount: roundEntries.length,
                     eliminatedCount: roundEntries.filter(e => e.eliminated).length,
                     advancedCount: roundEntries.filter(e => e.advanced).length,
@@ -214,6 +216,7 @@ router.get('/analytics/:tournamentId', async (req, res) => {
                 roundStats.push({
                     roundNumber: round.roundNumber,
                     roundName: round.name,
+                    roundType: round.type,
                     traderCount: roundEntries.length,
                     eliminatedCount: 0,
                     advancedCount: 0,
@@ -272,6 +275,67 @@ router.get('/analytics/:tournamentId', async (req, res) => {
                 roundName: e.roundName,
             }));
 
+        // Season context
+        let seasonContext: { id: number; name: string; weekNumber: number; currentWeek: number; status: string } | null = null;
+        if (tournament_.seasonId) {
+            const [season] = await db
+                .select()
+                .from(seasons)
+                .where(eq(seasons.id, tournament_.seasonId))
+                .limit(1);
+            if (season) {
+                seasonContext = {
+                    id: season.id,
+                    name: season.name,
+                    weekNumber: tournament_.weekNumber ?? 0,
+                    currentWeek: season.currentWeek,
+                    status: season.status,
+                };
+            }
+        }
+
+        // Daily category top performers
+        const categoryData: {
+            allAround: Array<{ wallet: string; score: number; scoreDate: string }>;
+            fisher: Array<{ wallet: string; score: number; scoreDate: string }>;
+        } = { allAround: [], fisher: [] };
+
+        const allAroundScores = await db
+            .select()
+            .from(dailyCategoryScores)
+            .where(
+                and(
+                    eq(dailyCategoryScores.tournamentId, tournamentId),
+                    eq(dailyCategoryScores.category, 'all_around'),
+                ),
+            )
+            .orderBy(desc(dailyCategoryScores.score))
+            .limit(5);
+
+        categoryData.allAround = allAroundScores.map(s => ({
+            wallet: s.wallet,
+            score: s.score,
+            scoreDate: String(s.scoreDate),
+        }));
+
+        const fisherScores = await db
+            .select()
+            .from(dailyCategoryScores)
+            .where(
+                and(
+                    eq(dailyCategoryScores.tournamentId, tournamentId),
+                    eq(dailyCategoryScores.category, 'fisher'),
+                ),
+            )
+            .orderBy(desc(dailyCategoryScores.score))
+            .limit(5);
+
+        categoryData.fisher = fisherScores.map(s => ({
+            wallet: s.wallet,
+            score: s.score,
+            scoreDate: String(s.scoreDate),
+        }));
+
         res.json({
             success: true,
             data: {
@@ -282,11 +346,13 @@ router.get('/analytics/:tournamentId', async (req, res) => {
                     totalRounds: allRounds.length,
                     totalTraders: uniqueWallets.size,
                     totalRegistrations: regCount.value,
+                    season: seasonContext,
                 },
                 roundStats,
                 scoreDistribution: buckets,
                 componentInsights,
                 topPerformers,
+                categoryData,
             },
         });
     } catch (error) {

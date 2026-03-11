@@ -9,6 +9,8 @@ import tournamentRoutes from './routes/tournaments.js';
 import registrationRoutes from './routes/registration.js';
 import adminRoutes from './routes/admin.js';
 import bracketsRoutes from './routes/brackets.js';
+import seasonsRoutes from './routes/seasons.js';
+import categoriesRoutes from './routes/categories.js';
 import { startScheduler } from './services/scheduler.js';
 
 const app = express();
@@ -41,6 +43,8 @@ app.use('/api/tournaments', tournamentRoutes);
 app.use('/api/register', registrationRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/brackets', bracketsRoutes);
+app.use('/api/seasons', seasonsRoutes);
+app.use('/api/categories', categoriesRoutes);
 
 // 404 handler
 app.use((_req, res) => {

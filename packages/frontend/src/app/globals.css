@@ -175,6 +175,47 @@ a:hover {
   background: rgba(0, 230, 118, 0.1);
 }
 
+/* Share dropdown menu */
+.share-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  z-index: 100;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-elevated);
+  min-width: 150px;
+  overflow: hidden;
+  animation: fadeInUp 0.15s ease-out;
+}
+
+.share-menu__item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 10px 14px;
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  font-family: var(--font-sans);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  text-align: left;
+}
+
+.share-menu__item:hover {
+  background: var(--bg-card-hover);
+  color: var(--text-primary);
+}
+
+.share-menu__item + .share-menu__item {
+  border-top: 1px solid var(--border-subtle);
+}
+
 /* Nav */
 .nav {
   position: sticky;

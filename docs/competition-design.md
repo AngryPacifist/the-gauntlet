@@ -148,6 +148,104 @@ Variety is heavily weighted (40%) to push traders toward using all available ass
 
 ---
 
+## Season Structure
+
+Tournaments can be grouped into a **weekly season** — a multi-week competitive arc that culminates in a Season Final.
+
+### Season Lifecycle
+
+```
+registration → active → final → completed
+                ↕ advanceWeek() loops through weeks
+```
+
+1. **Registration**: Season is created, accepting signups.
+2. **Active**: Weekly gauntlet tournaments run sequentially (default: 7 weeks).
+3. **Final**: Top qualifiers from aggregate standings compete in the Season Grand Final.
+4. **Completed**: Season ends after the Final tournament completes.
+
+### Season Points
+
+After each weekly tournament completes, wallets earn season points based on placement:
+
+| Placement | Points |
+|-----------|--------|
+| Tournament winner | 25 |
+| 2nd place | 18 |
+| 3rd place | 15 |
+| Other finalists | 12 |
+| Eliminated in Round 2+ | 8 |
+| Eliminated in Round 1 | 4 |
+| Consolation bracket winner | 6 |
+| Registered but no trades | 1 |
+
+Points accumulate across all weeks. A consolation winner's points are only applied if they exceed the wallet's existing weekly points (prevents double-counting).
+
+### Qualification
+
+After all regular weeks conclude, the top N wallets by total season points (default: 8) qualify for the Season Grand Final. Qualified wallets are auto-registered into the Final tournament.
+
+### Placement Detection
+
+Finalists are wallets that advanced in (or were never eliminated from) the last main round, ordered by CPI score. The winner is the finalist with the highest CPI.
+
+---
+
+## Daily Categories
+
+Alongside the main CPI-based bracket tournament, two daily tactical categories provide engagement loops for all registered traders — including those already eliminated from the main bracket.
+
+### All Around Trader
+
+Rewards diversified profitable trading across multiple assets within a single UTC day.
+
+**Algorithm:**
+1. Filter positions opened on the UTC day.
+2. Exclude positions with exposure < $1,000 (`entry_size × entry_price`).
+3. Only closed positions count (need realized PnL).
+4. Group by asset symbol.
+5. For each asset: select the position with the highest ROI.
+   - ROI > 0 → `min(ROI × 100, 200)` points (capped at 200 per asset)
+   - ROI ≤ 0 → 0 points
+6. Sum across all assets.
+
+**Design rationale:** The $1K minimum prevents dust-trade farming. The 200-point cap prevents one outlier position from dominating. Only closed positions are counted because open positions have no realized PnL.
+
+### Top Bottom Fisher
+
+Rewards precise entry timing — catching the best long entry near the day's low, or the best short entry near the day's high.
+
+**Data source:** Daily OHLC candles from the [Pyth Benchmarks TradingView shim](https://benchmarks.pyth.network/v1/shims/tradingview/history). No API key required. Bars are cached in the database (immutable after the day ends).
+
+**Algorithm (tournament-wide):**
+1. For each trader's positions opened on the UTC day:
+   - Find their best long across all assets (highest proximity to day low)
+   - Find their best short across all assets (highest proximity to day high)
+2. Long proximity: `1 - ((entry_price - day_low) / (day_high - day_low))`
+3. Short proximity: `(entry_price - day_low) / (day_high - day_low)`
+4. Rank all traders' best longs by proximity (descending). Top 3 receive rank points: 3, 2, 1.
+5. Rank all traders' best shorts by proximity (descending). Top 3 receive rank points.
+6. Score = `rank_points × max(ROI, 0) × 100`
+
+**Edge cases:**
+- Zero price range (high = low) → that asset is skipped entirely.
+- Entry outside day's range → proximity clamped to [0, 1].
+- Open positions → ROI = 0, so ranked but no score.
+- Fewer than 3 traders with longs/shorts → only available ranks awarded.
+
+### Supported Adrena Assets
+
+| Adrena Symbol | Pyth TradingView Symbol |
+|---------------|------------------------|
+| SOL | `Crypto.SOL/USD` |
+| BTC | `Crypto.BTC/USD` |
+| BONK | `Crypto.BONK/USD` |
+| JITOSOL | `Crypto.JITOSOL/USD` |
+
+The mapping is configurable via `ADRENA_TO_PYTH_SYMBOL` in `types.ts`.
+
+---
+
 ## Anti-Gaming Filters
 
 Before scoring, positions are filtered to prevent manipulation:

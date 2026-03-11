@@ -615,6 +615,143 @@ Cancels an active or registration-phase tournament. Cannot cancel tournaments th
 
 ---
 
+## Season Endpoints
+
+### List Seasons
+
+```
+GET /api/seasons
+```
+
+Returns all seasons ordered by creation date (newest first).
+
+### Get Season Details
+
+```
+GET /api/seasons/:id
+```
+
+Returns season details including all linked tournaments (weekly gauntlets + final).
+
+### Get Season Standings
+
+```
+GET /api/seasons/:id/standings
+```
+
+Returns the season leaderboard: all wallets with `totalPoints`, `weeksParticipated`, `bestPlacement`, and `qualifiedForFinal`.
+
+### Create Season (Admin)
+
+```
+POST /api/seasons
+Headers: X-Admin-Secret: <secret>
+Body: { "name": "Season 1", "config": { "weekCount": 7, "qualificationSlots": 8 } }
+```
+
+Creates a new season in `registration` status. Config fields are optional (defaults used for omitted fields).
+
+### Start Season (Admin)
+
+```
+POST /api/seasons/:id/start
+Headers: X-Admin-Secret: <secret>
+```
+
+Transitions season from `registration` → `active`. Creates the Week 1 tournament.
+
+### Advance Week (Admin)
+
+```
+POST /api/seasons/:id/advance
+Headers: X-Admin-Secret: <secret>
+```
+
+Awards season points for the current week's completed tournament, then either creates the next week's tournament or qualifies wallets for the Season Final.
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "nextTournamentId": 5,
+    "seasonStatus": "active"
+  }
+}
+```
+
+If all weeks are done, `seasonStatus` will be `"final"` and no `nextTournamentId` is returned.
+
+### Complete Season (Admin)
+
+```
+POST /api/seasons/:id/complete
+Headers: X-Admin-Secret: <secret>
+```
+
+Finalizes the season after the Grand Final tournament completes. Awards final points and sets status to `completed`.
+
+---
+
+## Category Endpoints
+
+### All Around Trader Leaderboard
+
+```
+GET /api/categories/:tournamentId/all-around
+```
+
+Returns cumulative All Around scores aggregated across all days: `wallet`, `totalScore`, `daysScored`.
+
+### Daily All Around Scores
+
+```
+GET /api/categories/:tournamentId/all-around/:date
+```
+
+Returns All Around scores for a specific UTC day (format: `YYYY-MM-DD`).
+
+### Fisher Leaderboard
+
+```
+GET /api/categories/:tournamentId/fisher
+```
+
+Returns cumulative Top Bottom Fisher scores aggregated across all days.
+
+### Daily Fisher Scores
+
+```
+GET /api/categories/:tournamentId/fisher/:date
+```
+
+Returns Fisher scores for a specific UTC day.
+
+### Trigger Category Scoring (Admin)
+
+```
+POST /api/categories/score
+Headers: X-Admin-Secret: <secret>
+Body: { "tournamentId": 1, "date": "2026-03-10" }
+```
+
+Manually triggers daily category scoring for a specific tournament and date. Fetches OHLC data from Pyth, computes scores for all registered wallets, and persists results.
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "date": "2026-03-10",
+    "tournamentId": 1,
+    "walletsScored": 24,
+    "ohlcAssetsAvailable": 4
+  }
+}
+```
+
+---
+
 ## Error Codes
 
 | Status | Meaning                                          |
