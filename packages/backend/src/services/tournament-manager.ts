@@ -559,8 +559,20 @@ export async function advanceRound(
     let consolationRoundId: number | undefined;
 
     if (eliminatedWallets.length >= 2) {
-        const consolationRoundNumber = 1; // Consolation rounds have their own numbering
-        const consolationName = CONSOLATION_ROUND_NAMES[0];
+        // Count existing consolation rounds to avoid duplicate numbering
+        const existingConsolation = await db
+            .select()
+            .from(rounds)
+            .where(
+                and(
+                    eq(rounds.tournamentId, tournamentId),
+                    eq(rounds.type, 'consolation'),
+                ),
+            );
+        const consolationRoundNumber = existingConsolation.length + 1;
+        const consolationName = CONSOLATION_ROUND_NAMES[
+            Math.min(consolationRoundNumber - 1, CONSOLATION_ROUND_NAMES.length - 1)
+        ];
         const consolationEnd = new Date(now.getTime() + durationHours * 60 * 60 * 1000);
 
         const [consolationRound] = await db

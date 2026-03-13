@@ -33,9 +33,19 @@ export default function AdminPage() {
     const [loading, setLoading] = useState(true);
     const [adminSecret, setAdminSecret] = useState('');
 
-    // Create form
+    // Create modal
+    const [showCreateModal, setShowCreateModal] = useState(false);
     const [newName, setNewName] = useState('');
     const [creating, setCreating] = useState(false);
+
+    // Config fields (defaults match DEFAULT_TOURNAMENT_CONFIG)
+    const [cfgBracketSize, setCfgBracketSize] = useState(8);
+    const [cfgAdvanceRatio, setCfgAdvanceRatio] = useState(0.5);
+    const [cfgRoundDurations, setCfgRoundDurations] = useState('72, 48, 48');
+    const [cfgMinCollateral, setCfgMinCollateral] = useState(25);
+    const [cfgMinDuration, setCfgMinDuration] = useState(120);
+    const [cfgLeverageThreshold, setCfgLeverageThreshold] = useState(30);
+    const [cfgAssetCount, setCfgAssetCount] = useState(4);
 
     // Action feedback
     const [actionLog, setActionLog] = useState<string[]>([]);
@@ -72,15 +82,43 @@ export default function AdminPage() {
         setActionLog((prev) => [`[${new Date().toLocaleTimeString()}] ${msg}`, ...prev]);
     }
 
+    function resetConfigDefaults() {
+        setNewName('');
+        setCfgBracketSize(8);
+        setCfgAdvanceRatio(0.5);
+        setCfgRoundDurations('72, 48, 48');
+        setCfgMinCollateral(25);
+        setCfgMinDuration(120);
+        setCfgLeverageThreshold(30);
+        setCfgAssetCount(4);
+    }
+
     async function handleCreate(e: React.FormEvent) {
         e.preventDefault();
         if (!newName.trim()) return;
+
+        const durations = cfgRoundDurations
+            .split(',')
+            .map((s) => Number(s.trim()))
+            .filter((n) => !isNaN(n) && n > 0);
+
+        const config = {
+            bracketSize: cfgBracketSize,
+            advanceRatio: cfgAdvanceRatio,
+            roundDurations: durations.length > 0 ? durations : [72, 48, 48],
+            minPositionCollateral: cfgMinCollateral,
+            minTradeDurationSec: cfgMinDuration,
+            leveragePenaltyThreshold: cfgLeverageThreshold,
+            supportedAssetCount: cfgAssetCount,
+        };
+
         try {
             setCreating(true);
-            const result = await createTournament(newName.trim(), undefined, adminSecret);
-            addLog(`Created tournament "${newName}" (id: ${result.id})`);
+            const result = await createTournament(newName.trim(), config, adminSecret);
+            addLog(`Created tournament "${newName}" (id: ${result.id}) with custom config`);
             showToast(`Tournament "${newName}" created`, 'success');
-            setNewName('');
+            resetConfigDefaults();
+            setShowCreateModal(false);
             loadTournaments();
         } catch (err) {
             const msg = err instanceof Error ? err.message : 'Failed to create';
@@ -260,24 +298,13 @@ export default function AdminPage() {
             {/* Create Tournament */}
             <section className={styles.section}>
                 <h2 className={styles.sectionTitle}>Create Tournament</h2>
-                <form onSubmit={handleCreate} className={styles.createForm}>
-                    <input
-                        type="text"
-                        className="input"
-                        placeholder="Tournament name (e.g., The Gauntlet Season 1)"
-                        value={newName}
-                        onChange={(e) => setNewName(e.target.value)}
-                        disabled={creating}
-                    />
-                    <button
-                        type="submit"
-                        className="btn btn--primary"
-                        disabled={creating || !newName.trim()}
-                    >
-                        <Plus size={14} />
-                        {creating ? 'Creating...' : 'Create'}
-                    </button>
-                </form>
+                <button
+                    className="btn btn--primary"
+                    onClick={() => setShowCreateModal(true)}
+                >
+                    <Plus size={14} />
+                    New Tournament
+                </button>
             </section>
 
             {/* Tournament Controls */}
@@ -381,6 +408,166 @@ export default function AdminPage() {
                     ))}
                 </div>
             </section>
+
+            {/* Create Tournament Modal */}
+            {showCreateModal && (
+                <div className={styles.modalOverlay} onClick={() => setShowCreateModal(false)}>
+                    <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
+                        <div className={styles.modalHeader}>
+                            <h2 className={styles.modalTitle}>Create Tournament</h2>
+                            <button
+                                className={styles.modalClose}
+                                onClick={() => setShowCreateModal(false)}
+                            >
+                                ×
+                            </button>
+                        </div>
+
+                        <form onSubmit={handleCreate} className={styles.modalForm}>
+                            <div className={styles.formGroup}>
+                                <label className={styles.formLabel}>
+                                    {adminSecret ? (
+                                        <><Unlock size={12} style={{ color: 'var(--status-success)', marginRight: 4 }} />Admin Secret</>
+                                    ) : (
+                                        <><Lock size={12} style={{ marginRight: 4 }} />Admin Secret</>
+                                    )}
+                                </label>
+                                <input
+                                    type="password"
+                                    className="input input--mono"
+                                    placeholder="Enter admin secret..."
+                                    value={adminSecret}
+                                    onChange={(e) => setAdminSecret(e.target.value)}
+                                />
+                                <span className={styles.formHint}>Required for all admin actions</span>
+                            </div>
+
+                            <div className={styles.formDivider} />
+
+                            <div className={styles.formGroup}>
+                                <label className={styles.formLabel}>Tournament Name</label>
+                                <input
+                                    type="text"
+                                    className="input"
+                                    placeholder="e.g., The Gauntlet Pilot"
+                                    value={newName}
+                                    onChange={(e) => setNewName(e.target.value)}
+                                    autoFocus
+                                />
+                            </div>
+
+                            <div className={styles.formDivider} />
+                            <h3 className={styles.formSectionTitle}>Configuration</h3>
+
+                            <div className={styles.formGrid}>
+                                <div className={styles.formGroup}>
+                                    <label className={styles.formLabel}>Bracket Size</label>
+                                    <input
+                                        type="number"
+                                        className="input input--mono"
+                                        value={cfgBracketSize}
+                                        onChange={(e) => setCfgBracketSize(Number(e.target.value))}
+                                        min={2}
+                                    />
+                                    <span className={styles.formHint}>Traders per bracket in Round 1</span>
+                                </div>
+
+                                <div className={styles.formGroup}>
+                                    <label className={styles.formLabel}>Advance Ratio</label>
+                                    <input
+                                        type="number"
+                                        className="input input--mono"
+                                        value={cfgAdvanceRatio}
+                                        onChange={(e) => setCfgAdvanceRatio(Number(e.target.value))}
+                                        min={0.1}
+                                        max={0.9}
+                                        step={0.1}
+                                    />
+                                    <span className={styles.formHint}>Fraction that survive each round</span>
+                                </div>
+
+                                <div className={styles.formGroup}>
+                                    <label className={styles.formLabel}>Min Collateral ($)</label>
+                                    <input
+                                        type="number"
+                                        className="input input--mono"
+                                        value={cfgMinCollateral}
+                                        onChange={(e) => setCfgMinCollateral(Number(e.target.value))}
+                                        min={0}
+                                    />
+                                    <span className={styles.formHint}>Min collateral for a trade to count</span>
+                                </div>
+
+                                <div className={styles.formGroup}>
+                                    <label className={styles.formLabel}>Min Trade Duration (s)</label>
+                                    <input
+                                        type="number"
+                                        className="input input--mono"
+                                        value={cfgMinDuration}
+                                        onChange={(e) => setCfgMinDuration(Number(e.target.value))}
+                                        min={0}
+                                    />
+                                    <span className={styles.formHint}>Min seconds a trade must be open</span>
+                                </div>
+
+                                <div className={styles.formGroup}>
+                                    <label className={styles.formLabel}>Leverage Threshold</label>
+                                    <input
+                                        type="number"
+                                        className="input input--mono"
+                                        value={cfgLeverageThreshold}
+                                        onChange={(e) => setCfgLeverageThreshold(Number(e.target.value))}
+                                        min={1}
+                                    />
+                                    <span className={styles.formHint}>Leverage above this penalizes Risk score</span>
+                                </div>
+
+                                <div className={styles.formGroup}>
+                                    <label className={styles.formLabel}>Supported Assets</label>
+                                    <input
+                                        type="number"
+                                        className="input input--mono"
+                                        value={cfgAssetCount}
+                                        onChange={(e) => setCfgAssetCount(Number(e.target.value))}
+                                        min={1}
+                                    />
+                                    <span className={styles.formHint}>Number of tradeable assets on Adrena</span>
+                                </div>
+                            </div>
+
+                            <div className={styles.formGroup}>
+                                <label className={styles.formLabel}>Round Durations (hours)</label>
+                                <input
+                                    type="text"
+                                    className="input input--mono"
+                                    value={cfgRoundDurations}
+                                    onChange={(e) => setCfgRoundDurations(e.target.value)}
+                                    placeholder="72, 48, 48"
+                                />
+                                <span className={styles.formHint}>Comma-separated hours per round (R1, R2, R3)</span>
+                            </div>
+
+                            <div className={styles.modalActions}>
+                                <button
+                                    type="button"
+                                    className="btn btn--secondary"
+                                    onClick={() => { resetConfigDefaults(); setShowCreateModal(false); }}
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="submit"
+                                    className="btn btn--primary"
+                                    disabled={creating || !newName.trim()}
+                                >
+                                    <Plus size={14} />
+                                    {creating ? 'Creating...' : 'Create Tournament'}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
