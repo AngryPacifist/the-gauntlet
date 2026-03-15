@@ -181,6 +181,11 @@ export class AdrenaClient {
                 });
 
                 if (!response.ok) {
+                    // 404 = wallet has no positions on Adrena (never traded)
+                    // Treat as a valid empty response, don't retry
+                    if (response.status === 404) {
+                        return { success: true, data: [] };
+                    }
                     throw new Error(`HTTP ${response.status}: ${response.statusText}`);
                 }
 
