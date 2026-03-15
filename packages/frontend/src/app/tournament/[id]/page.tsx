@@ -67,11 +67,12 @@ export default function TournamentPage({ params }: { params: Promise<{ id: strin
         }
     }, [selectedRoundId]);
 
-    // Tick the clock every 60s so countdown timers update
+    // Tick the clock every second during registration (for countdown), every 60s otherwise
     useEffect(() => {
-        const interval = setInterval(() => setNow(Date.now()), 60_000);
+        const ms = tournament?.status === 'registration' ? 1_000 : 60_000;
+        const interval = setInterval(() => setNow(Date.now()), ms);
         return () => clearInterval(interval);
-    }, []);
+    }, [tournament?.status]);
 
     // Poll for data updates while tournament is active or in registration
     useEffect(() => {
@@ -142,6 +143,21 @@ export default function TournamentPage({ params }: { params: Promise<{ id: strin
         const hours = Math.floor(diff / (1000 * 60 * 60));
         const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
         return `${hours}h ${minutes}m remaining`;
+    }
+
+    // Countdown to tournament start (Sunday Mar 15, 11am UTC)
+    const TOURNAMENT_START = new Date('2026-03-15T11:00:00Z').getTime();
+
+    function getCountdown(): { days: number; hours: number; minutes: number; seconds: number; started: boolean } {
+        const diff = TOURNAMENT_START - now;
+        if (diff <= 0) return { days: 0, hours: 0, minutes: 0, seconds: 0, started: true };
+        return {
+            days: Math.floor(diff / (1000 * 60 * 60 * 24)),
+            hours: Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60)),
+            minutes: Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60)),
+            seconds: Math.floor((diff % (1000 * 60)) / 1000),
+            started: false,
+        };
     }
 
     if (loading) {
@@ -268,6 +284,89 @@ export default function TournamentPage({ params }: { params: Promise<{ id: strin
                     )}
                 </section>
             )}
+
+            {/* Countdown + Rules — only during registration */}
+            {tournament.status === 'registration' && (() => {
+                const cd = getCountdown();
+                return (
+                    <>
+                        {/* Countdown Hero */}
+                        <section className={styles.countdownHero}>
+                            <h2 className={styles.countdownLabel}>
+                                {cd.started ? 'Competition has started!' : 'Competition Starts In'}
+                            </h2>
+                            {!cd.started && (
+                                <div className={styles.countdownGrid}>
+                                    <div className={styles.countdownUnit}>
+                                        <span className={styles.countdownNumber}>{String(cd.days).padStart(2, '0')}</span>
+                                        <span className={styles.countdownSuffix}>Days</span>
+                                    </div>
+                                    <span className={styles.countdownSeparator}>:</span>
+                                    <div className={styles.countdownUnit}>
+                                        <span className={styles.countdownNumber}>{String(cd.hours).padStart(2, '0')}</span>
+                                        <span className={styles.countdownSuffix}>Hours</span>
+                                    </div>
+                                    <span className={styles.countdownSeparator}>:</span>
+                                    <div className={styles.countdownUnit}>
+                                        <span className={styles.countdownNumber}>{String(cd.minutes).padStart(2, '0')}</span>
+                                        <span className={styles.countdownSuffix}>Min</span>
+                                    </div>
+                                    <span className={styles.countdownSeparator}>:</span>
+                                    <div className={styles.countdownUnit}>
+                                        <span className={styles.countdownNumber}>{String(cd.seconds).padStart(2, '0')}</span>
+                                        <span className={styles.countdownSuffix}>Sec</span>
+                                    </div>
+                                </div>
+                            )}
+                            <p className={styles.countdownDate}>Sunday, March 15 · 11:00 AM UTC</p>
+                        </section>
+
+                        {/* Competition Rules */}
+                        <section className={styles.section}>
+                            <h2 className={styles.sectionTitle}>How It Works</h2>
+                            <div className={styles.rulesGrid}>
+                                <div className={`card ${styles.ruleCard}`}>
+                                    <div className={styles.ruleIcon}><Swords size={20} /></div>
+                                    <h3 className={styles.ruleTitle}>Battle Royale Format</h3>
+                                    <p className={styles.ruleText}>
+                                        Traders are placed into brackets of {tournament.config.bracketSize}.
+                                        After each 24-hour round, the bottom 50% is eliminated.
+                                        3 rounds — last ones standing win.
+                                    </p>
+                                </div>
+                                <div className={`card ${styles.ruleCard}`}>
+                                    <div className={styles.ruleIcon}><BarChart3 size={20} /></div>
+                                    <h3 className={styles.ruleTitle}>CPI Scoring</h3>
+                                    <p className={styles.ruleText}>
+                                        You&apos;re scored on a Composite Performance Index:
+                                        PnL, risk management, consistency across days, and trading activity.
+                                        Not just who makes the most — who trades the smartest.
+                                    </p>
+                                </div>
+                                <div className={`card ${styles.ruleCard}`}>
+                                    <div className={styles.ruleIcon}><Compass size={20} /></div>
+                                    <h3 className={styles.ruleTitle}>Trade on Adrena</h3>
+                                    <p className={styles.ruleText}>
+                                        Register your Solana wallet, then trade perps on{' '}
+                                        <a href="https://www.adrena.trade" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent-primary)' }}>adrena.trade</a>.
+                                        The engine tracks your positions automatically — just trade like you normally would.
+                                    </p>
+                                </div>
+                                <div className={`card ${styles.ruleCard}`}>
+                                    <div className={styles.ruleIcon}><Layers size={20} /></div>
+                                    <h3 className={styles.ruleTitle}>Requirements</h3>
+                                    <ul className={styles.ruleList}>
+                                        <li>Min ${tournament.config.minPositionCollateral} collateral per position</li>
+                                        <li>Trades must be open for at least {Math.round(tournament.config.minTradeDurationSec / 60)} minutes</li>
+                                        <li>Leverage above {tournament.config.leveragePenaltyThreshold}x incurs risk penalty</li>
+                                        <li>No entry fee — free to compete</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </section>
+                    </>
+                );
+            })()}
 
             {/* Round Selector Tabs — split into Main Bracket and Fallen Fighters */}
             {allRounds.length > 0 && (() => {
