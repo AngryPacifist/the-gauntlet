@@ -14,8 +14,8 @@
 //
 // Points scheme (per weekly tournament placement):
 //   Winner: 25, 2nd: 18, 3rd: 15, Finalist: 12,
-//   Eliminated R2: 8, Eliminated R1: 4, Consolation Winner: 6,
-//   Registered but didn't trade: 1
+//   Eliminated R2: 8, Eliminated R1: 4,
+//   Consolation 1st: 6, 2nd: 4, 3rd: 3, Registered: 1
 // ============================================================================
 
 import { eq, and, desc } from 'drizzle-orm';
@@ -28,6 +28,7 @@ import {
     brackets,
     bracketEntries,
     registrations,
+    seasonRegistrations,
 } from '../db/schema.js';
 import { createTournament, registerWallet } from './tournament-manager.js';
 import type { SeasonConfig, SeasonPointsScheme } from '../types.js';
@@ -189,9 +190,21 @@ export async function advanceWeek(
         .set({ currentWeek: nextWeek, updatedAt: new Date() })
         .where(eq(seasons.id, seasonId));
 
+    // Auto-enroll all season-registered wallets into the new tournament
+    const seasonWallets = await db
+        .select()
+        .from(seasonRegistrations)
+        .where(eq(seasonRegistrations.seasonId, seasonId));
+
+    let autoRegistered = 0;
+    for (const sw of seasonWallets) {
+        const result = await registerWallet(nextTournament.id, sw.wallet);
+        if (result.registered) autoRegistered++;
+    }
+
     console.log(
         `[SeasonManager] Season ${seasonId}: Advanced to Week ${nextWeek} ` +
-        `(tournament ${nextTournament.id})`,
+        `(tournament ${nextTournament.id}). Auto-registered ${autoRegistered}/${seasonWallets.length} wallets.`,
     );
 
     return { nextTournamentId: nextTournament.id, seasonStatus: 'active' };
@@ -327,7 +340,7 @@ async function awardWeeklyPoints(
         }
     }
 
-    // Find consolation winner
+    // Award consolation podium points (top 3)
     if (consolationRounds.length > 0) {
         const lastConsolation = consolationRounds[consolationRounds.length - 1];
         const consolationBrackets = await db
@@ -335,7 +348,7 @@ async function awardWeeklyPoints(
             .from(brackets)
             .where(eq(brackets.roundId, lastConsolation.id));
 
-        let consolationWinner: { wallet: string; cpiScore: number } | null = null;
+        const consolationFinishers: { wallet: string; cpiScore: number }[] = [];
 
         for (const bracket of consolationBrackets) {
             const entries = await db
@@ -344,17 +357,22 @@ async function awardWeeklyPoints(
                 .where(eq(bracketEntries.bracketId, bracket.id));
 
             for (const entry of entries) {
-                if (!consolationWinner || entry.cpiScore > consolationWinner.cpiScore) {
-                    consolationWinner = { wallet: entry.wallet, cpiScore: entry.cpiScore };
-                }
+                consolationFinishers.push({ wallet: entry.wallet, cpiScore: entry.cpiScore });
             }
         }
 
-        if (consolationWinner) {
-            // Consolation winner gets consolation points ONLY if it's more than what they already have
-            const currentPoints = walletPoints.get(consolationWinner.wallet) ?? 0;
-            if (pointsScheme.consolationWinner > currentPoints) {
-                walletPoints.set(consolationWinner.wallet, pointsScheme.consolationWinner);
+        consolationFinishers.sort((a, b) => b.cpiScore - a.cpiScore);
+
+        const consolationTiers = [
+            pointsScheme.consolationWinner,
+            pointsScheme.consolationSecond ?? 4,
+            pointsScheme.consolationThird ?? 3,
+        ];
+        for (let i = 0; i < Math.min(consolationFinishers.length, 3); i++) {
+            const wallet = consolationFinishers[i].wallet;
+            const currentPoints = walletPoints.get(wallet) ?? 0;
+            if (consolationTiers[i] > currentPoints) {
+                walletPoints.set(wallet, consolationTiers[i]);
             }
         }
     }

@@ -8,16 +8,15 @@
 //   1. createTournament: Initialize a new tournament with config
 //   2. startTournament: Close registration, create Round 1 brackets
 //   3. computeRoundScores: Score all traders in the current round
-//   4. advanceRound: Eliminate bottom half, promote top half to next round
-//      Creates "Fallen Fighters" consolation brackets for eliminated traders
+//   4. advanceRound: Rank traders, advance top half, track eliminated wallets
 //   5. completeTournament: Finalize results
 //
 // Changelog (ZeDef feedback, March 2026):
 //   - Registration: eligibility barrier removed. Anyone with a valid wallet
 //     can register. Quality filters move to prize distribution time.
 //   - Round durations: configurable per-round via roundDurations[] array
-//   - Consolation brackets: eliminated traders auto-enter "Fallen Fighters"
-//     parallel brackets to maintain engagement and platform volume.
+//   - Fallen Fighters: at main completion, all eliminated wallets enter a
+//     single consolation pool scored over the final round's time window.
 //   - Config: leveragePenaltyThreshold + supportedAssetCount passed to
 //     scoring engine.
 // ============================================================================
@@ -31,6 +30,7 @@ import {
     bracketEntries,
     registrations,
     scoreSnapshots,
+    seasonRegistrations,
 } from '../db/schema.js';
 import { AdrenaClient } from './adrena-client.js';
 import { computeCPI } from './scoring-engine.js';
@@ -39,7 +39,7 @@ import type {
     RoundName,
     CPIScores,
 } from '../types.js';
-import { DEFAULT_TOURNAMENT_CONFIG, DEFAULT_CPI_WEIGHTS, CONSOLATION_ROUND_NAMES } from '../types.js';
+import { DEFAULT_TOURNAMENT_CONFIG, DEFAULT_CPI_WEIGHTS } from '../types.js';
 
 const ROUND_NAMES: RoundName[] = ['First Blood', 'The Crucible', 'Sudden Death', 'Endgame'];
 
@@ -133,6 +133,21 @@ export async function registerWallet(
         tournamentId,
         wallet,
     });
+
+    // If tournament belongs to a season, also register at season level
+    if (tournament.seasonId) {
+        try {
+            await db.insert(seasonRegistrations).values({
+                seasonId: tournament.seasonId,
+                wallet,
+            });
+        } catch (err) {
+            // UNIQUE constraint violation = already season-registered (idempotent)
+            if (!(err instanceof Error && err.message.includes('unique'))) {
+                throw err;
+            }
+        }
+    }
 
     console.log(`[TournamentManager] Registered wallet ${wallet} for tournament ${tournamentId}`);
     return { registered: true };
@@ -381,14 +396,15 @@ export async function computeRoundScores(roundId: number): Promise<number> {
 //
 // Consolation rounds:
 //   - Eliminated traders from the main bracket enter a parallel bracket
-//   - They compete for a smaller prize pool
-//   - Consolation rounds follow the same scoring/elimination rules
-//   - Eliminated from consolation = truly out (no recursion)
+//   - Eliminated traders are collected into a single Fallen Fighters pool
+//     scored over the final round's time window (rank-only, no elimination)
+//   - R3 (final main round) is rank-only: all participants are ranked but
+//     none eliminated, ensuring finalist status for season points
 // --------------------------------------------------------------------------
 export async function advanceRound(
     tournamentId: number,
     roundType: 'main' | 'consolation' = 'main',
-): Promise<{ nextRoundId: number; advanced: number; eliminated: number; consolationRoundId?: number } | { completed: true }> {
+): Promise<{ nextRoundId: number; advanced: number; eliminated: number } | { completed: true }> {
     // Get tournament
     const [tournament] = await db
         .select()
@@ -423,17 +439,25 @@ export async function advanceRound(
     const advancingWallets: string[] = [];
     const eliminatedWallets: string[] = [];
 
+    // Rank-only detection:
+    // - Consolation (FF pool): flat ranking, no elimination
+    // - Final main round: round that would trigger completion
+    const nextRoundNumber = currentRound.roundNumber + 1;
+    const isRankOnly = roundType === 'consolation'
+        || (roundType === 'main' && nextRoundNumber > 3);
+
     for (const bracket of currentBrackets) {
         const entries = await db
             .select()
             .from(bracketEntries)
             .where(eq(bracketEntries.bracketId, bracket.id));
-
         // Sort by CPI score descending
         entries.sort((a, b) => b.cpiScore - a.cpiScore);
 
-        // Top advanceRatio advance, rest eliminated
-        const advanceCount = Math.max(1, Math.ceil(entries.length * config.advanceRatio));
+        // Top advanceRatio advance, rest eliminated (unless rank-only)
+        const advanceCount = isRankOnly
+            ? entries.length
+            : Math.max(1, Math.ceil(entries.length * config.advanceRatio));
 
         for (let i = 0; i < entries.length; i++) {
             const isAdvancing = i < advanceCount;
@@ -460,60 +484,88 @@ export async function advanceRound(
         .set({ status: 'completed' })
         .where(eq(rounds.id, currentRound.id));
 
-    // Determine next round number
-    const nextRoundNumber = currentRound.roundNumber + 1;
-
-    // --- Handle consolation rounds differently ---
+    // --- Handle consolation rounds (Fallen Fighters pool) ---
     if (roundType === 'consolation') {
-        // Consolation: eliminated from consolation = truly out. No further consolation.
-        if (advancingWallets.length <= 3 || nextRoundNumber > 3) {
-            // Consolation complete — don't touch the main tournament status
-            console.log(
-                `[TournamentManager] Consolation bracket completed for tournament ${tournamentId}. ` +
-                `${advancingWallets.length} consolation finalists.`,
-            );
-            return { completed: true };
-        }
-
-        // Create next consolation round
-        const consolationName = CONSOLATION_ROUND_NAMES[
-            Math.min(nextRoundNumber - 1, CONSOLATION_ROUND_NAMES.length - 1)
-        ];
-        const now = new Date();
-        const durationHours = getRoundDuration(config, nextRoundNumber);
-        const roundEnd = new Date(now.getTime() + durationHours * 60 * 60 * 1000);
-
-        const [nextConsolation] = await db
-            .insert(rounds)
-            .values({
-                tournamentId,
-                roundNumber: nextRoundNumber,
-                name: consolationName,
-                type: 'consolation',
-                startTime: now,
-                endTime: roundEnd,
-                status: 'active',
-            })
-            .returning({ id: rounds.id });
-
-        await createBracketsForWallets(nextConsolation.id, advancingWallets, config);
+        // FF pool complete — rank only, no advancement. Set tournament to completed.
+        await db
+            .update(tournaments)
+            .set({ status: 'completed', updatedAt: new Date() })
+            .where(eq(tournaments.id, tournamentId));
 
         console.log(
-            `[TournamentManager] Consolation advanced to Round ${nextRoundNumber} "${consolationName}": ` +
-            `${advancingWallets.length} continue, ${eliminatedWallets.length} out`,
+            `[TournamentManager] Tournament ${tournamentId} completed ` +
+            `(main + Fallen Fighters). ${advancingWallets.length} FF finalists.`,
         );
-
-        return {
-            nextRoundId: nextConsolation.id,
-            advanced: advancingWallets.length,
-            eliminated: eliminatedWallets.length,
-        };
+        return { completed: true };
     }
 
     // --- Main round logic ---
 
-    // If 3 or fewer traders remain, or we've done 3 rounds, tournament is complete
+    // If 3 or fewer traders remain, or we've done 3 rounds, main track is done
     if (advancingWallets.length <= 3 || nextRoundNumber > 3) {
+        // Collect ALL eliminated wallets from ALL main rounds
+        const allMainRounds = await db
+            .select()
+            .from(rounds)
+            .where(
+                and(
+                    eq(rounds.tournamentId, tournamentId),
+                    eq(rounds.type, 'main'),
+                ),
+            );
+
+        const allEliminated: string[] = [];
+        for (const mr of allMainRounds) {
+            const mrBrackets = await db
+                .select()
+                .from(brackets)
+                .where(eq(brackets.roundId, mr.id));
+
+            for (const br of mrBrackets) {
+                const brEntries = await db
+                    .select()
+                    .from(bracketEntries)
+                    .where(
+                        and(
+                            eq(bracketEntries.bracketId, br.id),
+                            eq(bracketEntries.eliminated, true),
+                        ),
+                    );
+                allEliminated.push(...brEntries.map(e => e.wallet));
+            }
+        }
+
+        if (allEliminated.length >= 2) {
+            // Create single FF consolation round using the current (final) round's time window
+            const [ffRound] = await db
+                .insert(rounds)
+                .values({
+                    tournamentId,
+                    roundNumber: 1,
+                    name: 'Fallen Fighters',
+                    type: 'consolation',
+                    startTime: currentRound.startTime,
+                    endTime: currentRound.endTime,
+                    status: 'active',
+                })
+                .returning({ id: rounds.id });
+
+            await createBracketsForWallets(ffRound.id, allEliminated, config);
+
+            console.log(
+                `[TournamentManager] Main complete for tournament ${tournamentId}. ` +
+                `Created Fallen Fighters: ${allEliminated.length} eliminated traders.`,
+            );
+
+            // Tournament stays 'active' — FF round must complete first
+            return {
+                nextRoundId: ffRound.id,
+                advanced: advancingWallets.length,
+                eliminated: eliminatedWallets.length,
+            };
+        }
+
+        // No eliminated wallets (edge case) — complete immediately
         await db
             .update(tournaments)
             .set({ status: 'completed', updatedAt: new Date() })
@@ -555,64 +607,11 @@ export async function advanceRound(
         `${mainBracketCount} brackets`,
     );
 
-    // --- Fallen Fighters: consolation bracket for eliminated traders ---
-    let consolationRoundId: number | undefined;
-
-    if (eliminatedWallets.length >= 2) {
-        // Count existing consolation rounds to avoid duplicate numbering
-        const existingConsolation = await db
-            .select()
-            .from(rounds)
-            .where(
-                and(
-                    eq(rounds.tournamentId, tournamentId),
-                    eq(rounds.type, 'consolation'),
-                ),
-            );
-        const consolationRoundNumber = existingConsolation.length + 1;
-        const consolationName = CONSOLATION_ROUND_NAMES[
-            Math.min(consolationRoundNumber - 1, CONSOLATION_ROUND_NAMES.length - 1)
-        ];
-        const consolationEnd = new Date(now.getTime() + durationHours * 60 * 60 * 1000);
-
-        const [consolationRound] = await db
-            .insert(rounds)
-            .values({
-                tournamentId,
-                roundNumber: consolationRoundNumber,
-                name: consolationName,
-                type: 'consolation',
-                startTime: now,
-                endTime: consolationEnd,
-                status: 'active',
-            })
-            .returning({ id: rounds.id });
-
-        const consolationBracketCount = await createBracketsForWallets(
-            consolationRound.id,
-            eliminatedWallets,
-            config,
-        );
-
-        consolationRoundId = consolationRound.id;
-
-        console.log(
-            `[TournamentManager] Created Fallen Fighters "${consolationName}": ` +
-            `${eliminatedWallets.length} eliminated traders, ${consolationBracketCount} brackets`,
-        );
-    }
-
-    const result: { nextRoundId: number; advanced: number; eliminated: number; consolationRoundId?: number } = {
+    return {
         nextRoundId: nextRound.id,
         advanced: advancingWallets.length,
         eliminated: eliminatedWallets.length,
     };
-
-    if (consolationRoundId !== undefined) {
-        result.consolationRoundId = consolationRoundId;
-    }
-
-    return result;
 }
 
 // --------------------------------------------------------------------------

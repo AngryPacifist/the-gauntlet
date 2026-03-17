@@ -46,8 +46,8 @@ export interface CPIWeights {
 
 export const DEFAULT_CPI_WEIGHTS: CPIWeights = {
     pnl: 0.35,
-    risk: 0.25,
-    consistency: 0.25,
+    risk: 0.20,
+    consistency: 0.30,
     activity: 0.15,
 };
 
@@ -172,6 +172,8 @@ export interface SeasonPointsScheme {
     eliminatedR2: number;
     eliminatedR1: number;
     consolationWinner: number;
+    consolationSecond: number;
+    consolationThird: number;
     registered: number;
 }
 
@@ -190,6 +192,8 @@ export const DEFAULT_SEASON_POINTS: SeasonPointsScheme = {
     eliminatedR2: 8,
     eliminatedR1: 4,
     consolationWinner: 6,
+    consolationSecond: 4,
+    consolationThird: 3,
     registered: 1,
 };
 

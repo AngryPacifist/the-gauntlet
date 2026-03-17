@@ -272,6 +272,7 @@ Registers a wallet for a tournament. Zero-barrier sign-up — any valid Solana w
 - Wallet must be 32-44 characters (Solana base58 address format).
 - Tournament must exist and be in `registration` status.
 - Duplicate registrations are rejected.
+- If the tournament belongs to a season, the wallet is also registered at the season level (auto-enrolled in future weeks).
 
 ---
 
@@ -548,7 +549,7 @@ Scoring continues even if individual trader API calls fail. Failures are logged 
 POST /api/admin/advance
 ```
 
-Ranks each bracket by CPI, eliminates the bottom half, creates the next round with advancing traders, and creates a consolation bracket ("Fallen Fighters") for eliminated traders.
+Ranks each bracket by CPI, eliminates the bottom half (except in the final main round, which is rank-only), and creates the next round with advancing traders. When the main bracket completes, a single Fallen Fighters consolation round is created for all eliminated wallets.
 
 **Request body:**
 ```json
@@ -558,7 +559,7 @@ Ranks each bracket by CPI, eliminates the bottom half, creates the next round wi
 }
 ```
 
-`roundType` is optional (defaults to `"main"`). Use `"consolation"` to advance the consolation bracket independently.
+`roundType` is optional (defaults to `"main"`). Use `"consolation"` to advance the Fallen Fighters round (which completes the tournament).
 
 **Response (next round created):**
 ```json
@@ -567,13 +568,12 @@ Ranks each bracket by CPI, eliminates the bottom half, creates the next round wi
   "data": {
     "nextRoundId": 2,
     "advanced": 8,
-    "eliminated": 8,
-    "consolationRoundId": 3
+    "eliminated": 8
   }
 }
 ```
 
-`consolationRoundId` is present only when ≥2 traders were eliminated and a consolation bracket was created.
+When the main bracket finishes, the response returns the FF round as `nextRoundId`. When the FF round is advanced (with `roundType: "consolation"`), the tournament completes.
 
 **Response (tournament completed):**
 ```json
@@ -585,7 +585,7 @@ Ranks each bracket by CPI, eliminates the bottom half, creates the next round wi
 }
 ```
 
-The tournament completes if 3 or fewer traders remain or 3 rounds have been played.
+The tournament completes after the Fallen Fighters round is scored and advanced.
 
 ---
 

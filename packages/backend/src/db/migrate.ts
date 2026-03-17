@@ -63,6 +63,15 @@ CREATE TABLE IF NOT EXISTS registrations (
   UNIQUE(tournament_id, wallet)
 );
 
+-- Season Registrations (register once, enrolled for all season weeks)
+CREATE TABLE IF NOT EXISTS season_registrations (
+  id SERIAL PRIMARY KEY,
+  season_id INTEGER NOT NULL REFERENCES seasons(id),
+  wallet VARCHAR(44) NOT NULL,
+  registered_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE(season_id, wallet)
+);
+
 -- Score Snapshots
 CREATE TABLE IF NOT EXISTS score_snapshots (
   id SERIAL PRIMARY KEY,

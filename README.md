@@ -2,7 +2,7 @@
 
 A bracket-style elimination trading competition engine built for the [Adrena](https://www.adrena.xyz/) perpetuals protocol on Solana.
 
-Traders register with their wallet, compete in timed rounds, and are scored on a multi-dimensional **Composite Performance Index (CPI)** derived from live Adrena position data. The bottom half of each bracket is eliminated each round until a final group of top performers remains.
+Traders register with their wallet, compete in timed rounds, and are scored on a multi-dimensional **Composite Performance Index (CPI)** derived from live Adrena position data. The bottom half of each bracket is eliminated through rounds until a final group of top performers remains. Eliminated traders compete in a single Fallen Fighters consolation pool.
 
 ---
 
@@ -12,13 +12,13 @@ Traders register with their wallet, compete in timed rounds, and are scored on a
 2. **Bracket Formation** — Registered traders are shuffled into brackets of 8.
 3. **Trading Rounds** — Each round runs for a configurable duration (default: 72h, 48h, 48h). Traders trade as they normally would on Adrena.
 4. **Scoring** — At the end of each round, positions are fetched from the Adrena API and a CPI score is computed.
-5. **Elimination** — The bottom 50% of each bracket is eliminated. Eliminated traders enter "Fallen Fighters" consolation brackets. The top 50% advance in new brackets.
-6. **Completion** — After 3 rounds (or when 3 or fewer traders remain), the tournament ends.
+5. **Elimination** — The bottom 50% of each bracket is eliminated (except Round 3, which is rank-only). All eliminated traders from R1+R2 enter a single "Fallen Fighters" consolation pool. The top 50% advance in new brackets.
+6. **Completion** — After the main bracket and Fallen Fighters round are both scored, the tournament ends.
 
 ### CPI Scoring
 
 ```
-CPI = (0.35 x PnL) + (0.25 x Risk) + (0.25 x Consistency) + (0.15 x Activity)
+CPI = (0.35 x PnL) + (0.20 x Risk) + (0.30 x Consistency) + (0.15 x Activity)
 ```
 
 - **PnL**: ROI (PnL / notional USD exposure). Measures profitability.
@@ -98,7 +98,7 @@ npm run dev
 ## Key Features
 
 - **Bracket Elimination** — Traders compete in groups. Bottom 50% eliminated each round.
-- **Fallen Fighters** — Eliminated traders enter consolation brackets for continued engagement.
+- **Fallen Fighters** — All eliminated traders compete in a single consolation pool for podium points.
 - **Multi-Dimensional Scoring** — CPI combines PnL, Risk, Consistency, and Activity.
 - **Configurable Rounds** — Per-round durations, leverage thresholds, and asset counts.
 - **Anti-Gaming Filters** — Dust trade, wash trade, and duration filters prevent abuse.

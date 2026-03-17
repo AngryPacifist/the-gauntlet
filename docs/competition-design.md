@@ -48,25 +48,25 @@ Each round follows this flow:
 3. **Advancement**: An admin triggers round advancement.
    - Each bracket is ranked by CPI score (descending).
    - The top `advanceRatio` (default: 50%) advance to the next round.
-   - The rest are **eliminated from the main bracket** but auto-enter a **consolation bracket** ("Fallen Fighters").
+   - Eliminated wallets are tracked for the Fallen Fighters pool (see below).
    - Advancing wallets are re-shuffled into new brackets for the next round.
    - Round 2+ brackets use half the original bracket size for more focused competition.
+   - **Round 3 (final main round) is rank-only**: all participants are ranked but none eliminated, ensuring everyone earns finalist-level season points.
 
-### 4. Consolation Brackets (Fallen Fighters)
+### 4. Fallen Fighters Pool
 
-Eliminated traders are not removed from competition entirely. They enter parallel consolation brackets:
+Eliminated traders are not removed from competition entirely. When the main bracket concludes (after Round 3), all wallets eliminated from any main round (R1 + R2) are placed into a single Fallen Fighters consolation round:
 
-- Consolation rounds follow the same scoring and elimination rules.
-- They compete for a smaller prize pool.
-- Eliminated from consolation = truly out (no further recursive consolation).
-- Consolation rounds run simultaneously alongside main rounds.
-- Round names: "Redemption Arc", "Last Stand", "Final Reckoning".
+- The FF pool is scored over the same time window as the final main round.
+- Ranking is flat (rank-only) — no elimination within the FF pool.
+- Top 3 FF finishers earn consolation season points (1st: 6, 2nd: 4, 3rd: 3).
+- Once the FF round completes, the tournament is marked as completed.
 
 ### 5. Completion
 
-A tournament completes when either:
-- 3 or fewer traders remain after a round, or
-- 3 rounds have been completed.
+A tournament completes when:
+- The main bracket finishes (3 or fewer traders remain, or 3 rounds completed), AND
+- The Fallen Fighters consolation round has been scored and completed.
 
 The remaining traders are the finalists.
 
@@ -85,13 +85,11 @@ Each round has a thematic name:
 | 3     | Sudden Death   |
 | Final | Endgame        |
 
-**Consolation bracket (Fallen Fighters):**
+**Fallen Fighters (consolation):**
 
 | Round | Name              |
 |-------|-------------------|
-| 1     | Redemption Arc    |
-| 2     | Last Stand        |
-| 3     | Final Reckoning   |
+| 1     | Fallen Fighters   |
 
 ---
 
@@ -100,7 +98,7 @@ Each round has a thematic name:
 The CPI is a weighted sum of four sub-scores, each normalized to a 0-100 scale:
 
 ```
-CPI = (0.35 x PnL) + (0.25 x Risk) + (0.25 x Consistency) + (0.15 x Activity)
+CPI = (0.35 x PnL) + (0.20 x Risk) + (0.30 x Consistency) + (0.15 x Activity)
 ```
 
 ### PnL Score (35%)
@@ -115,7 +113,7 @@ Measures net profitability relative to notional exposure (ROI).
 
 Uses `entry_size × entry_price` instead of `collateral_amount` as the denominator because collateral can be removed mid-trade, making it gameable.
 
-### Risk Score (25%)
+### Risk Score (20%)
 
 Measures risk management discipline. Starts at 100 and is reduced by penalties:
 
@@ -124,7 +122,7 @@ Measures risk management discipline. Starts at 100 and is reduced by penalties:
 
 The 30x default was chosen to respect Adrena's trading style — many legitimate strategies use 10-25x leverage on the platform.
 
-### Consistency Score (25%)
+### Consistency Score (30%)
 
 Measures consistent profitable performance across trading days.
 
@@ -160,7 +158,7 @@ registration → active → final → completed
 ```
 
 1. **Registration**: Season is created, accepting signups.
-2. **Active**: Weekly gauntlet tournaments run sequentially (default: 7 weeks).
+2. **Active**: Weekly gauntlet tournaments run sequentially (default: 7 weeks). Wallets register once and are auto-enrolled in all subsequent weeks.
 3. **Final**: Top qualifiers from aggregate standings compete in the Season Grand Final.
 4. **Completed**: Season ends after the Final tournament completes.
 
@@ -176,10 +174,12 @@ After each weekly tournament completes, wallets earn season points based on plac
 | Other finalists | 12 |
 | Eliminated in Round 2+ | 8 |
 | Eliminated in Round 1 | 4 |
-| Consolation bracket winner | 6 |
+| Consolation 1st (FF) | 6 |
+| Consolation 2nd (FF) | 4 |
+| Consolation 3rd (FF) | 3 |
 | Registered but no trades | 1 |
 
-Points accumulate across all weeks. A consolation winner's points are only applied if they exceed the wallet's existing weekly points (prevents double-counting).
+Points accumulate across all weeks. Consolation points are only applied if they exceed the wallet's existing weekly points (prevents double-counting).
 
 ### Qualification
 

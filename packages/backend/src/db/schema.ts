@@ -74,6 +74,17 @@ export const registrations = pgTable('registrations', {
     registeredAt: timestamp('registered_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
+// --- Season Registrations (register once, enrolled for all weeks) ---
+
+export const seasonRegistrations = pgTable('season_registrations', {
+    id: serial('id').primaryKey(),
+    seasonId: integer('season_id').notNull().references(() => seasons.id),
+    wallet: varchar('wallet', { length: 44 }).notNull(),
+    registeredAt: timestamp('registered_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => ({
+    uniqueSeasonWallet: uniqueIndex('idx_season_registrations_unique').on(table.seasonId, table.wallet),
+}));
+
 // --- Score Snapshots (history of score computations for audit trail) ---
 
 export const scoreSnapshots = pgTable('score_snapshots', {

@@ -112,6 +112,7 @@ The migration script (`packages/backend/src/db/migrate.ts`) creates these tables
 | `brackets`             | Bracket groupings within a round                |
 | `bracket_entries`      | Individual trader entries with scores           |
 | `registrations`        | Wallet registrations for tournaments            |
+| `season_registrations` | Season-level registrations (auto-enroll weekly) |
 | `score_snapshots`      | Audit trail of score computations               |
 | `trade_cache`          | Cached position data from the Adrena API        |
 | `seasons`              | Season metadata, config, status, current week   |

@@ -331,6 +331,8 @@ export interface Season {
             eliminatedR2: number;
             eliminatedR1: number;
             consolationWinner: number;
+            consolationSecond: number;
+            consolationThird: number;
             registered: number;
         };
     };
