@@ -20,6 +20,7 @@ import { db } from '../db/index.js';
 import { tournaments, rounds, registrations } from '../db/schema.js';
 import { eq, and } from 'drizzle-orm';
 import { computeRoundScores, advanceRound } from './tournament-manager.js';
+import { awardDailyFisherPoints } from './season-manager.js';
 import { AdrenaClient } from './adrena-client.js';
 import { fetchDailyOHLCBatch } from './pyth-client.js';
 import { computeAllAroundScore, computeFisherScores, saveDailyCategoryScores } from './category-engine.js';
@@ -219,6 +220,11 @@ async function scoreDailyCategories(): Promise<void> {
                 allAroundScores,
                 fisherScores,
             );
+
+            // Award Fisher season points if this tournament belongs to a season
+            if (seasonId !== null) {
+                await awardDailyFisherPoints(tournament.id, seasonId, dateStr);
+            }
 
             console.log(
                 `[Scheduler] Daily categories scored for tournament ${tournament.id}: ` +

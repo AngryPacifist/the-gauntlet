@@ -6,7 +6,7 @@
 
 export type TournamentStatus = 'registration' | 'active' | 'completed' | 'cancelled';
 export type RoundStatus = 'pending' | 'active' | 'completed';
-export type RoundName = 'First Blood' | 'The Crucible' | 'Sudden Death' | 'Endgame';
+export type RoundName = 'First Blood' | 'The Crucible' | 'Endgame';
 export type RoundType = 'main' | 'consolation';
 
 export const CONSOLATION_ROUND_NAMES = ['Redemption Arc', 'Last Stand', 'Final Reckoning'] as const;
@@ -21,6 +21,7 @@ export interface TournamentConfig {
     supportedAssetCount: number;      // Number of tradeable assets on Adrena (default: 4)
     useHistoricalWindow: boolean;     // If true, scoring uses historical window instead of round dates (default: false)
     historicalWindowDays: number;     // Number of days for historical window (default: 90)
+    seededWallets?: string[];         // For Final tournaments: wallets ordered by season standing
 }
 
 export const DEFAULT_TOURNAMENT_CONFIG: TournamentConfig = {
@@ -168,13 +169,14 @@ export interface SeasonPointsScheme {
     winner: number;
     second: number;
     third: number;
-    finalist: number;
-    eliminatedR2: number;
-    eliminatedR1: number;
+    fourth: number;
+    fifth: number;
+    otherFinalist: number;
+    passingR1: number;
     consolationWinner: number;
     consolationSecond: number;
     consolationThird: number;
-    registered: number;
+    otherConsolation: number;
 }
 
 export interface SeasonConfig {
@@ -188,13 +190,14 @@ export const DEFAULT_SEASON_POINTS: SeasonPointsScheme = {
     winner: 25,
     second: 18,
     third: 15,
-    finalist: 12,
-    eliminatedR2: 8,
-    eliminatedR1: 4,
+    fourth: 12,
+    fifth: 10,
+    otherFinalist: 8,
+    passingR1: 3,
     consolationWinner: 6,
     consolationSecond: 4,
     consolationThird: 3,
-    registered: 1,
+    otherConsolation: 1,
 };
 
 export const DEFAULT_SEASON_CONFIG: SeasonConfig = {

@@ -497,7 +497,7 @@ The `config` object is optional. Any omitted fields use the defaults listed in t
 POST /api/admin/start
 ```
 
-Closes registration, shuffles all registered wallets, creates Round 1 brackets, and sets the tournament status to `active`.
+Closes registration, creates Round 1 brackets, and sets the tournament status to `active`. Wallets are shuffled randomly (Fisher-Yates) for normal tournaments, or placed in seeded order for Season Final tournaments (where `config.seededWallets` is set by `qualifyForFinal`).
 
 **Request body:**
 ```json
@@ -735,7 +735,7 @@ Headers: X-Admin-Secret: <secret>
 Body: { "tournamentId": 1, "date": "2026-03-10" }
 ```
 
-Manually triggers daily category scoring for a specific tournament and date. Fetches OHLC data from Pyth, computes scores for all registered wallets, and persists results.
+Manually triggers daily category scoring for a specific tournament and date. Fetches OHLC data from Pyth, computes scores for all registered wallets, and persists results. If the tournament belongs to a season, Fisher season points (3/2/1 for top 3 in each direction) are also awarded.
 
 **Response:**
 ```json

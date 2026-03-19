@@ -41,7 +41,7 @@ import type {
 } from '../types.js';
 import { DEFAULT_TOURNAMENT_CONFIG, DEFAULT_CPI_WEIGHTS } from '../types.js';
 
-const ROUND_NAMES: RoundName[] = ['First Blood', 'The Crucible', 'Sudden Death', 'Endgame'];
+const ROUND_NAMES: RoundName[] = ['First Blood', 'The Crucible', 'Endgame'];
 
 const adrenaClient = new AdrenaClient();
 
@@ -189,11 +189,27 @@ export async function startTournament(
         throw new Error(`Need at least 2 registered traders. Found ${allRegs.length}.`);
     }
 
-    // Shuffle wallets (Fisher-Yates)
-    const wallets = allRegs.map((r) => r.wallet);
-    for (let i = wallets.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [wallets[i], wallets[j]] = [wallets[j], wallets[i]];
+    // Use seeded order if provided (Final tournaments), otherwise shuffle randomly
+    let wallets: string[];
+    if (config.seededWallets && config.seededWallets.length > 0) {
+        // Seeded bracket: use the order from season standings (Championship → Contender)
+        // Only include wallets that are actually registered
+        const registeredSet = new Set(allRegs.map((r) => r.wallet));
+        wallets = config.seededWallets.filter((w) => registeredSet.has(w));
+        // Append any registered wallets not in the seeded list (safety)
+        for (const reg of allRegs) {
+            if (!wallets.includes(reg.wallet)) {
+                wallets.push(reg.wallet);
+            }
+        }
+        console.log(`[TournamentManager] Using seeded bracket order (${wallets.length} wallets)`);
+    } else {
+        // Random shuffle (Fisher-Yates)
+        wallets = allRegs.map((r) => r.wallet);
+        for (let i = wallets.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [wallets[i], wallets[j]] = [wallets[j], wallets[i]];
+        }
     }
 
     // Create Round 1

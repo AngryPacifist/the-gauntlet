@@ -28,7 +28,7 @@ import type {
 const ALL_AROUND_MIN_TRADE_USD = 1000;
 
 // All Around Trader: max points per asset (cap to prevent one outlier dominating)
-const ALL_AROUND_MAX_POINTS_PER_ASSET = 200;
+const ALL_AROUND_MAX_POINTS_PER_ASSET = 25;
 
 // Fisher: rank points awarded to top 3 in each direction
 const FISHER_RANK_POINTS = [3, 2, 1]; // 1st, 2nd, 3rd
@@ -89,7 +89,7 @@ function computePositionROI(position: AdrenaPosition): number {
  * 3. Filter to positions ≥ $1,000 exposure
  * 4. Group by symbol
  * 5. For each symbol: select position with highest ROI
- *    - ROI > 0 → min(ROI × 100, 200) points
+ *    - ROI > 0 → min(ROI × 25, 25) points
  *    - ROI ≤ 0 → 0 points
  * 6. Sum across all assets
  */
@@ -130,7 +130,7 @@ export function computeAllAroundScore(
 
         // Negative ROI = 0 points
         const points = bestROI > 0
-            ? Math.min(bestROI * 100, ALL_AROUND_MAX_POINTS_PER_ASSET)
+            ? Math.min(bestROI * 25, ALL_AROUND_MAX_POINTS_PER_ASSET)
             : 0;
 
         assetScores.push({

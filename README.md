@@ -9,7 +9,7 @@ Traders register with their wallet, compete in timed rounds, and are scored on a
 ## How It Works
 
 1. **Registration** — Traders submit their Solana wallet address. Zero-barrier sign-up: any valid wallet is accepted.
-2. **Bracket Formation** — Registered traders are shuffled into brackets of 8.
+2. **Bracket Formation** — Registered traders are shuffled into brackets of 8 (or placed in seeded order for Season Finals).
 3. **Trading Rounds** — Each round runs for a configurable duration (default: 72h, 48h, 48h). Traders trade as they normally would on Adrena.
 4. **Scoring** — At the end of each round, positions are fetched from the Adrena API and a CPI score is computed.
 5. **Elimination** — The bottom 50% of each bracket is eliminated (except Round 3, which is rank-only). All eliminated traders from R1+R2 enter a single "Fallen Fighters" consolation pool. The top 50% advance in new brackets.
@@ -98,7 +98,7 @@ npm run dev
 ## Key Features
 
 - **Bracket Elimination** — Traders compete in groups. Bottom 50% eliminated each round.
-- **Fallen Fighters** — All eliminated traders compete in a single consolation pool for podium points.
+- **Fallen Fighters** — All eliminated traders compete in a single consolation pool. All participants earn season points.
 - **Multi-Dimensional Scoring** — CPI combines PnL, Risk, Consistency, and Activity.
 - **Configurable Rounds** — Per-round durations, leverage thresholds, and asset counts.
 - **Anti-Gaming Filters** — Dust trade, wash trade, and duration filters prevent abuse.

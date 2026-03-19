@@ -59,7 +59,7 @@ Eliminated traders are not removed from competition entirely. When the main brac
 
 - The FF pool is scored over the same time window as the final main round.
 - Ranking is flat (rank-only) — no elimination within the FF pool.
-- Top 3 FF finishers earn consolation season points (1st: 6, 2nd: 4, 3rd: 3).
+- All FF participants earn season points: 1st: 6, 2nd: 4, 3rd: 3, all others: 1.
 - Once the FF round completes, the tournament is marked as completed.
 
 ### 5. Completion
@@ -82,8 +82,7 @@ Each round has a thematic name:
 |-------|----------------|
 | 1     | First Blood    |
 | 2     | The Crucible   |
-| 3     | Sudden Death   |
-| Final | Endgame        |
+| 3+    | Endgame        |
 
 **Fallen Fighters (consolation):**
 
@@ -171,19 +170,20 @@ After each weekly tournament completes, wallets earn season points based on plac
 | Tournament winner | 25 |
 | 2nd place | 18 |
 | 3rd place | 15 |
-| Other finalists | 12 |
-| Eliminated in Round 2+ | 8 |
-| Eliminated in Round 1 | 4 |
-| Consolation 1st (FF) | 6 |
-| Consolation 2nd (FF) | 4 |
-| Consolation 3rd (FF) | 3 |
-| Registered but no trades | 1 |
+| 4th place | 12 |
+| 5th place | 10 |
+| Other finalists | 8 |
+| Passing R1 (survived R1, eliminated R2+) | 3 |
+| FF 1st (Fallen Fighters winner) | 6 |
+| FF 2nd | 4 |
+| FF 3rd | 3 |
+| Other FF participants | 1 |
 
-Points accumulate across all weeks. Consolation points are only applied if they exceed the wallet's existing weekly points (prevents double-counting).
+Points accumulate across all weeks. FF points are only applied if they exceed the wallet's existing weekly points (prevents double-counting). Additionally, top 3 in each daily Fisher direction (long/short) earn 3/2/1 season points daily.
 
 ### Qualification
 
-After all regular weeks conclude, the top N wallets by total season points (default: 8) qualify for the Season Grand Final. Qualified wallets are auto-registered into the Final tournament.
+After all regular weeks conclude, **all season participants** qualify for the Season Grand Final. Brackets are seeded by season standing — the highest-ranked wallet faces the lowest-ranked in the same bracket, rewarding consistent season performance with favorable matchups.
 
 ### Placement Detection
 
@@ -205,11 +205,11 @@ Rewards diversified profitable trading across multiple assets within a single UT
 3. Only closed positions count (need realized PnL).
 4. Group by asset symbol.
 5. For each asset: select the position with the highest ROI.
-   - ROI > 0 → `min(ROI × 100, 200)` points (capped at 200 per asset)
+   - ROI > 0 → `min(ROI × 25, 25)` points (capped at 25 per asset)
    - ROI ≤ 0 → 0 points
 6. Sum across all assets.
 
-**Design rationale:** The $1K minimum prevents dust-trade farming. The 200-point cap prevents one outlier position from dominating. Only closed positions are counted because open positions have no realized PnL.
+**Design rationale:** The $1K minimum prevents dust-trade farming. The 25-point cap prevents one outlier position from dominating. Only closed positions are counted because open positions have no realized PnL.
 
 ### Top Bottom Fisher
 

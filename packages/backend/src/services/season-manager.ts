@@ -5,7 +5,7 @@
 //   1. Create a season (container for weekly gauntlets)
 //   2. Start the season (creates Week 1 tournament)
 //   3. Advance weeks (after each weekly tournament completes)
-//   4. Qualify for the Season Final (top N from aggregate standings)
+//   4. Qualify for the Season Final (all participants, seeded by standings)
 //   5. Complete the season (after the Final tournament completes)
 //
 // A season contains `weekCount` weekly gauntlets + 1 Season Final.
@@ -13,9 +13,8 @@
 // The season tracks aggregate points across all weeks for qualification.
 //
 // Points scheme (per weekly tournament placement):
-//   Winner: 25, 2nd: 18, 3rd: 15, Finalist: 12,
-//   Eliminated R2: 8, Eliminated R1: 4,
-//   Consolation 1st: 6, 2nd: 4, 3rd: 3, Registered: 1
+//   Winner: 25, 2nd: 18, 3rd: 15, 4th: 12, 5th: 10, Other Finalist: 8,
+//   Passing R1: 3, FF 1st: 6, FF 2nd: 4, FF 3rd: 3, Other FF: 1
 // ============================================================================
 
 import { eq, and, desc } from 'drizzle-orm';
@@ -27,11 +26,11 @@ import {
     rounds,
     brackets,
     bracketEntries,
-    registrations,
     seasonRegistrations,
+    dailyCategoryScores,
 } from '../db/schema.js';
 import { createTournament, registerWallet } from './tournament-manager.js';
-import type { SeasonConfig, SeasonPointsScheme } from '../types.js';
+import type { SeasonConfig, SeasonPointsScheme, FisherDetails } from '../types.js';
 import { DEFAULT_SEASON_CONFIG } from '../types.js';
 
 // --------------------------------------------------------------------------
@@ -214,14 +213,12 @@ export async function advanceWeek(
 // 4. Award season points for a completed weekly tournament
 //
 // Placement detection:
-//   - Finalists = wallets that were never eliminated (advanced through all rounds
-//     or were still active when tournament completed)
-//   - Winner = finalist with highest CPI in last round
-//   - 2nd/3rd = next highest CPI among finalists
-//   - Eliminated R1 = wallets eliminated in round 1
-//   - Eliminated R2 = wallets eliminated in round 2+
-//   - Consolation winner = highest CPI in last consolation round
-//   - Registered but didn't trade = registered but 0 CPI in round 1
+//   - Finalists = wallets that advanced through all main rounds
+//   - Winner/2nd/3rd/4th/5th = top CPI among finalists
+//   - Other Finalist = remaining finalists beyond 5th
+//   - Passing R1 = wallets eliminated in R2+ (survived R1)
+//   - FF participants = all eliminated wallets, ranked by CPI
+//   - R1-eliminated wallets earn only FF-based points
 // --------------------------------------------------------------------------
 async function awardWeeklyPoints(
     seasonId: number,
@@ -243,22 +240,9 @@ async function awardWeeklyPoints(
         .filter((r) => (r.type ?? 'main') === 'consolation')
         .sort((a, b) => a.roundNumber - b.roundNumber);
 
-    // All registrations
-    const allRegs = await db
-        .select()
-        .from(registrations)
-        .where(eq(registrations.tournamentId, tournamentId));
-
-    const allRegisteredWallets = new Set(allRegs.map((r) => r.wallet));
-
     // Track wallet placements
     const walletPoints = new Map<string, number>();
     const walletPlacements = new Map<string, number>(); // 1 = winner, 2 = 2nd, etc.
-
-    // Initialize all registered wallets with minimum points
-    for (const wallet of allRegisteredWallets) {
-        walletPoints.set(wallet, pointsScheme.registered);
-    }
 
     // Process main rounds to find who was eliminated in each
     const eliminatedInRound = new Map<string, number>(); // wallet → round number eliminated
@@ -323,24 +307,29 @@ async function awardWeeklyPoints(
             walletPoints.set(wallet, pointsScheme.second);
         } else if (i === 2) {
             walletPoints.set(wallet, pointsScheme.third);
+        } else if (i === 3) {
+            walletPoints.set(wallet, pointsScheme.fourth);
+        } else if (i === 4) {
+            walletPoints.set(wallet, pointsScheme.fifth);
         } else {
-            walletPoints.set(wallet, pointsScheme.finalist);
+            walletPoints.set(wallet, pointsScheme.otherFinalist);
         }
     }
 
-    // Award elimination points
+    // Award "Passing R1" points — wallets that survived R1 (eliminated in R2+)
     for (const [wallet, roundNumber] of eliminatedInRound) {
         // Skip if wallet is already a finalist (shouldn't happen, but safety)
         if (walletPlacements.has(wallet)) continue;
 
-        if (roundNumber === 1) {
-            walletPoints.set(wallet, pointsScheme.eliminatedR1);
-        } else {
-            walletPoints.set(wallet, pointsScheme.eliminatedR2);
+        if (roundNumber > 1) {
+            // Survived R1, eliminated later — "Passing R1" gives base recognition
+            // Their main points will come from FF placement below
+            const current = walletPoints.get(wallet) ?? 0;
+            walletPoints.set(wallet, Math.max(current, pointsScheme.passingR1));
         }
     }
 
-    // Award consolation podium points (top 3)
+    // Award Fallen Fighters (consolation) points — all FF participants
     if (consolationRounds.length > 0) {
         const lastConsolation = consolationRounds[consolationRounds.length - 1];
         const consolationBrackets = await db
@@ -365,14 +354,17 @@ async function awardWeeklyPoints(
 
         const consolationTiers = [
             pointsScheme.consolationWinner,
-            pointsScheme.consolationSecond ?? 4,
-            pointsScheme.consolationThird ?? 3,
+            pointsScheme.consolationSecond,
+            pointsScheme.consolationThird,
         ];
-        for (let i = 0; i < Math.min(consolationFinishers.length, 3); i++) {
+        for (let i = 0; i < consolationFinishers.length; i++) {
             const wallet = consolationFinishers[i].wallet;
+            const tierPoints = i < consolationTiers.length
+                ? consolationTiers[i]
+                : pointsScheme.otherConsolation;
             const currentPoints = walletPoints.get(wallet) ?? 0;
-            if (consolationTiers[i] > currentPoints) {
-                walletPoints.set(wallet, consolationTiers[i]);
+            if (tierPoints > currentPoints) {
+                walletPoints.set(wallet, tierPoints);
             }
         }
     }
@@ -423,29 +415,154 @@ async function awardWeeklyPoints(
 }
 
 // --------------------------------------------------------------------------
-// 5. Qualify top wallets for the Season Final
+// 4b. Award season points for daily Fisher category results
 //
-// Reads season standings, marks top N as qualified, creates the Final
-// tournament with those wallets auto-registered.
+// Top 3 in each Fisher direction (Top Fisher / Bottom Fisher) earn
+// 3 / 2 / 1 season points respectively. Uses a sentinel row in
+// daily_category_scores to prevent double-awarding.
+// --------------------------------------------------------------------------
+export async function awardDailyFisherPoints(
+    tournamentId: number,
+    seasonId: number,
+    scoreDate: string, // YYYY-MM-DD
+): Promise<void> {
+    const SENTINEL_WALLET = '__fisher_season_sentinel__';
+    const SENTINEL_CATEGORY = 'fisher_season';
+    const SEASON_POINTS = [3, 2, 1]; // 1st, 2nd, 3rd
+
+    // Idempotency check: look for sentinel row
+    const [existing] = await db
+        .select()
+        .from(dailyCategoryScores)
+        .where(
+            and(
+                eq(dailyCategoryScores.tournamentId, tournamentId),
+                eq(dailyCategoryScores.wallet, SENTINEL_WALLET),
+                eq(dailyCategoryScores.category, SENTINEL_CATEGORY),
+                eq(dailyCategoryScores.scoreDate, scoreDate),
+            ),
+        )
+        .limit(1);
+
+    if (existing) {
+        console.log(
+            `[SeasonManager] Fisher season points already awarded for tournament ${tournamentId} ` +
+            `date ${scoreDate}. Skipping.`,
+        );
+        return;
+    }
+
+    // Read Fisher scores for this date
+    const fisherRows = await db
+        .select()
+        .from(dailyCategoryScores)
+        .where(
+            and(
+                eq(dailyCategoryScores.tournamentId, tournamentId),
+                eq(dailyCategoryScores.category, 'fisher'),
+                eq(dailyCategoryScores.scoreDate, scoreDate),
+            ),
+        );
+
+    if (fisherRows.length === 0) {
+        console.log(
+            `[SeasonManager] No Fisher scores found for tournament ${tournamentId} ` +
+            `date ${scoreDate}. Skipping Fisher season points.`,
+        );
+        return;
+    }
+
+    // Collect wallets with top-3 ranks in long or short direction
+    const pointsToAward = new Map<string, number>(); // wallet → total points to add
+
+    for (const row of fisherRows) {
+        const details = row.details as FisherDetails;
+
+        // Check long entry rank
+        if (details.longEntry?.rank && details.longEntry.rank <= 3) {
+            const pts = SEASON_POINTS[details.longEntry.rank - 1];
+            const current = pointsToAward.get(row.wallet) ?? 0;
+            pointsToAward.set(row.wallet, current + pts);
+        }
+
+        // Check short entry rank
+        if (details.shortEntry?.rank && details.shortEntry.rank <= 3) {
+            const pts = SEASON_POINTS[details.shortEntry.rank - 1];
+            const current = pointsToAward.get(row.wallet) ?? 0;
+            pointsToAward.set(row.wallet, current + pts);
+        }
+    }
+
+    // Upsert season standings with Fisher points
+    for (const [wallet, pts] of pointsToAward) {
+        const [existingStanding] = await db
+            .select()
+            .from(seasonStandings)
+            .where(
+                and(
+                    eq(seasonStandings.seasonId, seasonId),
+                    eq(seasonStandings.wallet, wallet),
+                ),
+            )
+            .limit(1);
+
+        if (existingStanding) {
+            await db
+                .update(seasonStandings)
+                .set({ totalPoints: existingStanding.totalPoints + pts })
+                .where(eq(seasonStandings.id, existingStanding.id));
+        } else {
+            await db.insert(seasonStandings).values({
+                seasonId,
+                wallet,
+                totalPoints: pts,
+                weeksParticipated: 0,
+                bestPlacement: null,
+            });
+        }
+    }
+
+    // Write sentinel row to mark this date as processed
+    await db.insert(dailyCategoryScores).values({
+        tournamentId,
+        seasonId,
+        wallet: SENTINEL_WALLET,
+        category: SENTINEL_CATEGORY,
+        scoreDate,
+        score: 0,
+        details: {},
+    });
+
+    console.log(
+        `[SeasonManager] Awarded Fisher season points for tournament ${tournamentId} ` +
+        `date ${scoreDate}: ${pointsToAward.size} wallets.`,
+    );
+}
+
+// --------------------------------------------------------------------------
+// 5. Qualify ALL season participants for the Season Final
+//
+// All season participants enter the Final tournament. Brackets are seeded
+// by season standing — the seeded order is stored in the tournament's
+// config JSONB as seededWallets, which startTournament reads.
 // --------------------------------------------------------------------------
 async function qualifyForFinal(
     seasonId: number,
     config: SeasonConfig,
 ): Promise<void> {
-    // Get top N wallets by total points
+    // Get ALL wallets with season standings, ordered by total points
     const standings = await db
         .select()
         .from(seasonStandings)
         .where(eq(seasonStandings.seasonId, seasonId))
-        .orderBy(desc(seasonStandings.totalPoints))
-        .limit(config.qualificationSlots);
+        .orderBy(desc(seasonStandings.totalPoints));
 
     if (standings.length === 0) {
         console.warn(`[SeasonManager] No standings found for season ${seasonId}. Cannot qualify.`);
         return;
     }
 
-    // Mark as qualified
+    // Mark all as qualified
     for (const standing of standings) {
         await db
             .update(seasonStandings)
@@ -460,8 +577,15 @@ async function qualifyForFinal(
         .where(eq(seasons.id, seasonId))
         .limit(1);
 
+    // Store seeded order in tournament config for startTournament to read
+    const seededOrder = standings.map(s => s.wallet);
+    const finalConfig = {
+        ...config.tournamentConfig,
+        seededWallets: seededOrder,
+    };
+
     const finalName = `${season?.name ?? 'Season'} — Grand Final`;
-    const finalTournament = await createTournament(finalName, config.tournamentConfig);
+    const finalTournament = await createTournament(finalName, finalConfig);
 
     // Link to season
     await db
@@ -469,7 +593,7 @@ async function qualifyForFinal(
         .set({ seasonId, weekNumber: config.weekCount + 1 })
         .where(eq(tournaments.id, finalTournament.id));
 
-    // Auto-register qualified wallets
+    // Auto-register all participants
     for (const standing of standings) {
         await registerWallet(finalTournament.id, standing.wallet);
     }
@@ -486,7 +610,7 @@ async function qualifyForFinal(
 
     console.log(
         `[SeasonManager] Season ${seasonId}: Qualified ${standings.length} wallets for Final ` +
-        `(tournament ${finalTournament.id})`,
+        `(tournament ${finalTournament.id}, seeded brackets)`,
     );
 }
 

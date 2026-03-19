@@ -13,6 +13,7 @@
 import { Router } from 'express';
 import { db } from '../db/index.js';
 import { dailyCategoryScores, registrations, tournaments } from '../db/schema.js';
+import { awardDailyFisherPoints } from '../services/season-manager.js';
 import { eq, and, desc, sql } from 'drizzle-orm';
 import { AdrenaClient } from '../services/adrena-client.js';
 import { fetchDailyOHLCBatch } from '../services/pyth-client.js';
@@ -232,6 +233,11 @@ router.post('/score', async (req, res) => {
         const seasonId = tournament?.seasonId ?? null;
 
         await saveDailyCategoryScores(tournamentId, seasonId, date, allAroundScores, fisherScores);
+
+        // Award Fisher season points if this tournament belongs to a season
+        if (seasonId !== null) {
+            await awardDailyFisherPoints(tournamentId, seasonId, date);
+        }
 
         res.json({
             success: true,

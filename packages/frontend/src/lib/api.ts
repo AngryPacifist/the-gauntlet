@@ -52,6 +52,7 @@ export interface Tournament {
         supportedAssetCount: number;
         useHistoricalWindow: boolean;
         historicalWindowDays: number;
+        seededWallets?: string[];
     };
     createdAt: string;
     updatedAt: string;
@@ -327,13 +328,14 @@ export interface Season {
             winner: number;
             second: number;
             third: number;
-            finalist: number;
-            eliminatedR2: number;
-            eliminatedR1: number;
+            fourth: number;
+            fifth: number;
+            otherFinalist: number;
+            passingR1: number;
             consolationWinner: number;
             consolationSecond: number;
             consolationThird: number;
-            registered: number;
+            otherConsolation: number;
         };
     };
     currentWeek: number;
