@@ -15,6 +15,10 @@
 // Points scheme (per weekly tournament placement):
 //   Winner: 25, 2nd: 18, 3rd: 15, 4th: 12, 5th: 10, Other Finalist: 8,
 //   Passing R1: 3, FF 1st: 6, FF 2nd: 4, FF 3rd: 3, Other FF: 1
+//
+// Daily category season points (awarded each UTC day):
+//   Fisher (top 3 per direction): 3 / 2 / 1
+//   All Around (top 3 by score): 3 / 2 / 1
 // ============================================================================
 
 import { eq, and, desc } from 'drizzle-orm';
@@ -535,6 +539,129 @@ export async function awardDailyFisherPoints(
 
     console.log(
         `[SeasonManager] Awarded Fisher season points for tournament ${tournamentId} ` +
+        `date ${scoreDate}: ${pointsToAward.size} wallets.`,
+    );
+}
+
+// --------------------------------------------------------------------------
+// 4c. Award season points for daily All Around category results
+//
+// Top 3 wallets by All Around score earn 3 / 2 / 1 season points
+// respectively. Uses a sentinel row in daily_category_scores to
+// prevent double-awarding (same pattern as Fisher).
+// --------------------------------------------------------------------------
+export async function awardDailyAllAroundPoints(
+    tournamentId: number,
+    seasonId: number,
+    scoreDate: string, // YYYY-MM-DD
+): Promise<void> {
+    const SENTINEL_WALLET = '__all_around_season_sentinel__';
+    const SENTINEL_CATEGORY = 'all_around_season';
+    const SEASON_POINTS = [3, 2, 1]; // 1st, 2nd, 3rd
+
+    // Idempotency check: look for sentinel row
+    const [existing] = await db
+        .select()
+        .from(dailyCategoryScores)
+        .where(
+            and(
+                eq(dailyCategoryScores.tournamentId, tournamentId),
+                eq(dailyCategoryScores.wallet, SENTINEL_WALLET),
+                eq(dailyCategoryScores.category, SENTINEL_CATEGORY),
+                eq(dailyCategoryScores.scoreDate, scoreDate),
+            ),
+        )
+        .limit(1);
+
+    if (existing) {
+        console.log(
+            `[SeasonManager] All Around season points already awarded for tournament ${tournamentId} ` +
+            `date ${scoreDate}. Skipping.`,
+        );
+        return;
+    }
+
+    // Read All Around scores for this date, sorted by score descending
+    const allAroundRows = await db
+        .select()
+        .from(dailyCategoryScores)
+        .where(
+            and(
+                eq(dailyCategoryScores.tournamentId, tournamentId),
+                eq(dailyCategoryScores.category, 'all_around'),
+                eq(dailyCategoryScores.scoreDate, scoreDate),
+            ),
+        )
+        .orderBy(desc(dailyCategoryScores.score));
+
+    if (allAroundRows.length === 0) {
+        console.log(
+            `[SeasonManager] No All Around scores found for tournament ${tournamentId} ` +
+            `date ${scoreDate}. Skipping All Around season points.`,
+        );
+        return;
+    }
+
+    // Award 3/2/1 to top 3 by score (skip zero-score wallets)
+    const pointsToAward = new Map<string, number>();
+
+    for (let i = 0; i < Math.min(allAroundRows.length, SEASON_POINTS.length); i++) {
+        const row = allAroundRows[i];
+        if (row.score > 0) {
+            pointsToAward.set(row.wallet, SEASON_POINTS[i]);
+        }
+    }
+
+    if (pointsToAward.size === 0) {
+        console.log(
+            `[SeasonManager] All wallets scored 0 for All Around on ${scoreDate}. ` +
+            `No season points awarded.`,
+        );
+        return;
+    }
+
+    // Upsert season standings with All Around points
+    for (const [wallet, pts] of pointsToAward) {
+        const [existingStanding] = await db
+            .select()
+            .from(seasonStandings)
+            .where(
+                and(
+                    eq(seasonStandings.seasonId, seasonId),
+                    eq(seasonStandings.wallet, wallet),
+                ),
+            )
+            .limit(1);
+
+        if (existingStanding) {
+            await db
+                .update(seasonStandings)
+                .set({ totalPoints: existingStanding.totalPoints + pts })
+                .where(eq(seasonStandings.id, existingStanding.id));
+        } else {
+            await db.insert(seasonStandings).values({
+                seasonId,
+                wallet,
+                totalPoints: pts,
+                weeksParticipated: 0,
+                bestPlacement: null,
+            });
+        }
+    }
+
+    // Write sentinel row to mark this date as processed
+    await db.insert(dailyCategoryScores).values({
+        tournamentId,
+        seasonId,
+        wallet: SENTINEL_WALLET,
+        category: SENTINEL_CATEGORY,
+        scoreDate,
+        score: 0,
+        details: {},
+    });
+
+    console.log(
+        `[SeasonManager] Awarded All Around season points for tournament ${tournamentId} ` +
         `date ${scoreDate}: ${pointsToAward.size} wallets.`,
     );
 }

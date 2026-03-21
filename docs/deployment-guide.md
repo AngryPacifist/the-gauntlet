@@ -149,7 +149,7 @@ adrena-the-gauntlet/
 │   │           ├── scoring-engine.ts      # CPI computation
 │   │           ├── scheduler.ts           # Automated scoring + round/category advancement
 │   │           ├── adrena-client.ts       # Adrena API client
-│   │           ├── season-manager.ts      # Season lifecycle (create, start, advance, qualify, complete)
+│   │           ├── season-manager.ts      # Season lifecycle + daily category season points (Fisher/All Around)
 │   │           ├── category-engine.ts     # All Around + Fisher daily scoring
 │   │           └── pyth-client.ts         # Pyth Benchmarks OHLC fetcher with DB cache
 │   └── frontend/

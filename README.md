@@ -100,6 +100,8 @@ npm run dev
 - **Bracket Elimination** — Traders compete in groups. Bottom 50% eliminated each round.
 - **Fallen Fighters** — All eliminated traders compete in a single consolation pool. All participants earn season points.
 - **Multi-Dimensional Scoring** — CPI combines PnL, Risk, Consistency, and Activity.
+- **Daily Categories** — All Around Trader (diversified ROI) and Top Bottom Fisher (entry timing) award 3/2/1 season points to top 3 daily.
+- **Seasons** — Multi-week seasons with aggregate standings, seeded bracket finals, and automatic weekly tournament progression.
 - **Configurable Rounds** — Per-round durations, leverage thresholds, and asset counts.
 - **Anti-Gaming Filters** — Dust trade, wash trade, and duration filters prevent abuse.
 - **Automated Rounds** — Scheduler auto-scores every 15 minutes and auto-advances when rounds end.
@@ -123,8 +125,8 @@ adrena-the-gauntlet/
 ├── packages/
 │   ├── backend/           # Express API server
 │   │   └── src/
-│   │       ├── routes/    # API route handlers (tournaments, registration, brackets, admin)
-│   │       ├── services/  # Business logic (tournament, scoring, scheduler, Adrena client)
+│   │       ├── routes/    # API route handlers (tournaments, registration, brackets, admin, seasons, categories)
+│   │       ├── services/  # Business logic (tournament, scoring, scheduler, seasons, daily categories, Adrena client)
 │   │       └── db/        # Schema, migrations, connection
 │   └── frontend/          # Next.js dashboard
 │       └── src/
@@ -145,7 +147,7 @@ adrena-the-gauntlet/
 
 | Document | Description |
 |----------|-------------|
-| [Competition Design](docs/competition-design.md) | Tournament mechanics, scoring methodology, anti-gaming filters |
+| [Competition Design](docs/competition-design.md) | Tournament mechanics, scoring, anti-gaming filters, seasons, daily categories |
 | [API Reference](docs/api-reference.md) | All endpoints with request/response examples |
 | [Deployment Guide](docs/deployment-guide.md) | Setup, environment variables, production build, hosting |
 | [Testing Report](docs/testing-report.md) | Engine validation, simulation results, scoring analysis |

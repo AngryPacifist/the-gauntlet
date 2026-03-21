@@ -179,7 +179,7 @@ After each weekly tournament completes, wallets earn season points based on plac
 | FF 3rd | 3 |
 | Other FF participants | 1 |
 
-Points accumulate across all weeks. FF points are only applied if they exceed the wallet's existing weekly points (prevents double-counting). Additionally, top 3 in each daily Fisher direction (long/short) earn 3/2/1 season points daily.
+Points accumulate across all weeks. FF points are only applied if they exceed the wallet's existing weekly points (prevents double-counting). Additionally, top 3 in each daily Fisher direction (long/short) and top 3 All Around traders earn 3/2/1 season points daily.
 
 ### Qualification
 
@@ -210,6 +210,8 @@ Rewards diversified profitable trading across multiple assets within a single UT
 6. Sum across all assets.
 
 **Design rationale:** The $1K minimum prevents dust-trade farming. The 25-point cap prevents one outlier position from dominating. Only closed positions are counted because open positions have no realized PnL.
+
+**Season points:** Top 3 wallets by daily All Around score earn 3 / 2 / 1 season points respectively (same award as Fisher).
 
 ### Top Bottom Fisher
 

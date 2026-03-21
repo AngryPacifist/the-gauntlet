@@ -735,7 +735,7 @@ Headers: X-Admin-Secret: <secret>
 Body: { "tournamentId": 1, "date": "2026-03-10" }
 ```
 
-Manually triggers daily category scoring for a specific tournament and date. Fetches OHLC data from Pyth, computes scores for all registered wallets, and persists results. If the tournament belongs to a season, Fisher season points (3/2/1 for top 3 in each direction) are also awarded.
+Manually triggers daily category scoring for a specific tournament and date. Fetches OHLC data from Pyth, computes scores for all registered wallets, and persists results. If the tournament belongs to a season, both Fisher season points (3/2/1 for top 3 in each direction) and All Around season points (3/2/1 for top 3 by score) are also awarded.
 
 **Response:**
 ```json
