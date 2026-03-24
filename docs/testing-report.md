@@ -51,6 +51,8 @@ The consolation bracket ran 3 rounds (Redemption Arc → Last Stand → Final Re
 - Consolation R2: 8 entries, 4 advanced, 4 eliminated
 - Consolation R3: 4 entries (reached end of consolation chain)
 
+> **Note:** This test used the original multi-round consolation design. After feedback from the Adrena team, the consolation structure was simplified to a single Fallen Fighters round (see competition-design.md).
+
 ### Score Analysis
 
 | Metric | Min | Max | Avg | Observations |
