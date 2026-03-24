@@ -31,7 +31,7 @@ Both tests ran end-to-end via the automated scheduler with no manual interventio
 |-------|------|---------|----------|------------|-----------|---------|
 | R1 | First Blood | 30 | 15 | 15 | 28.8–86.9 | 58.8 |
 | R2 | The Crucible | 15 | 8 | 7 | 62.2–86.9 | 67.1 |
-| R3 | Sudden Death | 8 | 4 | 4 | 64.8–86.9 | 69.7 |
+| R3 | Endgame | 8 | 4 | 4 | 64.8–86.9 | 69.7 |
 
 CPI floor rose each round (28.8 → 62.2 → 64.8), confirming the elimination system progressively concentrates stronger performers.
 
@@ -153,7 +153,7 @@ Evidence of automated scoring:
 |-------|------|-----------|-------|
 | T1 R1 First Blood | main | 29 | Initial manual score (1 API failure) |
 | T1 R2 The Crucible | main | 2,880 | 15 entries × ~192 scheduler cycles (48h ÷ 15min) |
-| T1 R3 Sudden Death | main | 1,644 | 8 entries × ~205 cycles |
+| T1 R3 Endgame | main | 1,644 | 8 entries × ~205 cycles |
 | T1 Consolation R1 | consolation | 2,688 + 1,435 | Two parallel consolation chains |
 | T1 Consolation R2 | consolation | 1,640 | Completed chain |
 

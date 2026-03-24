@@ -112,7 +112,7 @@ npm run dev
 
 ## API
 
-17 endpoints covering tournaments, registration, brackets, trader profiles, leaderboards, analytics, and admin actions.
+29 endpoints covering tournaments, registration, brackets, trader profiles, leaderboards, analytics, seasons, daily categories, and admin actions.
 
 Full reference: [docs/api-reference.md](docs/api-reference.md)
 
