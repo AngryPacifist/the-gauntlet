@@ -104,13 +104,13 @@ CPI = (0.35 x PnL) + (0.20 x Risk) + (0.30 x Consistency) + (0.15 x Activity)
 
 Measures net profitability relative to notional exposure (ROI).
 
-- **ROI** = Total Net PnL (USD) / Total Notional Exposure (USD)
-- Notional exposure = `entry_size × entry_price` (immutable at position open; cannot be gamed).
+- **ROI** = Total Net PnL (USD) / Total Close Exposure (USD)
+- Close exposure = `exit_size` (already in USD). Accounts for all upsizing. Falls back to `entry_size` for positions without `exit_size` data.
+- Both numerator (PnL) and denominator (exposure) use closed positions only. Open positions are excluded from both.
 - Normalized linearly from -100% ROI (score 0) to +200% ROI (score 100).
-- Only closed/liquidated positions contribute to realized PnL.
 - If a trader has only open positions, PnL score defaults to 50 (neutral).
 
-Uses `entry_size × entry_price` instead of `collateral_amount` as the denominator because collateral can be removed mid-trade, making it gameable.
+Note: `entry_size` and `exit_size` are already in USD (notional exposure), not token units. Do not multiply by `entry_price`. Previously used `entry_size × entry_price`, which was double-multiplying.
 
 ### Risk Score (20%)
 
@@ -138,7 +138,7 @@ If a trader has only open positions, they receive a baseline of 30.
 Measures active participation. Prevents "open one trade, sit idle" strategies:
 
 - **Trade count**: `min(count / 10, 1) x 30`. Maxes out at 10+ trades.
-- **Volume**: `min(volume / $10,000, 1) x 30`. Maxes out at $10K+ notional volume.
+- **Volume**: `min(volume / $10,000, 1) x 30`. Maxes out at $10K+ notional volume. Uses the API's precomputed `volume` field (round-trip USD notional). Falls back to `entry_size` (already USD).
 - **Variety**: `min(unique_symbols / N, 1) x 40`. N = `supportedAssetCount` from config (default: 4).
 
 Variety is heavily weighted (40%) to push traders toward using all available assets on Adrena, directly serving the platform's goal of broad market engagement.
@@ -201,7 +201,7 @@ Rewards diversified profitable trading across multiple assets within a single UT
 
 **Algorithm:**
 1. Filter positions opened on the UTC day.
-2. Exclude positions with exposure < $1,000 (`entry_size × entry_price`).
+2. Exclude positions with close exposure < $1,000 (`exit_size`, already in USD. Falls back to `entry_size`).
 3. Only closed positions count (need realized PnL).
 4. Group by asset symbol.
 5. For each asset: select the position with the highest ROI.

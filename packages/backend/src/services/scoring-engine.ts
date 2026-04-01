@@ -3,8 +3,8 @@
 //
 // Computes a multi-dimensional score for trader performance during a round.
 //
-// CPI = (0.35 × PnL Score) + (0.25 × Risk Score)
-//      + (0.25 × Consistency Score) + (0.15 × Activity Score)
+// CPI = (0.35 × PnL Score) + (0.20 × Risk Score)
+//      + (0.30 × Consistency Score) + (0.15 × Activity Score)
 //
 // Each sub-score is normalized to 0-100.
 //
@@ -17,6 +17,12 @@
 //     (avoids perverse incentive to trade conservatively on big winning days)
 //   - Activity: variety score weight doubled (20→40), trade count reduced
 //     (50→30). Asset count is dynamic via config, not hardcoded to 4.
+//
+// Changelog (April 2026 — API field sync):
+//   - PnL: denominator switched from entry_size × entry_price to exit_size.
+//     entry_size/exit_size are already USD; × entry_price was double-multiplying.
+//     exit_size accounts for upsizing. Denominator now closed-positions-only.
+//   - Activity: volume now uses API's precomputed volume field (with fallback).
 // ============================================================================
 
 import type {
@@ -75,14 +81,18 @@ export function computeCPI(
 // PnL Score (35% weight)
 //
 // Measures net profitability relative to position size (ROI).
-// Using entry_size × entry_price as the denominator (notional USD exposure)
-// instead of collateral_amount because collateral is gameable — traders can
-// remove collateral mid-trade. entry_size is immutable at position open.
+// entry_size and exit_size are already in USD (notional exposure).
+// Uses exit_size for closed positions (accounts for upsizing).
+// Falls back to entry_size for positions that lack exit_size (historical data).
 //
-// ROI = Total Net PnL (USD) / Total Notional Exposure (USD)
+// IMPORTANT: Do NOT multiply by entry_price — the size fields are already USD.
+// The previous formula (entry_size × entry_price) was double-multiplying.
+//
+// ROI = Total Net PnL (USD) / Total Close Exposure (USD)
 // PnL Score = normalize(ROI, -100%, +200%) → 0-100
 //
-// Only CLOSED positions contribute to PnL (open positions have pnl = null).
+// Both numerator (PnL) and denominator (exposure) use closed positions only.
+// Open positions have pnl = null and are excluded from both.
 // --------------------------------------------------------------------------
 function computePnlScore(positions: AdrenaPosition[]): number {
     const closedPositions = positions.filter(
@@ -99,17 +109,17 @@ function computePnlScore(positions: AdrenaPosition[]): number {
     // Sum PnL across closed positions (pnl field is non-null for closed positions)
     const totalPnl = closedPositions.reduce((sum, p) => sum + (p.pnl ?? 0), 0);
 
-    // Sum notional exposure across ALL positions (open + closed) in USD.
-    // entry_size is in token units; multiply by entry_price to get USD value.
-    // This is the denominator for ROI — total USD exposure the trader committed.
-    const totalExposureUsd = positions.reduce(
-        (sum, p) => sum + p.entry_size * p.entry_price,
+    // Sum notional exposure across CLOSED positions only (aligns with PnL numerator).
+    // entry_size/exit_size are already in USD — do NOT multiply by entry_price.
+    // Uses exit_size (final exposure including upsizing) with entry_size fallback.
+    const totalExposureUsd = closedPositions.reduce(
+        (sum, p) => sum + (p.exit_size ?? p.entry_size),
         0,
     );
 
     if (totalExposureUsd === 0) return 0;
 
-    // ROI as a percentage (PnL in USD / total USD exposure)
+    // ROI as a percentage (PnL in USD / total USD exposure at close)
     const roi = (totalPnl / totalExposureUsd) * 100;
 
     // Normalize to 0-100 scale:
@@ -123,7 +133,7 @@ function computePnlScore(positions: AdrenaPosition[]): number {
 }
 
 // --------------------------------------------------------------------------
-// Risk Score (25% weight)
+// Risk Score (20% weight)
 //
 // Measures risk management discipline.
 // Penalizes: liquidations, excessive leverage.
@@ -155,7 +165,7 @@ function computeRiskScore(
 }
 
 // --------------------------------------------------------------------------
-// Consistency Score (25% weight)
+// Consistency Score (30% weight)
 //
 // Measures trading consistency across the round.
 // Rewards traders who perform steadily across multiple days.
@@ -243,9 +253,11 @@ function computeActivityScore(
     // Trade count (capped at 10)
     const tradeCountScore = Math.min(positions.length / 10, 1) * 30;
 
-    // Total volume (entry_size × entry_price gives notional value in USD)
+    // Total volume in USD. Uses API's precomputed volume field (round-trip notional).
+    // Falls back to entry_size (already USD) for positions without volume.
+    // Note: do NOT multiply by entry_price — size fields are already USD.
     const totalVolume = positions.reduce(
-        (sum, p) => sum + p.entry_size * p.entry_price,
+        (sum, p) => sum + (p.volume ?? p.entry_size),
         0
     );
     const volumeScore = Math.min(totalVolume / 10000, 1) * 30;

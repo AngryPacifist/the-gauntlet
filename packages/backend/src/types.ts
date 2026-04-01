@@ -63,6 +63,7 @@ export interface CPIScores {
 // --- Adrena API Types ---
 
 export interface AdrenaPosition {
+    // --- Original fields (always present) ---
     position_id: number;
     user_id: number;
     symbol: string;
@@ -70,15 +71,52 @@ export interface AdrenaPosition {
     side: 'long' | 'short';
     status: 'open' | 'close' | 'liquidate';
     pubkey: string;
-    entry_price: number;
-    exit_price: number | null;
-    entry_size: number;
+    entry_price: number;       // average entry price in USD
+    exit_price: number | null; // average exit price in USD
+    entry_size: number;        // initial notional exposure in USD (NOT token units)
     pnl: number | null;
     entry_leverage: number;
-    entry_date: string;    // ISO 8601
-    exit_date: string | null; // ISO 8601
+    entry_date: string;        // ISO 8601
+    exit_date: string | null;  // ISO 8601
     fees: number;
     collateral_amount: number;
+
+    // --- New fields (optional for backward compat with JSONB snapshots) ---
+    // Size tracking (all in USD notional)
+    increase_size?: number;           // total USD added via upsizing (0 if no upsize)
+    exit_size?: number;               // final USD exposure at close (entry_size + increase_size)
+
+    // Leverage
+    lowest_leverage?: number;         // lowest leverage during position lifetime
+
+    // Collateral
+    entry_collateral_amount?: number; // immutable collateral at open
+
+    // Fee breakdown
+    borrow_fees?: number;
+    exit_fees?: number;
+
+    // Risk management
+    closed_by_sl_tp?: boolean;        // whether SL/TP triggered the close
+
+    // Activity
+    volume?: number;                  // round-trip notional volume in USD (= 2 × exit_size)
+    duration?: number;                // precomputed duration in seconds
+
+    // Audit trail
+    last_ix?: string;                 // on-chain tx signature
+
+    // Mutagen internals (informational — not used in CPI scoring)
+    pnl_volume_ratio?: number;
+    points_pnl_volume_ratio?: number;
+    points_duration?: number;
+    close_size_multiplier?: number;
+    points_mutations?: number;
+    total_points?: number;
+
+    // DB timestamps
+    created_at?: string;
+    updated_at?: string | null;
 }
 
 export interface AdrenaPositionResponse {

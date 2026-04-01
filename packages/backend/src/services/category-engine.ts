@@ -56,14 +56,15 @@ function filterPositionsForDay(
 
 /**
  * Compute ROI for a position.
- * ROI = pnl / (entry_size × entry_price)
+ * ROI = pnl / exit_size (already USD). Falls back to entry_size.
  * Returns 0 if position has no realized PnL (still open) or denominator is 0.
  */
 function computePositionROI(position: AdrenaPosition): number {
     if (position.pnl === null || position.pnl === undefined) {
         return 0;
     }
-    const exposure = position.entry_size * position.entry_price;
+    // entry_size/exit_size are already in USD — do NOT multiply by entry_price
+    const exposure = position.exit_size ?? position.entry_size;
     if (exposure <= 0) {
         return 0;
     }
@@ -75,7 +76,7 @@ function computePositionROI(position: AdrenaPosition): number {
 //
 // ZeDef's spec:
 // - Daily points = best ROI per unique asset traded, summed
-// - Min trade size: $1,000 (entry_size × entry_price)
+// - Min trade size: $1,000 (exit_size, already USD)
 // - Negative ROI = 0 points (not negative)
 // - Only closed positions count (need realized PnL)
 // ============================================================================
@@ -102,7 +103,8 @@ export function computeAllAroundScore(
     // Filter: closed only + minimum trade size
     const qualifying = dayPositions.filter((p) => {
         if (p.status === 'open') return false;
-        const exposure = p.entry_size * p.entry_price;
+        // exit_size/entry_size are already in USD — do NOT multiply by entry_price
+        const exposure = p.exit_size ?? p.entry_size;
         return exposure >= ALL_AROUND_MIN_TRADE_USD;
     });
 
