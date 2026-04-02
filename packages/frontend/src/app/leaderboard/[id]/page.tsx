@@ -217,7 +217,7 @@ export default function LeaderboardPage({ params }: { params: Promise<{ id: stri
                                     <td>
                                         <ShareButton
                                             compact
-                                            text={`\u{1F4CA} Ranked #${displayRank} in ${tournament.name} on @AdrenaProtocol | CPI: ${entry.cpiScore.toFixed(1)}\n\n#AdrenaGauntlet`}
+                                            text={`Ranked #${displayRank} in ${tournament.name} on @AdrenaProtocol | CPI: ${entry.cpiScore.toFixed(1)}\n\n#AdrenaGauntlet`}
                                         />
                                     </td>
                                 </tr>

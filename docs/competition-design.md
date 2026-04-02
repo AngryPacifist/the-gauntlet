@@ -179,7 +179,7 @@ After each weekly tournament completes, wallets earn season points based on plac
 | FF 3rd | 3 |
 | Other FF participants | 1 |
 
-Points accumulate across all weeks. FF points are only applied if they exceed the wallet's existing weekly points (prevents double-counting). Additionally, top 3 in each daily Fisher direction (long/short) and top 3 All Around traders earn 3/2/1 season points daily.
+Points accumulate across all weeks. FF points are only applied if they exceed the wallet's existing weekly points (prevents double-counting). Additionally, top 3 in each Fisher direction (Top-Tick Traveler / Bottom Fisher) and top 3 All Around traders earn 3/2/1 season points daily.
 
 ### Qualification
 
@@ -193,7 +193,10 @@ Finalists are wallets that advanced in (or were never eliminated from) the last 
 
 ## Daily Categories
 
-Alongside the main CPI-based bracket tournament, two daily tactical categories provide engagement loops for all registered traders — including those already eliminated from the main bracket.
+Alongside the main CPI-based bracket tournament, five tactical categories provide engagement loops for all registered traders -- including those already eliminated from the main bracket.
+
+**Daily categories** (scored every UTC day): All Around, Top-Tick Traveler, Bottom Fisher
+**2-day window categories** (scored on even-numbered tournament days): Risk Manager, The Humble One
 
 ### All Around Trader
 
@@ -205,35 +208,119 @@ Rewards diversified profitable trading across multiple assets within a single UT
 3. Only closed positions count (need realized PnL).
 4. Group by asset symbol.
 5. For each asset: select the position with the highest ROI.
-   - ROI > 0 → `min(ROI × 25, 25)` points (capped at 25 per asset)
-   - ROI ≤ 0 → 0 points
+   - ROI > 0: `min(ROI * 25, 25)` points (capped at 25 per asset)
+   - ROI <= 0: 0 points
 6. Sum across all assets.
 
 **Design rationale:** The $1K minimum prevents dust-trade farming. The 25-point cap prevents one outlier position from dominating. Only closed positions are counted because open positions have no realized PnL.
 
-**Season points:** Top 3 wallets by daily All Around score earn 3 / 2 / 1 season points respectively (same award as Fisher).
+**Season points:** Top 3 wallets by daily All Around score earn 3 / 2 / 1 season points respectively.
 
-### Top Bottom Fisher
+### Top-Tick Traveler (Long Direction)
 
-Rewards precise entry timing — catching the best long entry near the day's low, or the best short entry near the day's high.
+Rewards precise long entry timing -- catching the best entry near the day's low.
 
 **Data source:** Daily OHLC candles from the [Pyth Benchmarks TradingView shim](https://benchmarks.pyth.network/v1/shims/tradingview/history). No API key required. Bars are cached in the database (immutable after the day ends).
 
 **Algorithm (tournament-wide):**
 1. For each trader's positions opened on the UTC day:
    - Find their best long across all assets (highest proximity to day low)
-   - Find their best short across all assets (highest proximity to day high)
+   - Intra-wallet tiebreaker: proximity -> ROI -> position_id (lower wins)
 2. Long proximity: `1 - ((entry_price - day_low) / (day_high - day_low))`
-3. Short proximity: `(entry_price - day_low) / (day_high - day_low)`
-4. Rank all traders' best longs by proximity (descending). Top 3 receive rank points: 3, 2, 1.
-5. Rank all traders' best shorts by proximity (descending). Top 3 receive rank points.
-6. Score = `rank_points × max(ROI, 0) × 100`
+3. Rank all traders' best longs by proximity (descending). Tiebreaker: wallet address alphabetical.
+4. Top 3 receive rank points: 3, 2, 1.
+5. Score = `rank_points * max(ROI, 0) * 100`
 
-**Edge cases:**
-- Zero price range (high = low) → that asset is skipped entirely.
-- Entry outside day's range → proximity clamped to [0, 1].
-- Open positions → ROI = 0, so ranked but no score.
-- Fewer than 3 traders with longs/shorts → only available ranks awarded.
+**Season points:** Top 3 earn 3 / 2 / 1 season points daily.
+
+### Bottom Fisher (Short Direction)
+
+Rewards precise short entry timing -- catching the best entry near the day's high.
+
+**Algorithm (tournament-wide):**
+1. For each trader's positions opened on the UTC day:
+   - Find their best short across all assets (highest proximity to day high)
+   - Intra-wallet tiebreaker: proximity -> ROI -> position_id (lower wins)
+2. Short proximity: `(entry_price - day_low) / (day_high - day_low)`
+3. Rank all traders' best shorts by proximity (descending). Tiebreaker: wallet address alphabetical.
+4. Top 3 receive rank points: 3, 2, 1.
+5. Score = `rank_points * max(ROI, 0) * 100`
+
+**Edge cases (both directions):**
+- Zero price range (high = low): that asset is skipped entirely.
+- Entry outside day's range: proximity clamped to [0, 1].
+- Open positions: ROI = 0, so ranked but no score.
+- Fewer than 3 traders with longs/shorts: only available ranks awarded.
+
+**Season points:** Top 3 earn 3 / 2 / 1 season points daily.
+
+### Risk Manager (2-day window)
+
+Rewards disciplined stop-loss usage. Best SL-triggered close by ROI within a 2-day window.
+
+**Detection:** `closed_by_sl_tp === true && pnl < 0` (the Adrena API `closed_by_sl_tp` flag indicates a position was closed by its stop-loss or take-profit mechanism; combined with negative PnL, this identifies stop-loss exits).
+
+**Algorithm:**
+1. Determine the 2-day window: anchored to the tournament's first round `startTime`, windows are `[day_N-1, day_N]` on even-numbered days (day 2, 4, 6, ...).
+2. Filter each wallet's positions to those opened within the window.
+3. From those, select SL-triggered closes (see detection above).
+4. For each wallet, pick the best trade: highest ROI (least negative = tightest loss).
+   - Intra-wallet tiebreaker: ROI -> position_id (lower wins)
+5. Leaderboard score = `|ROI| * 100` (absolute value for positive sorting).
+6. Raw negative ROI is preserved in the `details` JSON for transparency.
+
+**Aggregation:** MAX (best single window score, not summed across windows).
+
+**Season points:** Configurable via `award2DayCategorySeasonPoints` (default: false).
+
+### The Humble One (2-day window)
+
+Rewards disciplined take-profit usage. Best TP-triggered close by ROI within a 2-day window.
+
+**Detection:** `closed_by_sl_tp === true && pnl > 0` (TP-triggered exit with positive PnL).
+
+**Algorithm:**
+1. Same 2-day windowing as Risk Manager.
+2. Filter to TP-triggered closes (see detection above).
+3. For each wallet, pick the best trade: highest ROI.
+   - Intra-wallet tiebreaker: ROI -> position_id (lower wins)
+4. Leaderboard score = `ROI * 100`.
+
+**Aggregation:** MAX (best single window score, not summed across windows).
+
+**Season points:** Configurable via `award2DayCategorySeasonPoints` (default: false).
+
+### Determinism Guarantees
+
+All category scoring is fully deterministic. Given the same input data, the same results will always be produced:
+
+| Decision Point | Tiebreaker |
+|----------------|------------|
+| Fisher ranking (cross-wallet) | proximity DESC, wallet ASC |
+| Fisher best position (intra-wallet) | proximity DESC, ROI DESC, position_id ASC |
+| Risk Manager / Humble One best trade | ROI DESC, position_id ASC |
+| All Around best asset position | ROI DESC (single-valued per asset) |
+| Season point awards (top-3 boundary) | score DESC, wallet ASC |
+| API leaderboard queries | score DESC, wallet ASC |
+
+### 2-Day Window Mechanics
+
+The 2-day window is anchored to the tournament's **first round startTime**, not the calendar:
+
+```
+Day 1: [tournament_start, tournament_start + 1 day]   -- no window scoring
+Day 2: [Day 1, Day 2]                                  -- first window
+Day 3: [Day 3, ...]                                    -- no window scoring
+Day 4: [Day 3, Day 4]                                  -- second window
+```
+
+This prevents drift if the tournament starts mid-week. The `dayNumber` is computed as:
+```
+daysSinceStart = floor((yesterday - tradingStartDate) / 86400000)
+dayNumber = daysSinceStart + 1  // 1-indexed
+```
+
+Window scoring fires when `dayNumber >= 2 && dayNumber % 2 === 0`.
 
 ### Supported Adrena Assets
 

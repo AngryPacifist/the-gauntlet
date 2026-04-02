@@ -21,7 +21,7 @@
 //   All Around (top 3 by score): 3 / 2 / 1
 // ============================================================================
 
-import { eq, and, desc } from 'drizzle-orm';
+import { eq, and, asc, desc, inArray } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import {
     seasons,
@@ -421,7 +421,7 @@ async function awardWeeklyPoints(
 // --------------------------------------------------------------------------
 // 4b. Award season points for daily Fisher category results
 //
-// Top 3 in each Fisher direction (Top Fisher / Bottom Fisher) earn
+// Top 3 in each direction (Top-Tick Traveler / Bottom Fisher) earn
 // 3 / 2 / 1 season points respectively. Uses a sentinel row in
 // daily_category_scores to prevent double-awarding.
 // --------------------------------------------------------------------------
@@ -456,14 +456,14 @@ export async function awardDailyFisherPoints(
         return;
     }
 
-    // Read Fisher scores for this date
+    // Read Fisher scores for this date (split into top_tick_traveler + bottom_fisher)
     const fisherRows = await db
         .select()
         .from(dailyCategoryScores)
         .where(
             and(
                 eq(dailyCategoryScores.tournamentId, tournamentId),
-                eq(dailyCategoryScores.category, 'fisher'),
+                inArray(dailyCategoryScores.category, ['top_tick_traveler', 'bottom_fisher']),
                 eq(dailyCategoryScores.scoreDate, scoreDate),
             ),
         );
@@ -592,7 +592,7 @@ export async function awardDailyAllAroundPoints(
                 eq(dailyCategoryScores.scoreDate, scoreDate),
             ),
         )
-        .orderBy(desc(dailyCategoryScores.score));
+        .orderBy(desc(dailyCategoryScores.score), asc(dailyCategoryScores.wallet));
 
     if (allAroundRows.length === 0) {
         console.log(

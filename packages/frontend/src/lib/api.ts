@@ -226,7 +226,8 @@ export interface TournamentAnalytics {
     }>;
     categoryData: {
         allAround: Array<{ wallet: string; score: number; scoreDate: string }>;
-        fisher: Array<{ wallet: string; score: number; scoreDate: string }>;
+        topTickTraveler: Array<{ wallet: string; score: number; scoreDate: string }>;
+        bottomFisher: Array<{ wallet: string; score: number; scoreDate: string }>;
     };
 }
 
@@ -377,6 +378,14 @@ export interface DailyCategoryScore {
     computedAt: string;
 }
 
+export type CategorySlug =
+    | 'all_around'
+    | 'top_tick_traveler'
+    | 'bottom_fisher'
+    | 'risk_manager'
+    | 'humble_one'
+    | 'leverage_master';
+
 // --- Season API Functions ---
 
 export async function listSeasons(): Promise<Season[]> {
@@ -437,14 +446,14 @@ export async function adminCompleteSeason(
 
 export async function getCategoryLeaderboard(
     tournamentId: number,
-    category: 'all-around' | 'fisher',
+    category: CategorySlug,
 ): Promise<CategoryLeaderboardEntry[]> {
     return apiFetch<CategoryLeaderboardEntry[]>(`/api/categories/${tournamentId}/${category}`);
 }
 
 export async function getDailyScores(
     tournamentId: number,
-    category: 'all-around' | 'fisher',
+    category: CategorySlug,
     date: string,
 ): Promise<DailyCategoryScore[]> {
     return apiFetch<DailyCategoryScore[]>(`/api/categories/${tournamentId}/${category}/${date}`);

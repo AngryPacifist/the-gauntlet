@@ -1,180 +1,49 @@
 // ============================================================================
 // Daily Category API Routes
 //
-// GET /api/categories/:tournamentId/all-around       — All Around leaderboard (cumulative)
-// GET /api/categories/:tournamentId/all-around/:date  — Single day All Around scores
-// GET /api/categories/:tournamentId/fisher            — Fisher leaderboard (cumulative)
-// GET /api/categories/:tournamentId/fisher/:date      — Single day Fisher scores
+// GET /api/categories/:tournamentId/:category       -- Category leaderboard (cumulative)
+// GET /api/categories/:tournamentId/:category/:date -- Single day scores
 //
 // Admin:
-// POST /api/categories/score — Manually trigger daily category scoring
+// POST /api/categories/score -- Manually trigger daily category scoring
 // ============================================================================
 
 import { Router } from 'express';
 import { db } from '../db/index.js';
-import { dailyCategoryScores, registrations, tournaments } from '../db/schema.js';
+import { dailyCategoryScores, registrations, rounds, tournaments } from '../db/schema.js';
 import { awardDailyFisherPoints, awardDailyAllAroundPoints } from '../services/season-manager.js';
-import { eq, and, desc, sql } from 'drizzle-orm';
+import { eq, and, asc, desc, sql } from 'drizzle-orm';
 import { AdrenaClient } from '../services/adrena-client.js';
 import { fetchDailyOHLCBatch } from '../services/pyth-client.js';
 import {
     computeAllAroundScore,
     computeFisherScores,
+    computeRiskManagerScores,
+    computeHumbleOneScores,
     saveDailyCategoryScores,
 } from '../services/category-engine.js';
-import type { AdrenaPosition, AllAroundDetails } from '../types.js';
+import type { AdrenaPosition, AllAroundDetails, CategoryScoreRow } from '../types.js';
 
 const router = Router();
 const adrenaClient = new AdrenaClient();
 
 // --------------------------------------------------------------------------
-// GET /api/categories/:tournamentId/all-around — Cumulative All Around leaderboard
+// Category validation
 // --------------------------------------------------------------------------
-router.get('/:tournamentId/all-around', async (req, res) => {
-    try {
-        const tournamentId = parseInt(req.params.tournamentId, 10);
-        if (isNaN(tournamentId)) {
-            res.status(400).json({ success: false, error: 'Invalid tournament ID' });
-            return;
-        }
+const VALID_CATEGORIES = [
+    'all_around', 'top_tick_traveler', 'bottom_fisher',
+    'risk_manager', 'humble_one', 'leverage_master',
+] as const;
 
-        // Aggregate scores across all days for this category
-        const scores = await db
-            .select({
-                wallet: dailyCategoryScores.wallet,
-                totalScore: sql<number>`SUM(${dailyCategoryScores.score})`.as('total_score'),
-                daysScored: sql<number>`COUNT(*)`.as('days_scored'),
-            })
-            .from(dailyCategoryScores)
-            .where(
-                and(
-                    eq(dailyCategoryScores.tournamentId, tournamentId),
-                    eq(dailyCategoryScores.category, 'all_around'),
-                ),
-            )
-            .groupBy(dailyCategoryScores.wallet)
-            .orderBy(desc(sql`SUM(${dailyCategoryScores.score})`));
+// Categories that use SUM aggregation (daily additive scores)
+const SUM_CATEGORIES = new Set(['all_around', 'top_tick_traveler', 'bottom_fisher']);
 
-        res.json({ success: true, data: scores });
-    } catch (error) {
-        console.error('[Categories] Error getting All Around leaderboard:', error);
-        res.status(500).json({
-            success: false,
-            error: error instanceof Error ? error.message : 'Internal server error',
-        });
-    }
-});
+// Categories that use MAX aggregation (best single window score)
+// risk_manager, humble_one, leverage_master
 
 // --------------------------------------------------------------------------
-// GET /api/categories/:tournamentId/all-around/:date — Single day scores
-// --------------------------------------------------------------------------
-router.get('/:tournamentId/all-around/:date', async (req, res) => {
-    try {
-        const tournamentId = parseInt(req.params.tournamentId, 10);
-        const dateStr = req.params.date; // YYYY-MM-DD
-
-        if (isNaN(tournamentId)) {
-            res.status(400).json({ success: false, error: 'Invalid tournament ID' });
-            return;
-        }
-
-        const scores = await db
-            .select()
-            .from(dailyCategoryScores)
-            .where(
-                and(
-                    eq(dailyCategoryScores.tournamentId, tournamentId),
-                    eq(dailyCategoryScores.category, 'all_around'),
-                    eq(dailyCategoryScores.scoreDate, dateStr),
-                ),
-            )
-            .orderBy(desc(dailyCategoryScores.score));
-
-        res.json({ success: true, data: scores });
-    } catch (error) {
-        console.error('[Categories] Error getting daily All Around scores:', error);
-        res.status(500).json({
-            success: false,
-            error: error instanceof Error ? error.message : 'Internal server error',
-        });
-    }
-});
-
-// --------------------------------------------------------------------------
-// GET /api/categories/:tournamentId/fisher — Cumulative Fisher leaderboard
-// --------------------------------------------------------------------------
-router.get('/:tournamentId/fisher', async (req, res) => {
-    try {
-        const tournamentId = parseInt(req.params.tournamentId, 10);
-        if (isNaN(tournamentId)) {
-            res.status(400).json({ success: false, error: 'Invalid tournament ID' });
-            return;
-        }
-
-        const scores = await db
-            .select({
-                wallet: dailyCategoryScores.wallet,
-                totalScore: sql<number>`SUM(${dailyCategoryScores.score})`.as('total_score'),
-                daysScored: sql<number>`COUNT(*)`.as('days_scored'),
-            })
-            .from(dailyCategoryScores)
-            .where(
-                and(
-                    eq(dailyCategoryScores.tournamentId, tournamentId),
-                    eq(dailyCategoryScores.category, 'fisher'),
-                ),
-            )
-            .groupBy(dailyCategoryScores.wallet)
-            .orderBy(desc(sql`SUM(${dailyCategoryScores.score})`));
-
-        res.json({ success: true, data: scores });
-    } catch (error) {
-        console.error('[Categories] Error getting Fisher leaderboard:', error);
-        res.status(500).json({
-            success: false,
-            error: error instanceof Error ? error.message : 'Internal server error',
-        });
-    }
-});
-
-// --------------------------------------------------------------------------
-// GET /api/categories/:tournamentId/fisher/:date — Single day Fisher scores
-// --------------------------------------------------------------------------
-router.get('/:tournamentId/fisher/:date', async (req, res) => {
-    try {
-        const tournamentId = parseInt(req.params.tournamentId, 10);
-        const dateStr = req.params.date;
-
-        if (isNaN(tournamentId)) {
-            res.status(400).json({ success: false, error: 'Invalid tournament ID' });
-            return;
-        }
-
-        const scores = await db
-            .select()
-            .from(dailyCategoryScores)
-            .where(
-                and(
-                    eq(dailyCategoryScores.tournamentId, tournamentId),
-                    eq(dailyCategoryScores.category, 'fisher'),
-                    eq(dailyCategoryScores.scoreDate, dateStr),
-                ),
-            )
-            .orderBy(desc(dailyCategoryScores.score));
-
-        res.json({ success: true, data: scores });
-    } catch (error) {
-        console.error('[Categories] Error getting daily Fisher scores:', error);
-        res.status(500).json({
-            success: false,
-            error: error instanceof Error ? error.message : 'Internal server error',
-        });
-    }
-});
-
-// --------------------------------------------------------------------------
-// POST /api/categories/score — Manually trigger daily category scoring
-// Admin protected
+// POST /api/categories/score -- Manually trigger daily category scoring
+// Admin protected. Must be registered BEFORE generic routes.
 // --------------------------------------------------------------------------
 router.post('/score', async (req, res) => {
     try {
@@ -215,13 +84,33 @@ router.post('/score', async (req, res) => {
             }
         }
 
-        // Compute scores
-        const allAroundScores = new Map<string, AllAroundDetails>();
+        // Compute daily scores
+        const allAroundRows: CategoryScoreRow[] = [];
         for (const [wallet, positions] of walletPositions) {
-            allAroundScores.set(wallet, computeAllAroundScore(positions, date));
+            const details = computeAllAroundScore(positions, date);
+            allAroundRows.push({
+                wallet, category: 'all_around',
+                score: details.totalPoints, details,
+            });
         }
 
-        const fisherScores = computeFisherScores(walletPositions, date, ohlcData);
+        // Fisher split
+        const fisherResults = computeFisherScores(walletPositions, date, ohlcData);
+        const topTickRows: CategoryScoreRow[] = [];
+        const bottomFisherRows: CategoryScoreRow[] = [];
+
+        for (const [wallet, details] of fisherResults) {
+            topTickRows.push({
+                wallet, category: 'top_tick_traveler',
+                score: details.longPoints,
+                details: { longEntry: details.longEntry, totalPoints: details.longPoints },
+            });
+            bottomFisherRows.push({
+                wallet, category: 'bottom_fisher',
+                score: details.shortPoints,
+                details: { shortEntry: details.shortEntry, totalPoints: details.shortPoints },
+            });
+        }
 
         // Get tournament to check for season_id
         const [tournament] = await db
@@ -232,9 +121,62 @@ router.post('/score', async (req, res) => {
 
         const seasonId = tournament?.seasonId ?? null;
 
-        await saveDailyCategoryScores(tournamentId, seasonId, date, allAroundScores, fisherScores);
+        await saveDailyCategoryScores(
+            tournamentId, seasonId, date,
+            [...allAroundRows, ...topTickRows, ...bottomFisherRows],
+        );
 
-        // Award daily category season points if this tournament belongs to a season
+        // Determine if this is a 2-day window scoring day
+        const [firstRound] = await db
+            .select({ startTime: rounds.startTime })
+            .from(rounds)
+            .where(eq(rounds.tournamentId, tournamentId))
+            .orderBy(asc(rounds.startTime))
+            .limit(1);
+
+        if (firstRound) {
+            const tradingStartDate = new Date(firstRound.startTime);
+            tradingStartDate.setUTCHours(0, 0, 0, 0);
+            const yesterday = new Date(date + 'T00:00:00Z');
+            const daysSinceStart = Math.floor(
+                (yesterday.getTime() - tradingStartDate.getTime()) / (24 * 60 * 60 * 1000),
+            );
+            const dayNumber = daysSinceStart + 1;
+
+            if (dayNumber >= 2 && dayNumber % 2 === 0) {
+                const windowStartDate = new Date(yesterday.getTime() - 24 * 60 * 60 * 1000);
+                const windowStartStr = windowStartDate.toISOString().slice(0, 10);
+
+                const riskManagerResults = computeRiskManagerScores(
+                    walletPositions, windowStartStr, date,
+                );
+                const humbleOneResults = computeHumbleOneScores(
+                    walletPositions, windowStartStr, date,
+                );
+
+                const engagementRows: CategoryScoreRow[] = [];
+                for (const [wallet, details] of riskManagerResults) {
+                    engagementRows.push({
+                        wallet, category: 'risk_manager',
+                        score: details.bestTrade ? Math.abs(details.bestTrade.roi) * 100 : 0,
+                        details,
+                    });
+                }
+                for (const [wallet, details] of humbleOneResults) {
+                    engagementRows.push({
+                        wallet, category: 'humble_one',
+                        score: details.bestTrade ? details.bestTrade.roi * 100 : 0,
+                        details,
+                    });
+                }
+
+                await saveDailyCategoryScores(
+                    tournamentId, seasonId, date, engagementRows,
+                );
+            }
+        }
+
+        // Award season points if applicable
         if (seasonId !== null) {
             await awardDailyFisherPoints(tournamentId, seasonId, date);
             await awardDailyAllAroundPoints(tournamentId, seasonId, date);
@@ -251,6 +193,102 @@ router.post('/score', async (req, res) => {
         });
     } catch (error) {
         console.error('[Categories] Error scoring categories:', error);
+        res.status(500).json({
+            success: false,
+            error: error instanceof Error ? error.message : 'Internal server error',
+        });
+    }
+});
+
+// --------------------------------------------------------------------------
+// GET /api/categories/:tournamentId/:category -- Cumulative leaderboard
+//
+// SUM categories (daily additive): all_around, top_tick_traveler, bottom_fisher
+// MAX categories (best single window): risk_manager, humble_one, leverage_master
+//
+// Deterministic ordering: score DESC, wallet ASC
+// --------------------------------------------------------------------------
+router.get('/:tournamentId/:category', async (req, res) => {
+    try {
+        const tournamentId = parseInt(req.params.tournamentId, 10);
+        const category = req.params.category;
+
+        if (isNaN(tournamentId)) {
+            res.status(400).json({ success: false, error: 'Invalid tournament ID' });
+            return;
+        }
+
+        if (!VALID_CATEGORIES.includes(category as typeof VALID_CATEGORIES[number])) {
+            res.status(400).json({ success: false, error: `Invalid category: ${category}` });
+            return;
+        }
+
+        const agg = SUM_CATEGORIES.has(category)
+            ? sql<number>`SUM(${dailyCategoryScores.score})`
+            : sql<number>`MAX(${dailyCategoryScores.score})`;
+
+        const scores = await db
+            .select({
+                wallet: dailyCategoryScores.wallet,
+                totalScore: agg.as('total_score'),
+                daysScored: sql<number>`COUNT(*)`.as('days_scored'),
+            })
+            .from(dailyCategoryScores)
+            .where(
+                and(
+                    eq(dailyCategoryScores.tournamentId, tournamentId),
+                    eq(dailyCategoryScores.category, category),
+                ),
+            )
+            .groupBy(dailyCategoryScores.wallet)
+            .orderBy(desc(sql`total_score`), asc(dailyCategoryScores.wallet));
+
+        res.json({ success: true, data: scores });
+    } catch (error) {
+        console.error(`[Categories] Error getting ${req.params.category} leaderboard:`, error);
+        res.status(500).json({
+            success: false,
+            error: error instanceof Error ? error.message : 'Internal server error',
+        });
+    }
+});
+
+// --------------------------------------------------------------------------
+// GET /api/categories/:tournamentId/:category/:date -- Single day scores
+//
+// Deterministic ordering: score DESC, wallet ASC
+// --------------------------------------------------------------------------
+router.get('/:tournamentId/:category/:date', async (req, res) => {
+    try {
+        const tournamentId = parseInt(req.params.tournamentId, 10);
+        const category = req.params.category;
+        const dateStr = req.params.date; // YYYY-MM-DD
+
+        if (isNaN(tournamentId)) {
+            res.status(400).json({ success: false, error: 'Invalid tournament ID' });
+            return;
+        }
+
+        if (!VALID_CATEGORIES.includes(category as typeof VALID_CATEGORIES[number])) {
+            res.status(400).json({ success: false, error: `Invalid category: ${category}` });
+            return;
+        }
+
+        const scores = await db
+            .select()
+            .from(dailyCategoryScores)
+            .where(
+                and(
+                    eq(dailyCategoryScores.tournamentId, tournamentId),
+                    eq(dailyCategoryScores.category, category),
+                    eq(dailyCategoryScores.scoreDate, dateStr),
+                ),
+            )
+            .orderBy(desc(dailyCategoryScores.score), asc(dailyCategoryScores.wallet));
+
+        res.json({ success: true, data: scores });
+    } catch (error) {
+        console.error(`[Categories] Error getting daily ${req.params.category} scores:`, error);
         res.status(500).json({
             success: false,
             error: error instanceof Error ? error.message : 'Internal server error',

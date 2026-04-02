@@ -94,14 +94,14 @@ export default function TraderPage({ params }: { params: Promise<{ wallet: strin
             // Check if this is the final round (no more rounds after)
             const isWinner = lastRound.advanced && lastRound.roundNumber >= profile.rounds.length;
             if (isWinner) {
-                return `\u{1F3C6} Won ${tournamentName} on @AdrenaProtocol! Final CPI: ${cpi}\n\n#AdrenaGauntlet`;
+                return `Won ${tournamentName} on @AdrenaProtocol! Final CPI: ${cpi}\n\n#AdrenaGauntlet`;
             }
-            return `\u{1F5E1}\u{FE0F} Survived ${lastRound.roundName} of ${tournamentName} on @AdrenaProtocol! CPI: ${cpi}\n\n#AdrenaGauntlet`;
+            return `Survived ${lastRound.roundName} of ${tournamentName} on @AdrenaProtocol! CPI: ${cpi}\n\n#AdrenaGauntlet`;
         }
         if (lastRound.eliminated) {
-            return `\u{2694}\u{FE0F} Fell in ${lastRound.roundName} of ${tournamentName} on @AdrenaProtocol. CPI: ${cpi} | Bringing more heat next time\n\n#AdrenaGauntlet`;
+            return `Fell in ${lastRound.roundName} of ${tournamentName} on @AdrenaProtocol. CPI: ${cpi} | Bringing more heat next time\n\n#AdrenaGauntlet`;
         }
-        return `\u{2694}\u{FE0F} Competing in ${lastRound.roundName} of ${tournamentName} on @AdrenaProtocol! CPI: ${cpi}\n\n#AdrenaGauntlet`;
+        return `Competing in ${lastRound.roundName} of ${tournamentName} on @AdrenaProtocol! CPI: ${cpi}\n\n#AdrenaGauntlet`;
     }
 
     return (

@@ -1,12 +1,15 @@
 // ============================================================================
-// Category Engine — Daily Tactical Category Scoring
+// Category Engine -- Daily Tactical Category Scoring
 //
-// Implements two ZeDef-proposed daily competition categories:
-// 1. "All Around Trader" — best ROI per unique asset traded, summed
-// 2. "Top Bottom Fisher" — entry precision relative to daily high/low
+// Implements engagement kick categories for The Gauntlet:
+// 1. "All Around Trader" -- best ROI per unique asset traded, summed (daily)
+// 2. "Top-Tick Traveler" -- long entry precision relative to daily low (daily)
+// 3. "Bottom Fisher"     -- short entry precision relative to daily high (daily)
+// 4. "Risk Manager"      -- best stop-loss ROI in a 2-day window
+// 5. "The Humble One"    -- best take-profit ROI in a 2-day window
 //
 // These run alongside the main CPI-based bracket tournament and provide
-// daily engagement loops for all traders (including eliminated ones).
+// engagement loops for all traders (including eliminated ones).
 // ============================================================================
 
 import { db } from '../db/index.js';
@@ -18,13 +21,17 @@ import type {
     AllAroundAssetScore,
     FisherDetails,
     FisherEntryDetail,
+    CategoryScoreRow,
+    RiskManagerDetails,
+    HumbleOneDetails,
+    SLTPTradeDetail,
 } from '../types.js';
 
 // --------------------------------------------------------------------------
 // Constants
 // --------------------------------------------------------------------------
 
-// All Around Trader: minimum trade size in USD (entry_size × entry_price)
+// All Around Trader: minimum trade size in USD (exit_size, already USD)
 const ALL_AROUND_MIN_TRADE_USD = 1000;
 
 // All Around Trader: max points per asset (cap to prevent one outlier dominating)
@@ -55,6 +62,24 @@ function filterPositionsForDay(
 }
 
 /**
+ * Filter positions to those opened within a multi-day UTC window.
+ * Used by 2-day engagement categories (Risk Manager, Humble One).
+ */
+function filterPositionsForWindow(
+    positions: AdrenaPosition[],
+    startDate: string, // YYYY-MM-DD
+    endDate: string,   // YYYY-MM-DD
+): AdrenaPosition[] {
+    const windowStart = new Date(startDate + 'T00:00:00Z');
+    const windowEnd = new Date(endDate + 'T23:59:59.999Z');
+
+    return positions.filter((p) => {
+        const entryDate = new Date(p.entry_date);
+        return entryDate >= windowStart && entryDate <= windowEnd;
+    });
+}
+
+/**
  * Compute ROI for a position.
  * ROI = pnl / exit_size (already USD). Falls back to entry_size.
  * Returns 0 if position has no realized PnL (still open) or denominator is 0.
@@ -63,7 +88,7 @@ function computePositionROI(position: AdrenaPosition): number {
     if (position.pnl === null || position.pnl === undefined) {
         return 0;
     }
-    // entry_size/exit_size are already in USD — do NOT multiply by entry_price
+    // entry_size/exit_size are already in USD -- do NOT multiply by entry_price
     const exposure = position.exit_size ?? position.entry_size;
     if (exposure <= 0) {
         return 0;
@@ -87,11 +112,11 @@ function computePositionROI(position: AdrenaPosition): number {
  * Algorithm:
  * 1. Filter to positions opened on the given UTC day
  * 2. Filter to closed positions only (need realized PnL)
- * 3. Filter to positions ≥ $1,000 exposure
+ * 3. Filter to positions >= $1,000 exposure
  * 4. Group by symbol
  * 5. For each symbol: select position with highest ROI
- *    - ROI > 0 → min(ROI × 25, 25) points
- *    - ROI ≤ 0 → 0 points
+ *    - ROI > 0 -> min(ROI * 25, 25) points
+ *    - ROI <= 0 -> 0 points
  * 6. Sum across all assets
  */
 export function computeAllAroundScore(
@@ -103,7 +128,7 @@ export function computeAllAroundScore(
     // Filter: closed only + minimum trade size
     const qualifying = dayPositions.filter((p) => {
         if (p.status === 'open') return false;
-        // exit_size/entry_size are already in USD — do NOT multiply by entry_price
+        // exit_size/entry_size are already in USD -- do NOT multiply by entry_price
         const exposure = p.exit_size ?? p.entry_size;
         return exposure >= ALL_AROUND_MIN_TRADE_USD;
     });
@@ -149,7 +174,7 @@ export function computeAllAroundScore(
 }
 
 // ============================================================================
-// TOP BOTTOM FISHER
+// TOP-TICK TRAVELER / BOTTOM FISHER (Fisher split)
 //
 // ZeDef's spec:
 // - At end of UTC day, capture daily high/low from Pyth OHLC data
@@ -158,7 +183,11 @@ export function computeAllAroundScore(
 // - Top 3 each direction get rank points (3, 2, 1), multiplied by ROI
 // - Best trade per trader per direction
 //
-// This is a TOURNAMENT-WIDE computation — rankings require comparing all traders.
+// This is a TOURNAMENT-WIDE computation -- rankings require comparing all traders.
+//
+// Determinism:
+// - Cross-wallet sort: proximity DESC, wallet ASC (alphabetical tiebreaker)
+// - Intra-wallet selection: proximity -> ROI -> position_id (3-level tiebreaker)
 // ============================================================================
 
 interface FisherCandidate {
@@ -175,14 +204,9 @@ interface FisherCandidate {
 /**
  * Compute Fisher scores for ALL wallets in a tournament on a single day.
  *
- * Algorithm:
- * 1. For each wallet: find best long (highest proximity to day low)
- *    and best short (highest proximity to day high) across all assets
- * 2. Rank all best longs by proximity — top 3 get rank points
- * 3. Rank all best shorts by proximity — top 3 get rank points
- * 4. Score = rank_points × max(ROI, 0) × 100
- *
- * Returns a Map<wallet, FisherDetails>
+ * Returns a Map<wallet, FisherDetails> with longPoints and shortPoints
+ * stored separately for caller-level split into Top-Tick Traveler and
+ * Bottom Fisher categories.
  */
 export function computeFisherScores(
     walletPositions: Map<string, AdrenaPosition[]>,
@@ -215,10 +239,17 @@ export function computeFisherScores(
                 // Long proximity: how close entry was to the day's LOW
                 // 1.0 = entered at exact low (perfect), 0.0 = entered at high (worst)
                 const proximity = 1 - ((p.entry_price - ohlc.low) / range);
-                // Clamp to [0, 1] — entry could be outside day's range
+                // Clamp to [0, 1] -- entry could be outside day's range
                 const clampedProximity = Math.max(0, Math.min(1, proximity));
 
-                if (!bestLong || clampedProximity > bestLong.proximity) {
+                // Deterministic intra-wallet selection: proximity -> ROI -> position_id
+                if (
+                    !bestLong ||
+                    clampedProximity > bestLong.proximity ||
+                    (clampedProximity === bestLong.proximity && roi > bestLong.roi) ||
+                    (clampedProximity === bestLong.proximity && roi === bestLong.roi &&
+                     p.position_id < bestLong.positionId)
+                ) {
                     bestLong = {
                         wallet,
                         symbol: p.symbol,
@@ -236,7 +267,14 @@ export function computeFisherScores(
                 const proximity = (p.entry_price - ohlc.low) / range;
                 const clampedProximity = Math.max(0, Math.min(1, proximity));
 
-                if (!bestShort || clampedProximity > bestShort.proximity) {
+                // Deterministic intra-wallet selection: proximity -> ROI -> position_id
+                if (
+                    !bestShort ||
+                    clampedProximity > bestShort.proximity ||
+                    (clampedProximity === bestShort.proximity && roi > bestShort.roi) ||
+                    (clampedProximity === bestShort.proximity && roi === bestShort.roi &&
+                     p.position_id < bestShort.positionId)
+                ) {
                     bestShort = {
                         wallet,
                         symbol: p.symbol,
@@ -258,12 +296,15 @@ export function computeFisherScores(
         results.set(wallet, {
             longEntry: null,
             shortEntry: null,
+            longPoints: 0,
+            shortPoints: 0,
             totalPoints: 0,
         });
     }
 
-    // Phase 2: Rank longs by proximity (descending) — top 3 get rank points
-    allLongs.sort((a, b) => b.proximity - a.proximity);
+    // Phase 2: Rank longs by proximity (descending)
+    // Deterministic tiebreaker: wallet alphabetical when proximity is equal
+    allLongs.sort((a, b) => b.proximity - a.proximity || a.wallet.localeCompare(b.wallet));
     for (let i = 0; i < allLongs.length; i++) {
         const candidate = allLongs[i];
         const rank = i < FISHER_RANK_POINTS.length ? i + 1 : null;
@@ -282,11 +323,13 @@ export function computeFisherScores(
             rankPoints,
             positionId: candidate.positionId,
         };
+        existing.longPoints = pointsFromLong;
         existing.totalPoints += pointsFromLong;
     }
 
-    // Phase 3: Rank shorts by proximity (descending) — top 3 get rank points
-    allShorts.sort((a, b) => b.proximity - a.proximity);
+    // Phase 3: Rank shorts by proximity (descending)
+    // Deterministic tiebreaker: wallet alphabetical when proximity is equal
+    allShorts.sort((a, b) => b.proximity - a.proximity || a.wallet.localeCompare(b.wallet));
     for (let i = 0; i < allShorts.length; i++) {
         const candidate = allShorts[i];
         const rank = i < FISHER_RANK_POINTS.length ? i + 1 : null;
@@ -305,7 +348,135 @@ export function computeFisherScores(
             rankPoints,
             positionId: candidate.positionId,
         };
+        existing.shortPoints = pointsFromShort;
         existing.totalPoints += pointsFromShort;
+    }
+
+    return results;
+}
+
+// ============================================================================
+// RISK MANAGER (2-day engagement category)
+//
+// Best stop-loss trade by ROI within a 2-day window.
+// SL detection: closed_by_sl_tp === true && pnl < 0
+// Score = Math.abs(roi) * 100 (absolute value for positive leaderboard sorting)
+// Raw negative ROI preserved in details for transparency.
+//
+// Determinism:
+// - Intra-wallet tiebreaker: ROI (highest = least negative) -> position_id (lower wins)
+// ============================================================================
+
+export function computeRiskManagerScores(
+    walletPositions: Map<string, AdrenaPosition[]>,
+    startDate: string,
+    endDate: string,
+): Map<string, RiskManagerDetails> {
+    const results = new Map<string, RiskManagerDetails>();
+
+    for (const [wallet, positions] of walletPositions) {
+        const windowPositions = filterPositionsForWindow(positions, startDate, endDate);
+
+        // Filter to SL-triggered closes with negative PnL
+        const slTrades = windowPositions.filter((p) =>
+            p.status !== 'open' &&
+            p.closed_by_sl_tp === true &&
+            (p.pnl ?? 0) < 0,
+        );
+
+        let bestTrade: SLTPTradeDetail | null = null;
+        let bestROI = -Infinity;
+
+        for (const p of slTrades) {
+            const exposure = p.exit_size ?? p.entry_size;
+            if (exposure <= 0) continue;
+            const roi = (p.pnl ?? 0) / exposure;
+
+            // Deterministic selection: highest ROI (least negative) -> lowest position_id
+            if (
+                roi > bestROI ||
+                (roi === bestROI && bestTrade !== null && p.position_id < bestTrade.positionId)
+            ) {
+                bestROI = roi;
+                bestTrade = {
+                    positionId: p.position_id,
+                    symbol: p.symbol,
+                    side: p.side,
+                    roi,
+                    pnl: p.pnl ?? 0,
+                    exitSize: exposure,
+                    leverage: p.entry_leverage,
+                };
+            }
+        }
+
+        results.set(wallet, {
+            bestTrade,
+            candidateCount: slTrades.length,
+        });
+    }
+
+    return results;
+}
+
+// ============================================================================
+// THE HUMBLE ONE (2-day engagement category)
+//
+// Best take-profit trade by ROI within a 2-day window.
+// TP detection: closed_by_sl_tp === true && pnl > 0
+// Score = roi * 100 (already positive)
+//
+// Determinism:
+// - Intra-wallet tiebreaker: ROI (highest) -> position_id (lower wins)
+// ============================================================================
+
+export function computeHumbleOneScores(
+    walletPositions: Map<string, AdrenaPosition[]>,
+    startDate: string,
+    endDate: string,
+): Map<string, HumbleOneDetails> {
+    const results = new Map<string, HumbleOneDetails>();
+
+    for (const [wallet, positions] of walletPositions) {
+        const windowPositions = filterPositionsForWindow(positions, startDate, endDate);
+
+        // Filter to TP-triggered closes with positive PnL
+        const tpTrades = windowPositions.filter((p) =>
+            p.status !== 'open' &&
+            p.closed_by_sl_tp === true &&
+            (p.pnl ?? 0) > 0,
+        );
+
+        let bestTrade: SLTPTradeDetail | null = null;
+        let bestROI = -Infinity;
+
+        for (const p of tpTrades) {
+            const exposure = p.exit_size ?? p.entry_size;
+            if (exposure <= 0) continue;
+            const roi = (p.pnl ?? 0) / exposure;
+
+            // Deterministic selection: highest ROI -> lowest position_id
+            if (
+                roi > bestROI ||
+                (roi === bestROI && bestTrade !== null && p.position_id < bestTrade.positionId)
+            ) {
+                bestROI = roi;
+                bestTrade = {
+                    positionId: p.position_id,
+                    symbol: p.symbol,
+                    side: p.side,
+                    roi,
+                    pnl: p.pnl ?? 0,
+                    exitSize: exposure,
+                    leverage: p.entry_leverage,
+                };
+            }
+        }
+
+        results.set(wallet, {
+            bestTrade,
+            candidateCount: tpTrades.length,
+        });
     }
 
     return results;
@@ -313,69 +484,43 @@ export function computeFisherScores(
 
 // --------------------------------------------------------------------------
 // Persist daily category scores to the database
+//
+// Accepts a flat array of CategoryScoreRow. Uses onConflictDoUpdate for
+// idempotent upsert behavior -- re-scoring the same date replaces old values.
 // --------------------------------------------------------------------------
 export async function saveDailyCategoryScores(
     tournamentId: number,
     seasonId: number | null,
     dateStr: string,
-    allAroundScores: Map<string, AllAroundDetails>,
-    fisherScores: Map<string, FisherDetails>,
+    rows: CategoryScoreRow[],
 ): Promise<void> {
-    const rows: Array<{
-        tournamentId: number;
-        seasonId: number | null;
-        wallet: string;
-        category: string;
-        scoreDate: string;
-        score: number;
-        details: AllAroundDetails | FisherDetails;
-    }> = [];
-
-    // Collect All Around rows
-    for (const [wallet, details] of allAroundScores) {
-        rows.push({
-            tournamentId,
-            seasonId,
-            wallet,
-            category: 'all_around',
-            scoreDate: dateStr,
-            score: details.totalPoints,
-            details,
-        });
-    }
-
-    // Collect Fisher rows
-    for (const [wallet, details] of fisherScores) {
-        rows.push({
-            tournamentId,
-            seasonId,
-            wallet,
-            category: 'fisher',
-            scoreDate: dateStr,
-            score: details.totalPoints,
-            details,
-        });
-    }
-
     if (rows.length === 0) {
         console.log(`[CategoryEngine] No scores to save for tournament ${tournamentId} on ${dateStr}`);
         return;
     }
 
-    // Insert with ON CONFLICT DO UPDATE for idempotency
     for (const row of rows) {
-        try {
-            await db.insert(dailyCategoryScores).values(row);
-        } catch (error) {
-            // UNIQUE constraint violation — update existing
-            if (error instanceof Error && error.message.includes('unique')) {
-                console.warn(
-                    `[CategoryEngine] Duplicate score for ${row.wallet}/${row.category}/${row.scoreDate}, skipping`,
-                );
-            } else {
-                throw error;
-            }
-        }
+        await db.insert(dailyCategoryScores).values({
+            tournamentId,
+            seasonId,
+            wallet: row.wallet,
+            category: row.category,
+            scoreDate: dateStr,
+            score: row.score,
+            details: row.details,
+        }).onConflictDoUpdate({
+            target: [
+                dailyCategoryScores.tournamentId,
+                dailyCategoryScores.wallet,
+                dailyCategoryScores.category,
+                dailyCategoryScores.scoreDate,
+            ],
+            set: {
+                score: row.score,
+                details: row.details,
+                computedAt: new Date(),
+            },
+        });
     }
 
     console.log(

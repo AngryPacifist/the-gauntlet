@@ -311,8 +311,8 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
                             <div className={styles.performersGrid}>
                                 {topPerformers.map((performer, idx) => (
                                     <div key={`${performer.wallet}-${performer.roundNumber}`} className={`card ${styles.performerCard}`}>
-                                        <div className={styles.performerRank}>
-                                            {idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `#${idx + 1}`}
+                                        <div className={styles.performerRank} style={getRankColor(idx)}>
+                                            #{idx + 1}
                                         </div>
                                         <div className={styles.performerInfo}>
                                             <Link
@@ -333,7 +333,7 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
                     )}
 
                     {/* Section 6: Daily Categories */}
-                    {(categoryData.allAround.length > 0 || categoryData.fisher.length > 0) && (
+                    {(categoryData.allAround.length > 0 || categoryData.topTickTraveler.length > 0 || categoryData.bottomFisher.length > 0) && (
                         <section className={styles.section}>
                             <h2 className={styles.sectionTitle}>
                                 <Award size={16} style={{ marginRight: 6 }} /> Daily Category Leaders
@@ -341,13 +341,13 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
                             <div className={styles.categoryGrid}>
                                 {categoryData.allAround.length > 0 && (
                                     <div className={`card ${styles.categoryCard}`}>
-                                        <h3 className={styles.categoryTitle}>🎯 All Around Trader</h3>
+                                        <h3 className={styles.categoryTitle}>All Around Trader</h3>
                                         <p className={styles.categoryDesc}>Best ROI per unique asset traded</p>
                                         <div className={styles.categoryList}>
                                             {categoryData.allAround.map((entry, idx) => (
                                                 <div key={`ar-${entry.wallet}-${entry.scoreDate}`} className={styles.categoryEntry}>
-                                                    <span className={styles.categoryRank}>
-                                                        {idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `#${idx + 1}`}
+                                                    <span className={styles.categoryRank} style={getRankColor(idx)}>
+                                                        #{idx + 1}
                                                     </span>
                                                     <Link
                                                         href={`/trader/${entry.wallet}?tournamentId=${tournamentId}`}
@@ -362,15 +362,38 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
                                         </div>
                                     </div>
                                 )}
-                                {categoryData.fisher.length > 0 && (
+                                {categoryData.topTickTraveler.length > 0 && (
                                     <div className={`card ${styles.categoryCard}`}>
-                                        <h3 className={styles.categoryTitle}>🎣 Top Bottom Fisher</h3>
-                                        <p className={styles.categoryDesc}>Entry proximity to daily low/high</p>
+                                        <h3 className={styles.categoryTitle}>Top-Tick Traveler</h3>
+                                        <p className={styles.categoryDesc}>Best long entry near daily low</p>
                                         <div className={styles.categoryList}>
-                                            {categoryData.fisher.map((entry, idx) => (
-                                                <div key={`fi-${entry.wallet}-${entry.scoreDate}`} className={styles.categoryEntry}>
-                                                    <span className={styles.categoryRank}>
-                                                        {idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `#${idx + 1}`}
+                                            {categoryData.topTickTraveler.map((entry, idx) => (
+                                                <div key={`tt-${entry.wallet}-${entry.scoreDate}`} className={styles.categoryEntry}>
+                                                    <span className={styles.categoryRank} style={getRankColor(idx)}>
+                                                        #{idx + 1}
+                                                    </span>
+                                                    <Link
+                                                        href={`/trader/${entry.wallet}?tournamentId=${tournamentId}`}
+                                                        className={styles.performerWallet}
+                                                    >
+                                                        {entry.wallet.slice(0, 6)}...{entry.wallet.slice(-4)}
+                                                    </Link>
+                                                    <span className={styles.categoryScore}>{entry.score.toFixed(1)}</span>
+                                                    <span className={styles.categoryDate}>{entry.scoreDate}</span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+                                {categoryData.bottomFisher.length > 0 && (
+                                    <div className={`card ${styles.categoryCard}`}>
+                                        <h3 className={styles.categoryTitle}>Bottom Fisher</h3>
+                                        <p className={styles.categoryDesc}>Best short entry near daily high</p>
+                                        <div className={styles.categoryList}>
+                                            {categoryData.bottomFisher.map((entry, idx) => (
+                                                <div key={`bf-${entry.wallet}-${entry.scoreDate}`} className={styles.categoryEntry}>
+                                                    <span className={styles.categoryRank} style={getRankColor(idx)}>
+                                                        #{idx + 1}
                                                     </span>
                                                     <Link
                                                         href={`/trader/${entry.wallet}?tournamentId=${tournamentId}`}
@@ -392,4 +415,11 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
             )}
         </div>
     );
+}
+
+function getRankColor(index: number): React.CSSProperties {
+    if (index === 0) return { fontWeight: 700, color: '#ffd700' };
+    if (index === 1) return { fontWeight: 700, color: '#c0c0c0' };
+    if (index === 2) return { fontWeight: 700, color: '#cd7f32' };
+    return {};
 }

@@ -14,7 +14,7 @@ import {
 } from '../services/tournament-manager.js';
 import { db } from '../db/index.js';
 import { tournaments, rounds, brackets, bracketEntries, registrations, seasons, dailyCategoryScores } from '../db/schema.js';
-import { eq, desc, count, and } from 'drizzle-orm';
+import { eq, asc, desc, count, and } from 'drizzle-orm';
 
 const router = Router();
 
@@ -297,8 +297,9 @@ router.get('/analytics/:tournamentId', async (req, res) => {
         // Daily category top performers
         const categoryData: {
             allAround: Array<{ wallet: string; score: number; scoreDate: string }>;
-            fisher: Array<{ wallet: string; score: number; scoreDate: string }>;
-        } = { allAround: [], fisher: [] };
+            topTickTraveler: Array<{ wallet: string; score: number; scoreDate: string }>;
+            bottomFisher: Array<{ wallet: string; score: number; scoreDate: string }>;
+        } = { allAround: [], topTickTraveler: [], bottomFisher: [] };
 
         const allAroundScores = await db
             .select()
@@ -309,7 +310,7 @@ router.get('/analytics/:tournamentId', async (req, res) => {
                     eq(dailyCategoryScores.category, 'all_around'),
                 ),
             )
-            .orderBy(desc(dailyCategoryScores.score))
+            .orderBy(desc(dailyCategoryScores.score), asc(dailyCategoryScores.wallet))
             .limit(5);
 
         categoryData.allAround = allAroundScores.map(s => ({
@@ -318,19 +319,37 @@ router.get('/analytics/:tournamentId', async (req, res) => {
             scoreDate: String(s.scoreDate),
         }));
 
-        const fisherScores = await db
+        const topTickScores = await db
             .select()
             .from(dailyCategoryScores)
             .where(
                 and(
                     eq(dailyCategoryScores.tournamentId, tournamentId),
-                    eq(dailyCategoryScores.category, 'fisher'),
+                    eq(dailyCategoryScores.category, 'top_tick_traveler'),
                 ),
             )
-            .orderBy(desc(dailyCategoryScores.score))
+            .orderBy(desc(dailyCategoryScores.score), asc(dailyCategoryScores.wallet))
             .limit(5);
 
-        categoryData.fisher = fisherScores.map(s => ({
+        categoryData.topTickTraveler = topTickScores.map(s => ({
+            wallet: s.wallet,
+            score: s.score,
+            scoreDate: String(s.scoreDate),
+        }));
+
+        const bottomFisherScores = await db
+            .select()
+            .from(dailyCategoryScores)
+            .where(
+                and(
+                    eq(dailyCategoryScores.tournamentId, tournamentId),
+                    eq(dailyCategoryScores.category, 'bottom_fisher'),
+                ),
+            )
+            .orderBy(desc(dailyCategoryScores.score), asc(dailyCategoryScores.wallet))
+            .limit(5);
+
+        categoryData.bottomFisher = bottomFisherScores.map(s => ({
             wallet: s.wallet,
             score: s.score,
             scoreDate: String(s.scoreDate),

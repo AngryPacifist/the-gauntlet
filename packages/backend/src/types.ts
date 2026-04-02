@@ -222,6 +222,7 @@ export interface SeasonConfig {
     qualificationSlots: number;
     tournamentConfig: TournamentConfig;
     pointsScheme: SeasonPointsScheme;
+    award2DayCategorySeasonPoints?: boolean; // default: false — enable season points for Risk Manager / Humble One
 }
 
 export const DEFAULT_SEASON_POINTS: SeasonPointsScheme = {
@@ -243,6 +244,7 @@ export const DEFAULT_SEASON_CONFIG: SeasonConfig = {
     qualificationSlots: 8,
     tournamentConfig: DEFAULT_TOURNAMENT_CONFIG,
     pointsScheme: DEFAULT_SEASON_POINTS,
+    award2DayCategorySeasonPoints: false,
 };
 
 // --- Daily Category Types ---
@@ -274,7 +276,36 @@ export interface FisherEntryDetail {
 export interface FisherDetails {
     longEntry: FisherEntryDetail | null;
     shortEntry: FisherEntryDetail | null;
+    longPoints: number;
+    shortPoints: number;
     totalPoints: number;
+}
+
+export interface SLTPTradeDetail {
+    positionId: number;
+    symbol: string;
+    side: 'long' | 'short';
+    roi: number;        // raw ROI (negative for SL, positive for TP)
+    pnl: number;        // raw pnl value
+    exitSize: number;   // denominator used for ROI
+    leverage: number;   // entry_leverage at open
+}
+
+export interface RiskManagerDetails {
+    bestTrade: SLTPTradeDetail | null;
+    candidateCount: number;
+}
+
+export interface HumbleOneDetails {
+    bestTrade: SLTPTradeDetail | null;
+    candidateCount: number;
+}
+
+export interface CategoryScoreRow {
+    wallet: string;
+    category: string;
+    score: number;
+    details: unknown;
 }
 
 export interface OHLCBar {
