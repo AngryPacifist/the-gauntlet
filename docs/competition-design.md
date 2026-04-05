@@ -247,7 +247,7 @@ Rewards precise short entry timing -- catching the best entry near the day's hig
 5. Score = `rank_points * max(ROI, 0) * 100`
 
 **Edge cases (both directions):**
-- Zero price range (high = low): that asset is skipped entirely.
+- Degenerate price range (< 0.1% daily spread, or high = low): that asset is skipped entirely. Protects against stale oracle feeds, exchange outages, and permanently cached degenerate OHLC bars.
 - Entry outside day's range: proximity clamped to [0, 1].
 - Open positions: ROI = 0, so ranked but no score.
 - Fewer than 3 traders with longs/shorts: only available ranks awarded.

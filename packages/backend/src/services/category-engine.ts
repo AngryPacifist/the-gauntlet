@@ -229,9 +229,10 @@ export function computeFisherScores(
             const ohlc = ohlcData.get(p.symbol);
             if (!ohlc) continue;
 
-            // Skip assets with zero price range (division by zero)
+            // Skip assets with degenerate price range (stale feed, oracle outage,
+            // illiquid pair). < 0.1% spread = no meaningful price discovery.
             const range = ohlc.high - ohlc.low;
-            if (range <= 0) continue;
+            if (range <= 0 || (ohlc.low > 0 && range / ohlc.low < 0.001)) continue;
 
             const roi = computePositionROI(p);
 
