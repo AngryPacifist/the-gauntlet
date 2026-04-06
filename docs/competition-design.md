@@ -97,7 +97,7 @@ Each round has a thematic name:
 The CPI is a weighted sum of four sub-scores, each normalized to a 0-100 scale:
 
 ```
-CPI = (0.35 x PnL) + (0.20 x Risk) + (0.30 x Consistency) + (0.15 x Activity)
+CPI = (0.35 x PnL) + (0.30 x Risk) + (0.20 x Consistency) + (0.15 x Activity)
 ```
 
 ### PnL Score (35%)
@@ -112,16 +112,26 @@ Measures net profitability relative to notional exposure (ROI).
 
 Note: `entry_size` and `exit_size` are already in USD (notional exposure), not token units. Do not multiply by `entry_price`. Previously used `entry_size × entry_price`, which was double-multiplying.
 
-### Risk Score (20%)
+### Risk Score (30%)
 
-Measures risk management discipline. Starts at 100 and is reduced by penalties:
+Measures risk management discipline via equity curve stability. Starts at 100 and is reduced by penalties:
 
 - **Liquidation penalty**: `(liquidated count / total count) x 100`
-- **Leverage penalty**: `max(0, (average_leverage - threshold) x 2)`. Threshold is configurable (default: 30x).
+- **Drawdown penalty**: `min(drawdownRatio × 200, 80)`
+  - Drawdown ratio = max drawdown / total closed exposure
+  - Max drawdown is computed from the cumulative PnL curve of closed positions, sorted chronologically by exit_date (ties: position_id ascending for determinism)
 
-The 30x default was chosen to respect Adrena's trading style — many legitimate strategies use 10-25x leverage on the platform.
+  | Drawdown Ratio | Penalty | Risk Score (no liquidations) |
+  |----------------|---------|------------------------------|
+  | 0% (all green) | 0       | 100                          |
+  | 5%             | 10      | 90                           |
+  | 10%            | 20      | 80                           |
+  | 20%            | 40      | 60                           |
+  | 40%+           | 80 (cap)| 20                           |
 
-### Consistency Score (30%)
+Leverage is not penalized — tactical high-leverage trading is a legitimate strategy on Adrena. Instead, the drawdown metric captures whether a trader manages their equity curve well regardless of leverage used.
+
+### Consistency Score (20%)
 
 Measures consistent profitable performance across trading days.
 
@@ -138,7 +148,14 @@ If a trader has only open positions, they receive a baseline of 30.
 Measures active participation. Prevents "open one trade, sit idle" strategies:
 
 - **Trade count**: `min(count / 10, 1) x 30`. Maxes out at 10+ trades.
-- **Volume**: `min(volume / $10,000, 1) x 30`. Maxes out at $10K+ notional volume. Uses the API's precomputed `volume` field (round-trip USD notional). Falls back to `entry_size` (already USD).
+- **Volume** (logarithmic scale, 0-30 points): `10 × log10(volume / $1,000)`, capped at 30. Uses the API's precomputed `volume` field (round-trip USD notional). Falls back to `entry_size` (already USD).
+
+  | Volume | Score |
+  |--------|-------|
+  | ≤$1K   | 0     |
+  | $10K   | 10    |
+  | $100K  | 20    |
+  | $1M    | 30    |
 - **Variety**: `min(unique_symbols / N, 1) x 40`. N = `supportedAssetCount` from config (default: 4).
 
 Variety is heavily weighted (40%) to push traders toward using all available assets on Adrena, directly serving the platform's goal of broad market engagement.
@@ -195,7 +212,7 @@ Finalists are wallets that advanced in (or were never eliminated from) the last 
 
 Alongside the main CPI-based bracket tournament, five tactical categories provide engagement loops for all registered traders -- including those already eliminated from the main bracket.
 
-**Daily categories** (scored every UTC day): All Around, Top-Tick Traveler, Bottom Fisher
+**Daily categories** (scored every UTC day): All Around, Bottom Fisher, Top-Tick Traveler
 **2-day window categories** (scored on even-numbered tournament days): Risk Manager, The Humble One
 
 ### All Around Trader
@@ -204,7 +221,7 @@ Rewards diversified profitable trading across multiple assets within a single UT
 
 **Algorithm:**
 1. Filter positions opened on the UTC day.
-2. Exclude positions with close exposure < $1,000 (`exit_size`, already in USD. Falls back to `entry_size`).
+2. Exclude positions with close exposure < $500 (`exit_size`, already in USD. Falls back to `entry_size`).
 3. Only closed positions count (need realized PnL).
 4. Group by asset symbol.
 5. For each asset: select the position with the highest ROI.
@@ -212,13 +229,13 @@ Rewards diversified profitable trading across multiple assets within a single UT
    - ROI <= 0: 0 points
 6. Sum across all assets.
 
-**Design rationale:** The $1K minimum prevents dust-trade farming. The 25-point cap prevents one outlier position from dominating. Only closed positions are counted because open positions have no realized PnL.
+**Design rationale:** The $500 minimum prevents dust-trade farming. The 25-point cap prevents one outlier position from dominating. Only closed positions are counted because open positions have no realized PnL.
 
 **Season points:** Top 3 wallets by daily All Around score earn 3 / 2 / 1 season points respectively.
 
-### Top-Tick Traveler (Long Direction)
+### Bottom Fisher (Long Direction)
 
-Rewards precise long entry timing -- catching the best entry near the day's low.
+Rewards precise long entry timing -- *"I see the bottom and try to go long to catch a reversal."*
 
 **Data source:** Daily OHLC candles from the [Pyth Benchmarks TradingView shim](https://benchmarks.pyth.network/v1/shims/tradingview/history). No API key required. Bars are cached in the database (immutable after the day ends).
 
@@ -233,9 +250,9 @@ Rewards precise long entry timing -- catching the best entry near the day's low.
 
 **Season points:** Top 3 earn 3 / 2 / 1 season points daily.
 
-### Bottom Fisher (Short Direction)
+### Top-Tick Traveler (Short Direction)
 
-Rewards precise short entry timing -- catching the best entry near the day's high.
+Rewards precise short entry timing -- *"I see the top and try to go short to catch a reversal."*
 
 **Algorithm (tournament-wide):**
 1. For each trader's positions opened on the UTC day:
@@ -358,7 +375,7 @@ All parameters are configurable per tournament:
 | `roundDurations`           | [72, 48, 48] | Duration of each round in hours (per-round array)   |
 | `minPositionCollateral`    | 25           | Minimum collateral (USD) for a position to count    |
 | `minTradeDurationSec`      | 120          | Minimum duration (seconds) for a position to count  |
-| `leveragePenaltyThreshold` | 30           | Leverage above this is penalized in Risk score      |
+| `leveragePenaltyThreshold` | 30           | Legacy — no longer used by Risk score (retained for backward compat) |
 | `supportedAssetCount`      | 4            | Number of tradeable assets (for Activity variety)   |
 | `useHistoricalWindow`      | false        | Use historical window instead of round dates        |
 | `historicalWindowDays`     | 90           | Days for historical window (for backtesting)        |

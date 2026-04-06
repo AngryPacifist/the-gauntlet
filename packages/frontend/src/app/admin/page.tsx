@@ -44,7 +44,6 @@ export default function AdminPage() {
     const [cfgRoundDurations, setCfgRoundDurations] = useState('72, 48, 48');
     const [cfgMinCollateral, setCfgMinCollateral] = useState(25);
     const [cfgMinDuration, setCfgMinDuration] = useState(120);
-    const [cfgLeverageThreshold, setCfgLeverageThreshold] = useState(30);
     const [cfgAssetCount, setCfgAssetCount] = useState(4);
 
     // Action feedback
@@ -89,7 +88,6 @@ export default function AdminPage() {
         setCfgRoundDurations('72, 48, 48');
         setCfgMinCollateral(25);
         setCfgMinDuration(120);
-        setCfgLeverageThreshold(30);
         setCfgAssetCount(4);
     }
 
@@ -108,7 +106,6 @@ export default function AdminPage() {
             roundDurations: durations.length > 0 ? durations : [72, 48, 48],
             minPositionCollateral: cfgMinCollateral,
             minTradeDurationSec: cfgMinDuration,
-            leveragePenaltyThreshold: cfgLeverageThreshold,
             supportedAssetCount: cfgAssetCount,
         };
 
@@ -510,17 +507,6 @@ export default function AdminPage() {
                                     <span className={styles.formHint}>Min seconds a trade must be open</span>
                                 </div>
 
-                                <div className={styles.formGroup}>
-                                    <label className={styles.formLabel}>Leverage Threshold</label>
-                                    <input
-                                        type="number"
-                                        className="input input--mono"
-                                        value={cfgLeverageThreshold}
-                                        onChange={(e) => setCfgLeverageThreshold(Number(e.target.value))}
-                                        min={1}
-                                    />
-                                    <span className={styles.formHint}>Leverage above this penalizes Risk score</span>
-                                </div>
 
                                 <div className={styles.formGroup}>
                                     <label className={styles.formLabel}>Supported Assets</label>

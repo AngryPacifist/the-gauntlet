@@ -47,8 +47,8 @@ export interface CPIWeights {
 
 export const DEFAULT_CPI_WEIGHTS: CPIWeights = {
     pnl: 0.35,
-    risk: 0.20,
-    consistency: 0.30,
+    risk: 0.30,
+    consistency: 0.20,
     activity: 0.15,
 };
 

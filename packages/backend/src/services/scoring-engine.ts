@@ -3,16 +3,16 @@
 //
 // Computes a multi-dimensional score for trader performance during a round.
 //
-// CPI = (0.35 × PnL Score) + (0.20 × Risk Score)
-//      + (0.30 × Consistency Score) + (0.15 × Activity Score)
+// CPI = (0.35 × PnL Score) + (0.30 × Risk Score)
+//      + (0.20 × Consistency Score) + (0.15 × Activity Score)
 //
 // Each sub-score is normalized to 0-100.
 //
 // Changelog (ZeDef feedback, March 2026):
 //   - PnL: ROI denominator switched from collateral_amount to entry_size
 //     (entry_size is immutable at position open; collateral is gameable)
-//   - Risk: leverage penalty threshold raised from 10x to configurable
-//     (default 30x; respects tactical high-leverage trading on Adrena)
+//   - Risk: leverage penalty replaced with max drawdown metric
+//     (drawdown captures equity curve quality; leverage is no longer penalized)
 //   - Consistency: std-dev of daily ROIs replaced with profitable days ratio
 //     (avoids perverse incentive to trade conservatively on big winning days)
 //   - Activity: variety score weight doubled (20→40), trade count reduced
@@ -54,11 +54,10 @@ export function computeCPI(
         };
     }
 
-    const leverageThreshold = config?.leveragePenaltyThreshold ?? 30;
     const assetCount = Math.max(config?.supportedAssetCount ?? 4, 1);
 
     const pnlScore = computePnlScore(positions);
-    const riskScore = computeRiskScore(positions, leverageThreshold);
+    const riskScore = computeRiskScore(positions);
     const consistencyScore = computeConsistencyScore(positions);
     const activityScore = computeActivityScore(positions, assetCount);
 
@@ -133,39 +132,77 @@ function computePnlScore(positions: AdrenaPosition[]): number {
 }
 
 // --------------------------------------------------------------------------
-// Risk Score (20% weight)
+// Risk Score (30% weight)
 //
-// Measures risk management discipline.
-// Penalizes: liquidations, excessive leverage.
+// Measures risk management discipline via equity curve stability.
 //
-// Liquidation Penalty = (liquidated count / total count) × 100
-// Leverage Penalty = max(0, (avg_leverage - threshold) × 2)
-//     Default threshold: 30x (configurable per tournament).
-//     At 30x: 0 penalty. At 50x: 40 penalty. At 100x: 140 → clamped.
+// Two penalty components:
+//   1. Liquidation Penalty = (liquidated count / total count) × 100
+//   2. Drawdown Penalty = min(drawdownRatio × 200, 80)
+//      where drawdownRatio = maxDrawdown / totalClosedExposure
 //
-// Risk Score = 100 - Liquidation Penalty - Leverage Penalty
+// Max drawdown is computed from the cumulative PnL curve of closed positions,
+// sorted by exit_date (secondary: position_id for determinism).
+//
+// Risk Score = 100 - Liquidation Penalty - Drawdown Penalty
 // --------------------------------------------------------------------------
-function computeRiskScore(
-    positions: AdrenaPosition[],
-    leverageThreshold: number,
-): number {
+function computeRiskScore(positions: AdrenaPosition[]): number {
     if (positions.length === 0) return 0;
 
-    // Liquidation penalty
+    // Liquidation penalty (unchanged — uses ALL positions)
     const liquidatedCount = positions.filter((p) => p.status === 'liquidate').length;
     const liquidationPenalty = (liquidatedCount / positions.length) * 100;
 
-    // Average leverage penalty
-    const avgLeverage =
-        positions.reduce((sum, p) => sum + p.entry_leverage, 0) / positions.length;
-    const leveragePenalty = Math.max(0, (avgLeverage - leverageThreshold) * 2);
+    // Drawdown penalty — only from closed positions with exit_date
+    const closedWithExit = positions.filter(
+        (p) => (p.status === 'close' || p.status === 'liquidate') && p.exit_date !== null,
+    );
 
-    const rawScore = 100 - liquidationPenalty - leveragePenalty;
+    if (closedWithExit.length === 0) {
+        // No closed positions to compute drawdown from.
+        // Score based on liquidation penalty only.
+        return clamp(100 - liquidationPenalty, 0, 100);
+    }
+
+    // Sort by exit_date chronologically; ties broken by position_id for determinism
+    closedWithExit.sort((a, b) => {
+        const dateA = new Date(a.exit_date!).getTime();
+        const dateB = new Date(b.exit_date!).getTime();
+        if (dateA !== dateB) return dateA - dateB;
+        return a.position_id - b.position_id;
+    });
+
+    // Compute cumulative PnL curve and track max drawdown
+    let cumPnL = 0;
+    let peak = 0;
+    let maxDrawdown = 0;
+
+    for (const p of closedWithExit) {
+        cumPnL += p.pnl ?? 0;
+        if (cumPnL > peak) peak = cumPnL;
+        const drawdown = peak - cumPnL;
+        if (drawdown > maxDrawdown) maxDrawdown = drawdown;
+    }
+
+    // Normalize by total closed exposure
+    const totalExposure = closedWithExit.reduce(
+        (sum, p) => sum + (p.exit_size ?? p.entry_size), 0,
+    );
+
+    if (totalExposure <= 0) {
+        return clamp(100 - liquidationPenalty, 0, 100);
+    }
+
+    const drawdownRatio = maxDrawdown / totalExposure;
+    // 0% → 0 penalty, 10% → 20 penalty, 40%+ → 80 penalty (capped)
+    const drawdownPenalty = Math.min(drawdownRatio * 200, 80);
+
+    const rawScore = 100 - liquidationPenalty - drawdownPenalty;
     return clamp(rawScore, 0, 100);
 }
 
 // --------------------------------------------------------------------------
-// Consistency Score (30% weight)
+// Consistency Score (20% weight)
 //
 // Measures trading consistency across the round.
 // Rewards traders who perform steadily across multiple days.
@@ -236,7 +273,7 @@ function computeConsistencyScore(positions: AdrenaPosition[]): number {
 // strategy. Capped to avoid rewarding trade spam.
 //
 // Trade Count Score = min(count / 10, 1) × 30   (max at 10+ trades)
-// Volume Score = min(volume / 10000, 1) × 30    (max at $10K+ volume)
+// Volume Score = 10 × log10(volume / 1000), capped at 30 ($1K→0, $10K→10, $100K→20, $1M→30)
 // Variety Score = min(symbols / N, 1) × 40       (max at N unique symbols)
 //
 // N = supportedAssetCount from tournament config (default: 4).
@@ -260,7 +297,9 @@ function computeActivityScore(
         (sum, p) => sum + (p.volume ?? p.entry_size),
         0
     );
-    const volumeScore = Math.min(totalVolume / 10000, 1) * 30;
+    // Log scale: $1K → 0, $10K → 10, $100K → 20, $1M → 30
+    const volumeRaw = totalVolume <= 1000 ? 0 : 10 * Math.log10(totalVolume / 1000);
+    const volumeScore = Math.min(Math.max(volumeRaw, 0), 30);
 
     // Symbol variety (dynamic asset count, not hardcoded)
     const uniqueSymbols = new Set(positions.map((p) => p.symbol));

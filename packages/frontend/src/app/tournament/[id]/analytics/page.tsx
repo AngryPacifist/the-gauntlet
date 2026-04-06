@@ -365,7 +365,7 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
                                 {categoryData.topTickTraveler.length > 0 && (
                                     <div className={`card ${styles.categoryCard}`}>
                                         <h3 className={styles.categoryTitle}>Top-Tick Traveler</h3>
-                                        <p className={styles.categoryDesc}>Best long entry near daily low</p>
+                                        <p className={styles.categoryDesc}>Best short entry near daily high</p>
                                         <div className={styles.categoryList}>
                                             {categoryData.topTickTraveler.map((entry, idx) => (
                                                 <div key={`tt-${entry.wallet}-${entry.scoreDate}`} className={styles.categoryEntry}>
@@ -388,7 +388,7 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
                                 {categoryData.bottomFisher.length > 0 && (
                                     <div className={`card ${styles.categoryCard}`}>
                                         <h3 className={styles.categoryTitle}>Bottom Fisher</h3>
-                                        <p className={styles.categoryDesc}>Best short entry near daily high</p>
+                                        <p className={styles.categoryDesc}>Best long entry near daily low</p>
                                         <div className={styles.categoryList}>
                                             {categoryData.bottomFisher.map((entry, idx) => (
                                                 <div key={`bf-${entry.wallet}-${entry.scoreDate}`} className={styles.categoryEntry}>

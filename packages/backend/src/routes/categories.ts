@@ -96,17 +96,17 @@ router.post('/score', async (req, res) => {
 
         // Fisher split
         const fisherResults = computeFisherScores(walletPositions, date, ohlcData);
-        const topTickRows: CategoryScoreRow[] = [];
         const bottomFisherRows: CategoryScoreRow[] = [];
+        const topTickRows: CategoryScoreRow[] = [];
 
         for (const [wallet, details] of fisherResults) {
-            topTickRows.push({
-                wallet, category: 'top_tick_traveler',
+            bottomFisherRows.push({
+                wallet, category: 'bottom_fisher',
                 score: details.longPoints,
                 details: { longEntry: details.longEntry, totalPoints: details.longPoints },
             });
-            bottomFisherRows.push({
-                wallet, category: 'bottom_fisher',
+            topTickRows.push({
+                wallet, category: 'top_tick_traveler',
                 score: details.shortPoints,
                 details: { shortEntry: details.shortEntry, totalPoints: details.shortPoints },
             });

@@ -71,7 +71,7 @@ Returns all tournaments, ordered by creation date (newest first).
         "roundDurations": [72, 48, 48],
         "minPositionCollateral": 25,
         "minTradeDurationSec": 120,
-        "leveragePenaltyThreshold": 30,
+        "leveragePenaltyThreshold": 30,  // legacy — no longer used by Risk score
         "supportedAssetCount": 4
       },
       "createdAt": "2026-03-08T04:00:00.000Z",
@@ -473,7 +473,7 @@ X-Admin-Secret: <your-admin-secret>
   "config": {
     "bracketSize": 16,
     "roundDurations": [48, 48, 48],
-    "leveragePenaltyThreshold": 30,
+    "leveragePenaltyThreshold": 30,  // legacy — no longer used by Risk score
     "supportedAssetCount": 4
   }
 }

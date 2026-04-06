@@ -358,7 +358,7 @@ export default function TournamentPage({ params }: { params: Promise<{ id: strin
                                     <ul className={styles.ruleList}>
                                         <li>Min ${tournament.config.minPositionCollateral} collateral per position</li>
                                         <li>Trades must be open for at least {Math.round(tournament.config.minTradeDurationSec / 60)} minutes</li>
-                                        <li>Leverage above {tournament.config.leveragePenaltyThreshold}x incurs risk penalty</li>
+                                        <li>Risk score based on equity curve drawdown</li>
                                         <li>No entry fee — free to compete</li>
                                     </ul>
                                 </div>

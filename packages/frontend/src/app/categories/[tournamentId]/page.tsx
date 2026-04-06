@@ -27,7 +27,7 @@ const CATEGORY_TABS: Array<{
         icon: Compass,
         color: 'var(--status-success)',
         colorBg: 'var(--status-success-bg)',
-        description: 'Best ROI per unique asset traded each day. Trade across more assets to maximize your score. Minimum $1,000 trade size, 25 points cap per asset.',
+        description: 'Best ROI per unique asset traded each day. Trade across more assets to maximize your score. Minimum $500 trade size, 25 points cap per asset.',
     },
     {
         slug: 'top_tick_traveler',
@@ -35,7 +35,7 @@ const CATEGORY_TABS: Array<{
         icon: TrendingUp,
         color: 'var(--accent-primary)',
         colorBg: 'rgba(108, 92, 231, 0.1)',
-        description: 'Catch the best long entry relative to the day\'s low. Top 3 earn rank points (3, 2, 1) multiplied by ROI.',
+        description: 'Catch the best short entry relative to the day\'s high. Top 3 earn rank points (3, 2, 1) multiplied by ROI.',
     },
     {
         slug: 'bottom_fisher',
@@ -43,7 +43,7 @@ const CATEGORY_TABS: Array<{
         icon: Target,
         color: '#e17055',
         colorBg: 'rgba(225, 112, 85, 0.1)',
-        description: 'Catch the best short entry relative to the day\'s high. Top 3 earn rank points (3, 2, 1) multiplied by ROI.',
+        description: 'Catch the best long entry relative to the day\'s low. Top 3 earn rank points (3, 2, 1) multiplied by ROI.',
     },
     {
         slug: 'risk_manager',

@@ -199,12 +199,12 @@ export default function RegisterPage() {
                                         <span className="weight-label">PnL (35%)</span>
                                     </div>
                                     <div className="weight-item">
-                                        <span className="weight-bar weight-risk" style={{ width: '25%' }}></span>
-                                        <span className="weight-label">Risk (25%)</span>
+                                        <span className="weight-bar weight-risk" style={{ width: '30%' }}></span>
+                                        <span className="weight-label">Risk (30%)</span>
                                     </div>
                                     <div className="weight-item">
-                                        <span className="weight-bar weight-consistency" style={{ width: '25%' }}></span>
-                                        <span className="weight-label">Consistency (25%)</span>
+                                        <span className="weight-bar weight-consistency" style={{ width: '20%' }}></span>
+                                        <span className="weight-label">Consistency (20%)</span>
                                     </div>
                                     <div className="weight-item">
                                         <span className="weight-bar weight-activity" style={{ width: '15%' }}></span>

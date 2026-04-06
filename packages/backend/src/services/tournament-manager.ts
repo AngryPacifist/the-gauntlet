@@ -17,8 +17,9 @@
 //   - Round durations: configurable per-round via roundDurations[] array
 //   - Fallen Fighters: at main completion, all eliminated wallets enter a
 //     single consolation pool scored over the final round's time window.
-//   - Config: leveragePenaltyThreshold + supportedAssetCount passed to
-//     scoring engine.
+//   - Config: supportedAssetCount passed to scoring engine.
+//     leveragePenaltyThreshold retained in config type for backward compat
+//     but no longer consumed (replaced by drawdown metric April 2026).
 // ============================================================================
 
 import { eq, and } from 'drizzle-orm';
@@ -283,7 +284,7 @@ export async function startTournament(
 // For each bracket entry:
 //   1. Fetch positions from Adrena API
 //   2. Filter to round window + apply competition rules
-//   3. Compute CPI (with config for leverage threshold + asset count)
+//   3. Compute CPI (with config for asset count)
 //   4. Update bracket_entries with scores
 //   5. Save score snapshot for audit trail
 // --------------------------------------------------------------------------
@@ -356,7 +357,7 @@ export async function computeRoundScores(roundId: number): Promise<number> {
                     config.minTradeDurationSec,
                 );
 
-                // Compute CPI — pass config for leverage threshold + asset count
+                // Compute CPI — pass config for asset count
                 const scores: CPIScores = computeCPI(
                     validPositions,
                     round.startTime,

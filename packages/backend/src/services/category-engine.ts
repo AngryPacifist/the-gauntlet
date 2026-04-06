@@ -3,8 +3,8 @@
 //
 // Implements engagement kick categories for The Gauntlet:
 // 1. "All Around Trader" -- best ROI per unique asset traded, summed (daily)
-// 2. "Top-Tick Traveler" -- long entry precision relative to daily low (daily)
-// 3. "Bottom Fisher"     -- short entry precision relative to daily high (daily)
+// 2. "Bottom Fisher"         -- long entry precision relative to daily low (daily)
+// 3. "Top-Tick Traveler"     -- short entry precision relative to daily high (daily)
 // 4. "Risk Manager"      -- best stop-loss ROI in a 2-day window
 // 5. "The Humble One"    -- best take-profit ROI in a 2-day window
 //
@@ -32,7 +32,7 @@ import type {
 // --------------------------------------------------------------------------
 
 // All Around Trader: minimum trade size in USD (exit_size, already USD)
-const ALL_AROUND_MIN_TRADE_USD = 1000;
+const ALL_AROUND_MIN_TRADE_USD = 500;
 
 // All Around Trader: max points per asset (cap to prevent one outlier dominating)
 const ALL_AROUND_MAX_POINTS_PER_ASSET = 25;

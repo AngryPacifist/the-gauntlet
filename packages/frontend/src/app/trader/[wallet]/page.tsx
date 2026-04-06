@@ -250,7 +250,7 @@ export default function TraderPage({ params }: { params: Promise<{ wallet: strin
                                                 style={{ width: `${round.scores.riskScore}%` }}
                                             />
                                         </div>
-                                        <span className={styles.scoreWeight}>25% weight</span>
+                                        <span className={styles.scoreWeight}>30% weight</span>
                                     </div>
 
                                     <div className={styles.scoreItem}>
@@ -264,7 +264,7 @@ export default function TraderPage({ params }: { params: Promise<{ wallet: strin
                                                 style={{ width: `${round.scores.consistencyScore}%` }}
                                             />
                                         </div>
-                                        <span className={styles.scoreWeight}>25% weight</span>
+                                        <span className={styles.scoreWeight}>20% weight</span>
                                     </div>
 
                                     <div className={styles.scoreItem}>

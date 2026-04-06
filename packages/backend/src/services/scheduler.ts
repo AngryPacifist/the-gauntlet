@@ -6,6 +6,7 @@
 //   2. Round advancement: check if any active round's endTime has passed,
 //      and if so, advance the tournament to the next round
 //   3. Daily category scoring: midnight UTC, compute All Around + Fisher
+//      (Bottom Fisher = longs near low, Top-Tick Traveler = shorts near high)
 //      scores for all registered wallets in active tournaments
 //
 // Updated to handle multiple active rounds per tournament (main + consolation).
@@ -208,7 +209,7 @@ async function scoreDailyCategories(): Promise<void> {
                 }
             }
 
-            // --- Daily Categories: All Around + Fisher split ---
+            // --- Daily Categories: All Around + Fisher (Bottom Fisher = longs, Top-Tick = shorts) ---
 
             const allAroundRows: CategoryScoreRow[] = [];
             for (const [wallet, positions] of walletPositions) {
@@ -220,17 +221,17 @@ async function scoreDailyCategories(): Promise<void> {
             }
 
             const fisherResults = computeFisherScores(walletPositions, dateStr, ohlcData);
-            const topTickRows: CategoryScoreRow[] = [];
             const bottomFisherRows: CategoryScoreRow[] = [];
+            const topTickRows: CategoryScoreRow[] = [];
 
             for (const [wallet, details] of fisherResults) {
-                topTickRows.push({
-                    wallet, category: 'top_tick_traveler',
+                bottomFisherRows.push({
+                    wallet, category: 'bottom_fisher',
                     score: details.longPoints,
                     details: { longEntry: details.longEntry, totalPoints: details.longPoints },
                 });
-                bottomFisherRows.push({
-                    wallet, category: 'bottom_fisher',
+                topTickRows.push({
+                    wallet, category: 'top_tick_traveler',
                     score: details.shortPoints,
                     details: { shortEntry: details.shortEntry, totalPoints: details.shortPoints },
                 });
