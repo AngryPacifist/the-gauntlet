@@ -12,11 +12,12 @@
 // Each weekly gauntlet is a full tournament (bracket → rounds → scoring).
 // The season tracks aggregate points across all weeks for qualification.
 //
-// Points scheme (per weekly tournament placement):
+// Points scheme (per weekly tournament — additive stacking):
 //   Winner: 25, 2nd: 18, 3rd: 15, 4th: 12, 5th: 10, Other Finalist: 8,
-//   Passing R1: 3, FF 1st: 6, FF 2nd: 4, FF 3rd: 3, Other FF: 1
+//   Passing R1: +3, Passing R2: +5, FF 1st: +6, FF 2nd: +4, FF 3rd: +3, Other FF: +1
+//   Survival bonuses are conditional on actual rounds played.
 //
-// Daily category season points (awarded each UTC day):
+// Daily category season points (awarded each UTC day, tie-shared):
 //   Fisher (top 3 per direction): 3 / 2 / 1
 //   All Around (top 3 by score): 3 / 2 / 1
 // ============================================================================
@@ -229,6 +230,34 @@ async function awardWeeklyPoints(
     tournamentId: number,
     pointsScheme: SeasonPointsScheme,
 ): Promise<void> {
+    // Idempotency guard: check if this tournament was already scored.
+    // Uses a sentinel row in daily_category_scores (same pattern as Fisher/AllAround).
+    // scoreDate is a PostgreSQL date column — must use a valid date, not an arbitrary string.
+    // We use '1970-01-01' as a fixed sentinel date, scoped by tournamentId.
+    const SENTINEL_WALLET = '__weekly_points_sentinel__';
+    const SENTINEL_CATEGORY = 'weekly_points';
+    const SENTINEL_DATE = '1970-01-01';
+
+    const [alreadyProcessed] = await db
+        .select()
+        .from(dailyCategoryScores)
+        .where(
+            and(
+                eq(dailyCategoryScores.tournamentId, tournamentId),
+                eq(dailyCategoryScores.wallet, SENTINEL_WALLET),
+                eq(dailyCategoryScores.category, SENTINEL_CATEGORY),
+                eq(dailyCategoryScores.scoreDate, SENTINEL_DATE),
+            ),
+        )
+        .limit(1);
+
+    if (alreadyProcessed) {
+        console.log(
+            `[SeasonManager] Weekly points already awarded for tournament ${tournamentId}. Skipping.`,
+        );
+        return;
+    }
+
     // Get all rounds for this tournament
     const tournamentRounds = await db
         .select()
@@ -320,17 +349,30 @@ async function awardWeeklyPoints(
         }
     }
 
-    // Award "Passing R1" points — wallets that survived R1 (eliminated in R2+)
+    // Award survival milestone points (additive)
+    // Survival bonuses are conditional on how many main rounds actually ran.
+    // A tournament may complete after 1 round if ≤3 wallets advance (tournament-manager.ts:522).
+    // passingR1 only has meaning if R2 exists. passingR2 only if R3 exists.
     for (const [wallet, roundNumber] of eliminatedInRound) {
-        // Skip if wallet is already a finalist (shouldn't happen, but safety)
-        if (walletPlacements.has(wallet)) continue;
-
-        if (roundNumber > 1) {
-            // Survived R1, eliminated later — "Passing R1" gives base recognition
-            // Their main points will come from FF placement below
+        if (roundNumber > 1 && mainRounds.length >= 2) {
+            // Survived R1, eliminated in R2 or later
             const current = walletPoints.get(wallet) ?? 0;
-            walletPoints.set(wallet, Math.max(current, pointsScheme.passingR1));
+            walletPoints.set(wallet, current + pointsScheme.passingR1);
         }
+        if (roundNumber > 2 && mainRounds.length >= 3) {
+            // Survived R2, eliminated in R3+
+            const current = walletPoints.get(wallet) ?? 0;
+            walletPoints.set(wallet, current + pointsScheme.passingR2);
+        }
+    }
+
+    // Finalists survived all main rounds — survival bonus conditioned on actual rounds played
+    for (const finalist of finalists) {
+        const current = walletPoints.get(finalist.wallet) ?? 0;
+        let survivalBonus = 0;
+        if (mainRounds.length >= 2) survivalBonus += pointsScheme.passingR1;
+        if (mainRounds.length >= 3) survivalBonus += pointsScheme.passingR2;
+        walletPoints.set(finalist.wallet, current + survivalBonus);
     }
 
     // Award Fallen Fighters (consolation) points — all FF participants
@@ -367,9 +409,7 @@ async function awardWeeklyPoints(
                 ? consolationTiers[i]
                 : pointsScheme.otherConsolation;
             const currentPoints = walletPoints.get(wallet) ?? 0;
-            if (tierPoints > currentPoints) {
-                walletPoints.set(wallet, tierPoints);
-            }
+            walletPoints.set(wallet, currentPoints + tierPoints);
         }
     }
 
@@ -411,6 +451,17 @@ async function awardWeeklyPoints(
             });
         }
     }
+
+    // Write sentinel to prevent double-awarding
+    await db.insert(dailyCategoryScores).values({
+        tournamentId,
+        seasonId,
+        wallet: SENTINEL_WALLET,
+        category: SENTINEL_CATEGORY,
+        scoreDate: SENTINEL_DATE,
+        score: 0,
+        details: {},
+    });
 
     console.log(
         `[SeasonManager] Awarded weekly points for tournament ${tournamentId}: ` +
@@ -602,13 +653,22 @@ export async function awardDailyAllAroundPoints(
         return;
     }
 
-    // Award 3/2/1 to top 3 by score (skip zero-score wallets)
+    // Award season points with tie-sharing (standard competition ranking)
+    // Tied wallets all receive the highest rank's points; next rank = rank + N_tied
     const pointsToAward = new Map<string, number>();
 
-    for (let i = 0; i < Math.min(allAroundRows.length, SEASON_POINTS.length); i++) {
+    let rank = 0;
+    for (let i = 0; i < allAroundRows.length; i++) {
         const row = allAroundRows[i];
-        if (row.score > 0) {
-            pointsToAward.set(row.wallet, SEASON_POINTS[i]);
+        if (row.score <= 0) continue;
+
+        // New rank if score differs from previous
+        if (i === 0 || row.score !== allAroundRows[i - 1].score) {
+            rank = i; // 0-indexed position = competition rank (skip tied slots)
+        }
+
+        if (rank < SEASON_POINTS.length) {
+            pointsToAward.set(row.wallet, SEASON_POINTS[rank]);
         }
     }
 

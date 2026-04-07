@@ -203,7 +203,9 @@ export default function CategoriesPage({ params }: { params: Promise<{ tournamen
                                 {leaderboard.map((entry, i) => (
                                     <tr key={entry.wallet} style={{ borderBottom: '1px solid var(--border-subtle)' }}>
                                         <td style={tdStyle}>
-                                            <span style={getRankStyle(i)}>{i + 1}</span>
+                                            <span style={getRankStyle(computeCompetitionRank(leaderboard, i) - 1)}>
+                                                {computeCompetitionRank(leaderboard, i)}
+                                            </span>
                                         </td>
                                         <td style={{ ...tdStyle, fontFamily: 'var(--font-mono)', fontSize: '13px' }}>
                                             {entry.wallet.slice(0, 4)}...{entry.wallet.slice(-4)}
@@ -283,6 +285,20 @@ export default function CategoriesPage({ params }: { params: Promise<{ tournamen
             </section>
         </div>
     );
+}
+
+/**
+ * Standard competition ranking: tied entries share the same rank.
+ * For entry at index i, rank = index of first entry with the same score + 1.
+ */
+function computeCompetitionRank(entries: CategoryLeaderboardEntry[], index: number): number {
+    const score = entries[index].totalScore;
+    for (let j = 0; j < index; j++) {
+        if (entries[j].totalScore === score) {
+            return j + 1;
+        }
+    }
+    return index + 1;
 }
 
 function getRankStyle(index: number): React.CSSProperties {

@@ -211,6 +211,7 @@ export interface SeasonPointsScheme {
     fifth: number;
     otherFinalist: number;
     passingR1: number;
+    passingR2: number;
     consolationWinner: number;
     consolationSecond: number;
     consolationThird: number;
@@ -233,6 +234,7 @@ export const DEFAULT_SEASON_POINTS: SeasonPointsScheme = {
     fifth: 10,
     otherFinalist: 8,
     passingR1: 3,
+    passingR2: 5,
     consolationWinner: 6,
     consolationSecond: 4,
     consolationThird: 3,

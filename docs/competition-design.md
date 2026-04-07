@@ -180,23 +180,33 @@ registration → active → final → completed
 
 ### Season Points
 
-After each weekly tournament completes, wallets earn season points based on placement:
+After each weekly tournament completes, wallets earn season points based on placement. Points are **additive** — a wallet accumulates points from every milestone reached, not just the highest single placement:
 
-| Placement | Points |
-|-----------|--------|
-| Tournament winner | 25 |
-| 2nd place | 18 |
-| 3rd place | 15 |
-| 4th place | 12 |
-| 5th place | 10 |
-| Other finalists | 8 |
-| Passing R1 (survived R1, eliminated R2+) | 3 |
-| FF 1st (Fallen Fighters winner) | 6 |
-| FF 2nd | 4 |
-| FF 3rd | 3 |
-| Other FF participants | 1 |
+| Placement | Points | Stacking |
+|-----------|--------|----------|
+| Tournament winner | 25 | Placement |
+| 2nd place | 18 | Placement |
+| 3rd place | 15 | Placement |
+| 4th place | 12 | Placement |
+| 5th place | 10 | Placement |
+| Other finalists | 8 | Placement |
+| Survived R1 (played in R2+) | +3 | Additive survival bonus |
+| Survived R2 (played in R3+) | +5 | Additive survival bonus |
+| FF 1st (Fallen Fighters winner) | +6 | Additive FF bonus |
+| FF 2nd | +4 | Additive FF bonus |
+| FF 3rd | +3 | Additive FF bonus |
+| Other FF participants | +1 | Additive FF bonus |
 
-Points accumulate across all weeks. FF points are only applied if they exceed the wallet's existing weekly points (prevents double-counting). Additionally, top 3 in each Fisher direction (Top-Tick Traveler / Bottom Fisher) and top 3 All Around traders earn 3/2/1 season points daily.
+**Examples (standard 3-round tournament):**
+- Tournament winner: 25 (placement) + 3 (R1) + 5 (R2) = **33**
+- Eliminated in R2, FF 1st: 3 (R1) + 6 (FF) = **9**
+- Eliminated in R1, FF other: 0 + 1 (FF) = **1**
+
+**Survival bonuses are conditional on actual rounds played**: passingR1 is only awarded if ≥2 main rounds exist; passingR2 only if ≥3. A small-field tournament completing after 1 round awards no survival bonuses.
+
+**Idempotency**: A sentinel row in `daily_category_scores` prevents `awardWeeklyPoints` from being called twice for the same tournament.
+
+Points accumulate across all weeks. Additionally, top 3 in each Fisher direction (Top-Tick Traveler / Bottom Fisher) and top 3 All Around traders earn 3/2/1 season points daily (with tie-sharing — see below).
 
 ### Qualification
 
@@ -231,7 +241,7 @@ Rewards diversified profitable trading across multiple assets within a single UT
 
 **Design rationale:** The $500 minimum prevents dust-trade farming. The 25-point cap prevents one outlier position from dominating. Only closed positions are counted because open positions have no realized PnL.
 
-**Season points:** Top 3 wallets by daily All Around score earn 3 / 2 / 1 season points respectively.
+**Season points:** Top 3 wallets by daily All Around score earn 3 / 2 / 1 season points respectively. **Tie-sharing**: tied wallets all receive the highest tied rank's points (standard competition ranking). Three wallets tied for 1st all receive 3 points; the next wallet is ranked 4th and receives no season points.
 
 ### Bottom Fisher (Long Direction)
 

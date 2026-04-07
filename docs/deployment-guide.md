@@ -151,6 +151,7 @@ adrena-the-gauntlet/
 │   │           ├── adrena-client.ts       # Adrena API client
 │   │           ├── season-manager.ts      # Season lifecycle + daily category season points (Fisher/All Around)
 │   │           ├── category-engine.ts     # All Around + Fisher daily scoring
+│   │           ├── final-score.ts         # CPI + quest points join, raffle ticket computation
 │   │           └── pyth-client.ts         # Pyth Benchmarks OHLC fetcher with DB cache
 │   └── frontend/
 │       └── src/

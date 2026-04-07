@@ -333,6 +333,7 @@ export interface Season {
             fifth: number;
             otherFinalist: number;
             passingR1: number;
+            passingR2: number;
             consolationWinner: number;
             consolationSecond: number;
             consolationThird: number;
