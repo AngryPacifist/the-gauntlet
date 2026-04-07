@@ -21,6 +21,7 @@ import {
     ChevronRight,
     BarChart3,
     Compass,
+    Ticket,
 } from 'lucide-react';
 import Link from 'next/link';
 import ShareButton from '@/components/ShareButton';
@@ -450,6 +451,13 @@ export default function TournamentPage({ params }: { params: Promise<{ id: strin
                                 style={{ fontSize: '0.8125rem', padding: '6px 12px' }}
                             >
                                 <Compass size={14} /> Categories
+                            </Link>
+                            <Link
+                                href={`/raffle/${tournamentId}`}
+                                className="btn btn--secondary"
+                                style={{ fontSize: '0.8125rem', padding: '6px 12px' }}
+                            >
+                                <Ticket size={14} /> Raffle
                             </Link>
                         </div>
                     </div>

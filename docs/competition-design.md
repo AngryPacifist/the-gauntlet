@@ -558,6 +558,27 @@ The `verifyDraw()` function re-runs the identical algorithm using the stored blo
 5. Winners are marked in `raffle_results` and the draw audit trail is persisted.
 6. Anyone can verify via `GET /api/raffle/:tournamentId/verify`.
 
+### Frontend Access
+
+**Raffle Page** (`/raffle/:tournamentId`):
+
+The raffle page displays ticket counts and eligibility status for all participants. It is accessible from the tournament page action bar (alongside Leaderboard, Analytics, and Categories). The page works in two states:
+
+- **Pre-draw**: Shows ticket counts, CPI scores, quest points, and eligibility status for every wallet. The status column displays `TOP 30%` (excluded), `ELIGIBLE`, `<10 TRADES` (excluded), or `0 TICKETS`.
+- **Post-draw**: Additionally highlights winners with a `WINNER` badge.
+
+A wallet search input allows participants to find their row instantly (exact match, scrolls to and highlights the row).
+
+The results table uses tie-aware competition ranking and renders in server-provided order (`finalScore DESC, wallet ASC`) with no client-side re-sorting.
+
+**Badge Grid** (`/categories/:tournamentId?tab=leverage_master_long&wallet=xxx`):
+
+The leverage quest badge grid shows real-time step completion for a specific wallet. The wallet is passed via the `?wallet=` URL query parameter. When a wallet is provided:
+
+1. The page calls `GET /api/quests/:tournamentId/:wallet` to fetch quest progress.
+2. The badge grid displays the appropriate boolean array (`long` or `short`) based on the active tab.
+3. If no wallet is provided, or no quest data exists, the grid defaults to all-empty (10 uncompleted steps).
+
 ### Top 30% Determination
 
 The top 30% cutoff uses competition ranking on the final composite score (CPI + quest points). Tied wallets share the same rank, and `Math.ceil(walletCount × 0.30)` determines the cutoff index.

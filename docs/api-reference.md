@@ -840,7 +840,7 @@ If no progress exists, all boolean arrays default to `false` and counts to `0`.
 GET /api/raffle/:tournamentId
 ```
 
-Returns all raffle results for a tournament, sorted by final score descending.
+Returns all raffle results for a tournament, sorted by final score descending with `wallet ASC` as the deterministic tiebreaker.
 
 **Response:**
 ```json

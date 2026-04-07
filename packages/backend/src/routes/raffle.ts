@@ -7,7 +7,7 @@
 // ============================================================================
 
 import { Router } from 'express';
-import { eq, and, desc } from 'drizzle-orm';
+import { eq, and, desc, asc } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import { raffleResults } from '../db/schema.js';
 import { verifyDraw } from '../services/raffle-engine.js';
@@ -29,7 +29,7 @@ router.get('/:tournamentId', async (req, res) => {
             .select()
             .from(raffleResults)
             .where(eq(raffleResults.tournamentId, tournamentId))
-            .orderBy(desc(raffleResults.finalScore));
+            .orderBy(desc(raffleResults.finalScore), asc(raffleResults.wallet));
 
         res.json({ success: true, data: results });
     } catch (error) {
