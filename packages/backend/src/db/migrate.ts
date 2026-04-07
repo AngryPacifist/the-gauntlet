@@ -139,6 +139,49 @@ CREATE TABLE IF NOT EXISTS pyth_ohlc_cache (
   UNIQUE(symbol, bar_date)
 );
 
+-- Quest Progress (Leverage Master)
+CREATE TABLE IF NOT EXISTS quest_progress (
+  id SERIAL PRIMARY KEY,
+  tournament_id INTEGER NOT NULL REFERENCES tournaments(id),
+  wallet VARCHAR(44) NOT NULL,
+  quest_type VARCHAR(30) NOT NULL,
+  side VARCHAR(10) NOT NULL,
+  steps_completed JSONB NOT NULL,
+  step_count INTEGER NOT NULL DEFAULT 0,
+  week_number INTEGER NOT NULL,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE(tournament_id, wallet, quest_type, side, week_number)
+);
+
+-- Raffle Results
+CREATE TABLE IF NOT EXISTS raffle_results (
+  id SERIAL PRIMARY KEY,
+  tournament_id INTEGER NOT NULL REFERENCES tournaments(id),
+  wallet VARCHAR(44) NOT NULL,
+  final_score REAL NOT NULL,
+  cpi_score REAL NOT NULL,
+  quest_points REAL NOT NULL,
+  closed_position_count INTEGER NOT NULL,
+  is_top_percent BOOLEAN NOT NULL,
+  ticket_count INTEGER NOT NULL DEFAULT 0,
+  is_winner BOOLEAN NOT NULL DEFAULT false,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE(tournament_id, wallet)
+);
+
+-- Raffle Draws
+CREATE TABLE IF NOT EXISTS raffle_draws (
+  id SERIAL PRIMARY KEY,
+  tournament_id INTEGER NOT NULL REFERENCES tournaments(id),
+  block_hash VARCHAR(128) NOT NULL,
+  seed INTEGER NOT NULL,
+  eligible_count INTEGER NOT NULL,
+  total_tickets INTEGER NOT NULL,
+  winner_count INTEGER NOT NULL,
+  winners JSONB NOT NULL,
+  drawn_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 -- Add type column to rounds if not already present (was added to CREATE TABLE
 -- definition after initial deployment, but existing DBs don't have it)
 DO $$ BEGIN
@@ -194,6 +237,8 @@ CREATE INDEX IF NOT EXISTS idx_season_standings_season ON season_standings(seaso
 CREATE INDEX IF NOT EXISTS idx_season_standings_points ON season_standings(season_id, total_points DESC);
 CREATE INDEX IF NOT EXISTS idx_daily_category_leaderboard ON daily_category_scores(tournament_id, category, score_date, score DESC);
 CREATE INDEX IF NOT EXISTS idx_pyth_ohlc_lookup ON pyth_ohlc_cache(symbol, bar_date);
+CREATE INDEX IF NOT EXISTS idx_quest_progress_tournament ON quest_progress(tournament_id, week_number);
+CREATE INDEX IF NOT EXISTS idx_raffle_results_tournament ON raffle_results(tournament_id);
 `;
 
 async function migrate() {

@@ -32,14 +32,14 @@ const adrenaClient = new AdrenaClient();
 // --------------------------------------------------------------------------
 const VALID_CATEGORIES = [
     'all_around', 'top_tick_traveler', 'bottom_fisher',
-    'risk_manager', 'humble_one', 'leverage_master',
+    'risk_manager', 'humble_one', 'leverage_master_long', 'leverage_master_short',
 ] as const;
 
 // Categories that use SUM aggregation (daily additive scores)
 const SUM_CATEGORIES = new Set(['all_around', 'top_tick_traveler', 'bottom_fisher']);
 
 // Categories that use MAX aggregation (best single window score)
-// risk_manager, humble_one, leverage_master
+// risk_manager, humble_one, leverage_master_long, leverage_master_short
 
 // --------------------------------------------------------------------------
 // POST /api/categories/score -- Manually trigger daily category scoring
@@ -130,7 +130,10 @@ router.post('/score', async (req, res) => {
         const [firstRound] = await db
             .select({ startTime: rounds.startTime })
             .from(rounds)
-            .where(eq(rounds.tournamentId, tournamentId))
+            .where(and(
+                eq(rounds.tournamentId, tournamentId),
+                eq(rounds.type, 'main'),
+            ))
             .orderBy(asc(rounds.startTime))
             .limit(1);
 

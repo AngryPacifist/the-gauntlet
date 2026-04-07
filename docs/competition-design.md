@@ -220,10 +220,11 @@ Finalists are wallets that advanced in (or were never eliminated from) the last 
 
 ## Daily Categories
 
-Alongside the main CPI-based bracket tournament, five tactical categories provide engagement loops for all registered traders -- including those already eliminated from the main bracket.
+Alongside the main CPI-based bracket tournament, seven tactical categories provide engagement loops for all registered traders -- including those already eliminated from the main bracket.
 
 **Daily categories** (scored every UTC day): All Around, Bottom Fisher, Top-Tick Traveler
 **2-day window categories** (scored on even-numbered tournament days): Risk Manager, The Humble One
+**Weekly categories** (scored at week boundary): Leverage Master (Long), Leverage Master (Short)
 
 ### All Around Trader
 
@@ -327,8 +328,10 @@ All category scoring is fully deterministic. Given the same input data, the same
 | Fisher best position (intra-wallet) | proximity DESC, ROI DESC, position_id ASC |
 | Risk Manager / Humble One best trade | ROI DESC, position_id ASC |
 | All Around best asset position | ROI DESC (single-valued per asset) |
+| Leverage Master leaderboard | stepCount DESC, wallet ASC |
 | Season point awards (top-3 boundary) | score DESC, wallet ASC |
 | API leaderboard queries | score DESC, wallet ASC |
+| Raffle draw pool order | wallet ASC (before PRNG selection) |
 
 ### 2-Day Window Mechanics
 
@@ -359,6 +362,38 @@ Window scoring fires when `dayNumber >= 2 && dayNumber % 2 === 0`.
 | JITOSOL | `Crypto.JITOSOL/USD` |
 
 The mapping is configurable via `ADRENA_TO_PYTH_SYMBOL` in `types.ts`.
+
+### Leverage Master (Weekly Quest)
+
+A progressive 10-step quest requiring traders to open positions at specific leverage tiers. Two independent tracks: **Long** and **Short**.
+
+**Steps:** 10x, 20x, 30x, 40x, 50x, 60x, 70x, 80x, 90x, 100x.
+Each step has a ±2x tolerance window (e.g., step 50x accepts 48x–52x). Step 100x is capped at Adrena's protocol max (98x–100x).
+
+**Qualification criteria per position:**
+- Side must match the track (long or short)
+- Collateral ≥ $25 (`entry_collateral_amount`, with fallback to `collateral_amount`)
+- Duration ≥ 120 seconds (open positions check elapsed time since entry)
+- `entry_leverage` within the step's tolerance window
+
+**Progress persistence:**
+- Steps are permanent per week — once earned, never removed.
+- Progress is stored in the `quest_progress` table with a unique index on `(tournament_id, wallet, quest_type, side, week_number)`.
+
+**Weekly reset:**
+Quest weeks are 7-day windows anchored to the tournament's first main round start date. The week boundary is computed by `computeCurrentQuestWeek()` in the scheduler.
+
+**Scoring:**
+At each week boundary (last day of the 7-day window), a leaderboard is computed for each side independently:
+- Wallets are ranked by `stepCount DESC, wallet ASC` (fully deterministic).
+- Scores are saved to `daily_category_scores` as `leverage_master_long` / `leverage_master_short`.
+- `final-score.ts` processes these as `WEEKLY_CATEGORIES`.
+
+**Leaderboard aggregation:** MAX (best single week), not SUM.
+
+**Frontend:** The badge grid shows 10 step badges (10x through 100x) with visual completed/pending state. The standard leaderboard table appears underneath.
+
+**API:** `GET /api/quests/:tournamentId/:wallet?week=N` returns the wallet's step completion for the current or specified week.
 
 ---
 
@@ -478,6 +513,55 @@ If MrRewards integration is not available, prizes can be distributed manually:
 3. Document the transactions in the tournament's audit trail
 
 ---
+
+## Raffle System
+
+A deterministic weighted raffle for prize distribution to participants outside the top skill tier. Designed to be fully verifiable and replayable.
+
+### Eligibility
+
+| Criterion | Threshold | Purpose |
+|-----------|-----------|----------|
+| Closed positions | ≥ 10 | Ensures genuine participation |
+| Final score ranking | Not in top 30% | Top performers receive skill prizes instead |
+| Ticket count | > 0 | Must have earned tickets through CPI/quest performance |
+
+### Ticket Formula
+
+```
+tickets = floor(CPI × 0.5) + floor(questPoints × 20)
+```
+
+Top 30% wallets receive zero tickets (they are excluded from the raffle and receive skill-based prizes).
+
+### Draw Mechanism
+
+1. **Seed**: A future Solana block hash is selected after ticket computation is finalized. The first 8 hex characters are parsed as a 32-bit integer to seed the PRNG.
+2. **PRNG**: Mulberry32 — a deterministic 32-bit PRNG that produces the same sequence of floats in [0, 1) for any given seed.
+3. **Selection**: Weighted random selection without replacement. Each wallet's ticket count is its weight.
+4. **Determinism**: The eligible pool is sorted by `wallet ASC` before the draw loop begins. This ensures that two runs with the same block hash always produce identical winners, regardless of database query order.
+
+### Verification
+
+The `verifyDraw()` function re-runs the identical algorithm using the stored block hash and seed, then compares the replayed winners against the stored winners. Any mismatch is reported.
+
+**Audit trail:** The `raffle_draws` table stores:
+- Block hash, PRNG seed, eligible count, total tickets, winner count, and the complete winner list (as JSON).
+- Public verification endpoint: `GET /api/raffle/:tournamentId/verify`
+
+### Admin Workflow
+
+1. Tournament completes and all scoring is finalized.
+2. Admin calls `POST /api/admin/raffle/:id/compute` — populates ticket counts and eligibility.
+3. Admin selects a future Solana block hash (announced publicly before the block is mined).
+4. Admin calls `POST /api/admin/raffle/:id/draw` with the block hash and prize count.
+5. Winners are marked in `raffle_results` and the draw audit trail is persisted.
+6. Anyone can verify via `GET /api/raffle/:tournamentId/verify`.
+
+### Top 30% Determination
+
+The top 30% cutoff uses competition ranking on the final composite score (CPI + quest points). Tied wallets share the same rank, and `Math.ceil(walletCount × 0.30)` determines the cutoff index.
+
 
 ## Mutagen Integration
 

@@ -34,7 +34,7 @@ const LEVERAGE_QUEST_POINTS = [1.5, 1.2, 1.0, 0.75, 0.50];
 // Categories grouped by scoring period
 const DAILY_CATEGORIES = ['all_around', 'top_tick_traveler', 'bottom_fisher'];
 const MULTIDAY_CATEGORIES = ['risk_manager', 'humble_one'];
-const WEEKLY_CATEGORIES = ['leverage_master'];
+const WEEKLY_CATEGORIES = ['leverage_master_long', 'leverage_master_short'];
 
 export interface FinalScoreResult {
     wallet: string;

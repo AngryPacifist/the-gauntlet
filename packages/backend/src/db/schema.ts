@@ -165,3 +165,55 @@ export const pythOhlcCache = pgTable('pyth_ohlc_cache', {
 }, (table) => ({
     uniqueSymbolDate: uniqueIndex('idx_pyth_ohlc_unique').on(table.symbol, table.barDate),
 }));
+
+// --- Quest Progress (Leverage Master) ---
+
+export const questProgress = pgTable('quest_progress', {
+    id: serial('id').primaryKey(),
+    tournamentId: integer('tournament_id').notNull().references(() => tournaments.id),
+    wallet: varchar('wallet', { length: 44 }).notNull(),
+    questType: varchar('quest_type', { length: 30 }).notNull(), // 'leverage_master'
+    side: varchar('side', { length: 10 }).notNull(),  // 'long' | 'short'
+    stepsCompleted: jsonb('steps_completed').notNull(), // boolean[10]
+    stepCount: integer('step_count').notNull().default(0), // denormalized for ORDER BY
+    weekNumber: integer('week_number').notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => ({
+    uniqueQuestWallet: uniqueIndex('idx_quest_progress_unique').on(
+        table.tournamentId, table.wallet, table.questType, table.side, table.weekNumber,
+    ),
+}));
+
+// --- Raffle Results (per-wallet eligibility + tickets) ---
+
+export const raffleResults = pgTable('raffle_results', {
+    id: serial('id').primaryKey(),
+    tournamentId: integer('tournament_id').notNull().references(() => tournaments.id),
+    wallet: varchar('wallet', { length: 44 }).notNull(),
+    finalScore: real('final_score').notNull(),
+    cpiScore: real('cpi_score').notNull(),
+    questPoints: real('quest_points').notNull(),
+    closedPositionCount: integer('closed_position_count').notNull(),
+    isTopPercent: boolean('is_top_percent').notNull(),  // top 30% excluded from raffle
+    ticketCount: integer('ticket_count').notNull().default(0),
+    isWinner: boolean('is_winner').notNull().default(false),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => ({
+    uniqueRaffleWallet: uniqueIndex('idx_raffle_results_unique').on(
+        table.tournamentId, table.wallet,
+    ),
+}));
+
+// --- Raffle Draws (deterministic draw audit trail) ---
+
+export const raffleDraws = pgTable('raffle_draws', {
+    id: serial('id').primaryKey(),
+    tournamentId: integer('tournament_id').notNull().references(() => tournaments.id),
+    blockHash: varchar('block_hash', { length: 128 }).notNull(),
+    seed: integer('seed').notNull(),
+    eligibleCount: integer('eligible_count').notNull(),
+    totalTickets: integer('total_tickets').notNull(),
+    winnerCount: integer('winner_count').notNull(),
+    winners: jsonb('winners').notNull(), // string[] — wallet addresses
+    drawnAt: timestamp('drawn_at', { withTimezone: true }).notNull().defaultNow(),
+});

@@ -32,6 +32,7 @@ import {
     saveDailyCategoryScores,
 } from './category-engine.js';
 import type { AdrenaPosition, CategoryScoreRow } from '../types.js';
+import { evaluateLeverageProgress, computeLeverageMasterLeaderboard } from './quest-engine.js';
 
 const schedulerAdrenaClient = new AdrenaClient();
 
@@ -250,7 +251,10 @@ async function scoreDailyCategories(): Promise<void> {
             const [firstRound] = await db
                 .select({ startTime: rounds.startTime })
                 .from(rounds)
-                .where(eq(rounds.tournamentId, tournament.id))
+                .where(and(
+                    eq(rounds.tournamentId, tournament.id),
+                    eq(rounds.type, 'main'),
+                ))
                 .orderBy(asc(rounds.startTime))
                 .limit(1);
 
@@ -300,6 +304,26 @@ async function scoreDailyCategories(): Promise<void> {
                         tournament.id, seasonId, dateStr, engagementRows,
                     );
                 }
+
+                // --- Leverage Master Quest Progress ---
+                // Evaluate quest progress for each wallet (runs daily, updates cumulative steps)
+                const weekInfo = computeCurrentQuestWeek(firstRound.startTime, dateStr);
+                if (weekInfo) {
+                    for (const [wallet, positions] of walletPositions) {
+                        await evaluateLeverageProgress(
+                            tournament.id, wallet, positions,
+                            weekInfo.weekNumber, weekInfo.weekStart, weekInfo.weekEnd,
+                        );
+                    }
+
+                    // At week boundary (last day of quest week), compute leaderboard scores
+                    if (weekInfo.isLastDay) {
+                        const seasonId = tournament.seasonId ?? null;
+                        await computeLeverageMasterLeaderboard(
+                            tournament.id, weekInfo.weekNumber, dateStr, seasonId,
+                        );
+                    }
+                }
             }
 
             // Award daily category season points if this tournament belongs to a season
@@ -316,6 +340,41 @@ async function scoreDailyCategories(): Promise<void> {
     } catch (error) {
         console.error('[Scheduler] Error scoring daily categories:', error);
     }
+}
+
+// --------------------------------------------------------------------------
+// Quest Week Calculation
+//
+// Computes which 7-day quest week the current date falls into, anchored
+// to the tournament's first main round start.
+// --------------------------------------------------------------------------
+
+function computeCurrentQuestWeek(
+    tournamentStartTime: Date,
+    currentDateStr: string,
+): { weekNumber: number; weekStart: string; weekEnd: string; isLastDay: boolean } | null {
+    const startDate = new Date(tournamentStartTime);
+    startDate.setUTCHours(0, 0, 0, 0);
+    const currentDate = new Date(currentDateStr + 'T00:00:00Z');
+
+    const daysSinceStart = Math.floor(
+        (currentDate.getTime() - startDate.getTime()) / (24 * 60 * 60 * 1000),
+    );
+
+    if (daysSinceStart < 0) return null;
+
+    const weekNumber = Math.floor(daysSinceStart / 7) + 1;
+    const weekStartOffset = (weekNumber - 1) * 7;
+    const weekStart = new Date(startDate.getTime() + weekStartOffset * 24 * 60 * 60 * 1000);
+    const weekEnd = new Date(weekStart.getTime() + 6 * 24 * 60 * 60 * 1000);
+    const isLastDay = daysSinceStart === weekStartOffset + 6;
+
+    return {
+        weekNumber,
+        weekStart: weekStart.toISOString().slice(0, 10),
+        weekEnd: weekEnd.toISOString().slice(0, 10),
+        isLastDay,
+    };
 }
 
 // --------------------------------------------------------------------------

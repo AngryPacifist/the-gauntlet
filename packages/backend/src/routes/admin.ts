@@ -5,6 +5,8 @@
 // POST /api/admin/score/:roundId    — Trigger score computation for a round
 // POST /api/admin/advance           — Advance to next round (eliminate + promote)
 // POST /api/admin/cancel/:id        — Cancel a tournament
+// POST /api/admin/raffle/:id/compute — Compute raffle tickets for a tournament
+// POST /api/admin/raffle/:id/draw   — Execute deterministic raffle draw
 // ============================================================================
 
 import { Router } from 'express';
@@ -16,6 +18,7 @@ import {
 import { db } from '../db/index.js';
 import { tournaments } from '../db/schema.js';
 import { eq } from 'drizzle-orm';
+import { computeAllTickets, executeDeterministicDraw } from '../services/raffle-engine.js';
 
 const router = Router();
 
@@ -137,6 +140,61 @@ router.post('/cancel/:id', async (req, res) => {
         res.json({ success: true, data: { id: tournamentId, status: 'cancelled' } });
     } catch (error) {
         console.error('[Admin] Error cancelling tournament:', error);
+        res.status(500).json({
+            success: false,
+            error: error instanceof Error ? error.message : 'Internal server error',
+        });
+    }
+});
+
+// POST /api/admin/raffle/:id/compute — Compute raffle tickets for a tournament
+router.post('/raffle/:id/compute', async (req, res) => {
+    try {
+        const tournamentId = parseInt(req.params.id, 10);
+        if (isNaN(tournamentId)) {
+            res.status(400).json({ success: false, error: 'Invalid tournament ID' });
+            return;
+        }
+
+        const result = await computeAllTickets(tournamentId);
+        res.json({ success: true, data: result });
+    } catch (error) {
+        console.error('[Admin] Error computing raffle tickets:', error);
+        res.status(500).json({
+            success: false,
+            error: error instanceof Error ? error.message : 'Internal server error',
+        });
+    }
+});
+
+// POST /api/admin/raffle/:id/draw — Execute deterministic raffle draw
+router.post('/raffle/:id/draw', async (req, res) => {
+    try {
+        const tournamentId = parseInt(req.params.id, 10);
+        if (isNaN(tournamentId)) {
+            res.status(400).json({ success: false, error: 'Invalid tournament ID' });
+            return;
+        }
+
+        const { blockHash, prizeCount } = req.body as {
+            blockHash: string;
+            prizeCount: number;
+        };
+
+        if (!blockHash || typeof blockHash !== 'string') {
+            res.status(400).json({ success: false, error: 'blockHash is required (hex string)' });
+            return;
+        }
+
+        if (!prizeCount || typeof prizeCount !== 'number' || prizeCount < 1) {
+            res.status(400).json({ success: false, error: 'prizeCount must be a positive integer' });
+            return;
+        }
+
+        const result = await executeDeterministicDraw(tournamentId, blockHash, prizeCount);
+        res.json({ success: true, data: result });
+    } catch (error) {
+        console.error('[Admin] Error executing raffle draw:', error);
         res.status(500).json({
             success: false,
             error: error instanceof Error ? error.message : 'Internal server error',

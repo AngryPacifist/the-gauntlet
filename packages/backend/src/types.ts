@@ -310,6 +310,22 @@ export interface CategoryScoreRow {
     details: unknown;
 }
 
+// --- Leverage Master Quest Types ---
+
+export interface LeverageStep {
+    step: number;   // target leverage: 10, 20, 30, ..., 100
+    min: number;    // lower bound of tolerance window (step - 2)
+    max: number;    // upper bound of tolerance window (step + 2, capped at 100 for step 100)
+}
+
+export interface QuestProgressDetails {
+    long: boolean[];   // boolean[10] — index 0 = 10x step, index 9 = 100x step
+    short: boolean[];  // boolean[10]
+    longCount: number;
+    shortCount: number;
+    weekNumber: number;
+}
+
 export interface OHLCBar {
     open: number;
     high: number;

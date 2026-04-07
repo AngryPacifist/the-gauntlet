@@ -385,7 +385,8 @@ export type CategorySlug =
     | 'bottom_fisher'
     | 'risk_manager'
     | 'humble_one'
-    | 'leverage_master';
+    | 'leverage_master_long'
+    | 'leverage_master_short';
 
 // --- Season API Functions ---
 
@@ -458,4 +459,55 @@ export async function getDailyScores(
     date: string,
 ): Promise<DailyCategoryScore[]> {
     return apiFetch<DailyCategoryScore[]>(`/api/categories/${tournamentId}/${category}/${date}`);
+}
+
+// --- Quest API Functions ---
+
+export interface QuestProgressDetails {
+    long: boolean[];
+    short: boolean[];
+    longCount: number;
+    shortCount: number;
+    weekNumber: number;
+}
+
+export async function getQuestProgress(
+    tournamentId: number,
+    wallet: string,
+    week?: number,
+): Promise<QuestProgressDetails> {
+    const url = week
+        ? `/api/quests/${tournamentId}/${wallet}?week=${week}`
+        : `/api/quests/${tournamentId}/${wallet}`;
+    return apiFetch<QuestProgressDetails>(url);
+}
+
+// --- Raffle API Functions ---
+
+export interface RaffleResult {
+    wallet: string;
+    finalScore: number;
+    cpiScore: number;
+    questPoints: number;
+    closedPositionCount: number;
+    isTopPercent: boolean;
+    ticketCount: number;
+    isWinner: boolean;
+}
+
+export interface RaffleVerification {
+    verified: boolean;
+    mismatches: string[];
+    drawId: number | null;
+}
+
+export async function getRaffleResults(tournamentId: number): Promise<RaffleResult[]> {
+    return apiFetch<RaffleResult[]>(`/api/raffle/${tournamentId}`);
+}
+
+export async function getWalletRaffleInfo(
+    tournamentId: number,
+    wallet: string,
+): Promise<RaffleResult> {
+    return apiFetch<RaffleResult>(`/api/raffle/${tournamentId}/${wallet}`);
 }

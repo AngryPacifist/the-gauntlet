@@ -615,6 +615,55 @@ Cancels an active or registration-phase tournament. Cannot cancel tournaments th
 
 ---
 
+### Compute Raffle Tickets (Admin)
+
+```
+POST /api/admin/raffle/:id/compute
+```
+
+Computes ticket counts and eligibility for all wallets in a tournament. Must be called after tournament scoring is finalized.
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "total": 50,
+    "eligible": 28,
+    "excluded": 15
+  }
+}
+```
+
+### Execute Raffle Draw (Admin)
+
+```
+POST /api/admin/raffle/:id/draw
+```
+
+Executes a deterministic weighted draw using a Solana block hash as the PRNG seed.
+
+**Request body:**
+```json
+{
+  "blockHash": "5a7b3c...",
+  "prizeCount": 10
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "winners": ["AbcXyz...", "DefUvw..."],
+    "seed": 1517211420
+  }
+}
+```
+
+---
+
 ## Season Endpoints
 
 ### List Seasons
@@ -749,6 +798,105 @@ Manually triggers daily category scoring for a specific tournament and date. Fet
   }
 }
 ```
+
+---
+
+## Quest Endpoints
+
+### Get Quest Progress
+
+```
+GET /api/quests/:tournamentId/:wallet
+```
+
+Returns a wallet's Leverage Master quest progress (badge grid data). Returns the latest week's progress by default.
+
+**Query parameters:**
+- `week` (optional): Specific week number to query.
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "long": [true, true, true, false, false, false, false, false, false, false],
+    "short": [true, false, false, false, false, false, false, false, false, false],
+    "longCount": 3,
+    "shortCount": 1,
+    "weekNumber": 2
+  }
+}
+```
+
+If no progress exists, all boolean arrays default to `false` and counts to `0`.
+
+---
+
+## Raffle Endpoints
+
+### Get Raffle Results
+
+```
+GET /api/raffle/:tournamentId
+```
+
+Returns all raffle results for a tournament, sorted by final score descending.
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": 1,
+      "tournamentId": 1,
+      "wallet": "AbcXyz...",
+      "finalScore": 85.2,
+      "cpiScore": 70.1,
+      "questPoints": 15.1,
+      "closedPositionCount": 24,
+      "isTopPercent": false,
+      "ticketCount": 337,
+      "isWinner": true,
+      "createdAt": "2026-03-15T00:00:00.000Z"
+    }
+  ]
+}
+```
+
+### Verify Raffle Draw
+
+```
+GET /api/raffle/:tournamentId/verify
+```
+
+Re-runs the deterministic draw algorithm with the stored block hash and compares results.
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "verified": true,
+    "mismatches": [],
+    "drawId": 1
+  }
+}
+```
+
+If `verified` is `false`, `mismatches` contains human-readable descriptions of each discrepancy.
+
+### Get Wallet Raffle Info
+
+```
+GET /api/raffle/:tournamentId/:wallet
+```
+
+Returns a single wallet's raffle eligibility, ticket count, and winner status.
+
+**Response:** Same shape as a single entry in the `GET /api/raffle/:tournamentId` response.
+
+**Errors:** `404` if the wallet has no raffle entry.
 
 ---
 

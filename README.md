@@ -101,6 +101,8 @@ npm run dev
 - **Fallen Fighters** — All eliminated traders compete in a single consolation pool. All participants earn season points.
 - **Multi-Dimensional Scoring** — CPI combines PnL, Risk, Consistency, and Activity.
 - **Daily Categories** — All Around Trader (diversified ROI) and Top Bottom Fisher (entry timing) award 3/2/1 season points to top 3 daily.
+- **Leverage Master Quest** —  Progressive 10-step leverage quest (10x–100x) with independent Long/Short tracks. Weekly resets, anti-gaming filters, badge grid UI.
+- **Deterministic Raffle** — Weighted raffle draw using Mulberry32 PRNG seeded by a future Solana block hash. Full audit trail and public verification endpoint.
 - **Seasons** — Multi-week seasons with aggregate standings, seeded bracket finals, and automatic weekly tournament progression.
 - **Configurable Rounds** — Per-round durations, leverage thresholds, and asset counts.
 - **Anti-Gaming Filters** — Dust trade, wash trade, and duration filters prevent abuse.
@@ -112,7 +114,7 @@ npm run dev
 
 ## API
 
-29 endpoints covering tournaments, registration, brackets, trader profiles, leaderboards, analytics, seasons, daily categories, and admin actions.
+35+ endpoints covering tournaments, registration, brackets, trader profiles, leaderboards, analytics, seasons, daily categories, quests, raffle, and admin actions.
 
 Full reference: [docs/api-reference.md](docs/api-reference.md)
 
@@ -125,8 +127,8 @@ adrena-the-gauntlet/
 ├── packages/
 │   ├── backend/           # Express API server
 │   │   └── src/
-│   │       ├── routes/    # API route handlers (tournaments, registration, brackets, admin, seasons, categories)
-│   │       ├── services/  # Business logic (tournament, scoring, scheduler, seasons, daily categories, Adrena client)
+│   │       ├── routes/    # API route handlers (tournaments, registration, brackets, admin, seasons, categories, quests, raffle)
+│   │       ├── services/  # Business logic (tournament, scoring, scheduler, seasons, daily categories, quest engine, raffle engine, Adrena client)
 │   │       └── db/        # Schema, migrations, connection
 │   └── frontend/          # Next.js dashboard
 │       └── src/
@@ -147,7 +149,7 @@ adrena-the-gauntlet/
 
 | Document | Description |
 |----------|-------------|
-| [Competition Design](docs/competition-design.md) | Tournament mechanics, scoring, anti-gaming filters, seasons, daily categories |
+| [Competition Design](docs/competition-design.md) | Tournament mechanics, scoring, anti-gaming filters, seasons, daily categories, leverage quest, raffle system |
 | [API Reference](docs/api-reference.md) | All endpoints with request/response examples |
 | [Deployment Guide](docs/deployment-guide.md) | Setup, environment variables, production build, hosting |
 | [Testing Report](docs/testing-report.md) | Engine validation, simulation results, scoring analysis |

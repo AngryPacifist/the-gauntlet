@@ -9,7 +9,7 @@ import {
     type DailyCategoryScore,
     type CategorySlug,
 } from '@/lib/api';
-import { Compass, Target, TrendingUp, Shield, Trophy, Calendar } from 'lucide-react';
+import { Compass, Target, TrendingUp, Shield, Trophy, Calendar, Zap } from 'lucide-react';
 import Link from 'next/link';
 
 // Category configuration — single source of truth for tab rendering
@@ -61,6 +61,22 @@ const CATEGORY_TABS: Array<{
         colorBg: 'rgba(253, 203, 110, 0.1)',
         description: 'Best take-profit trade by ROI in a 2-day window. Disciplined profit-taking rewarded. Requires SL/TP to be set.',
     },
+    {
+        slug: 'leverage_master_long',
+        label: 'Leverage (Long)',
+        icon: Zap,
+        color: '#e84393',
+        colorBg: 'rgba(232, 67, 147, 0.1)',
+        description: 'Complete all 10 leverage tiers (10x\u2013100x) with long positions in a single week. Higher step counts rank higher.',
+    },
+    {
+        slug: 'leverage_master_short',
+        label: 'Leverage (Short)',
+        icon: Zap,
+        color: '#0984e3',
+        colorBg: 'rgba(9, 132, 227, 0.1)',
+        description: 'Complete all 10 leverage tiers (10x\u2013100x) with short positions in a single week. Higher step counts rank higher.',
+    },
 ];
 
 export default function CategoriesPage({ params }: { params: Promise<{ tournamentId: string }> }) {
@@ -79,6 +95,7 @@ export default function CategoriesPage({ params }: { params: Promise<{ tournamen
     const [error, setError] = useState<string | null>(null);
 
     const activeTab = CATEGORY_TABS.find(t => t.slug === tab)!;
+    const isLeverageTab = tab === 'leverage_master_long' || tab === 'leverage_master_short';
 
     useEffect(() => {
         if (!isNaN(tournamentId)) {
@@ -229,6 +246,25 @@ export default function CategoriesPage({ params }: { params: Promise<{ tournamen
                 )}
             </section>
 
+            {/* Leverage Master Badge Grid (shown only for leverage tabs) */}
+            {isLeverageTab && (
+                <section style={{ marginBottom: 'var(--space-2xl)' }}>
+                    <h2 style={{ fontSize: '1.125rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: 'var(--space-md)', display: 'flex', alignItems: 'center', gap: 'var(--space-sm)' }}>
+                        <Zap size={18} />
+                        Step Progress
+                    </h2>
+                    <div className="card" style={{ padding: 'var(--space-lg)' }}>
+                        <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: 'var(--space-md)' }}>
+                            Each badge represents a leverage tier. Open a position at the target leverage (\u00b12x tolerance) to complete a step.
+                        </p>
+                        <LeverageBadgeGrid
+                            steps={Array(10).fill(false)}
+                            color={activeTab.color}
+                        />
+                    </div>
+                </section>
+            )}
+
             {/* Daily Breakdown */}
             <section>
                 <h2 style={{ fontSize: '1.125rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: 'var(--space-md)', display: 'flex', alignItems: 'center', gap: 'var(--space-sm)' }}>
@@ -306,6 +342,68 @@ function getRankStyle(index: number): React.CSSProperties {
     if (index === 1) return { fontWeight: 700, color: '#c0c0c0' };
     if (index === 2) return { fontWeight: 700, color: '#cd7f32' };
     return {};
+}
+
+// ---- Leverage Master Badge Grid ----
+
+const LEVERAGE_LABELS = ['10x', '20x', '30x', '40x', '50x', '60x', '70x', '80x', '90x', '100x'];
+
+function LeverageBadgeGrid({ steps, color }: { steps: boolean[]; color: string }) {
+    const completedCount = steps.filter(Boolean).length;
+
+    return (
+        <div>
+            <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(5, 1fr)',
+                gap: 'var(--space-sm)',
+                marginBottom: 'var(--space-md)',
+            }}>
+                {LEVERAGE_LABELS.map((label, i) => {
+                    const completed = steps[i];
+                    return (
+                        <div
+                            key={label}
+                            style={{
+                                display: 'flex',
+                                flexDirection: 'column',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                padding: 'var(--space-sm) var(--space-xs)',
+                                borderRadius: 'var(--radius-md)',
+                                border: `1px solid ${completed ? color : 'var(--border-default)'}`,
+                                background: completed ? `${color}15` : 'var(--bg-card)',
+                                transition: 'all var(--transition-default)',
+                                minHeight: '56px',
+                            }}
+                        >
+                            <span style={{
+                                fontSize: '16px',
+                                fontWeight: 700,
+                                color: completed ? color : 'var(--text-muted)',
+                            }}>
+                                {label}
+                            </span>
+                            <span style={{
+                                fontSize: '11px',
+                                color: completed ? color : 'var(--text-muted)',
+                                marginTop: '2px',
+                            }}>
+                                {completed ? '✓' : '—'}
+                            </span>
+                        </div>
+                    );
+                })}
+            </div>
+            <p style={{
+                fontSize: '13px',
+                color: completedCount > 0 ? color : 'var(--text-muted)',
+                fontWeight: 600,
+            }}>
+                {completedCount}/10 steps completed
+            </p>
+        </div>
+    );
 }
 
 const tabBtnStyle: React.CSSProperties = {
