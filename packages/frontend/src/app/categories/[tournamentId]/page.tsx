@@ -1,13 +1,15 @@
 'use client';
 
 import { useEffect, useState, use } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams, useRouter } from 'next/navigation';
 import {
     getCategoryLeaderboard,
     getDailyScores,
+    getQuestProgress,
     type CategoryLeaderboardEntry,
     type DailyCategoryScore,
     type CategorySlug,
+    type QuestProgressDetails,
 } from '@/lib/api';
 import { Compass, Target, TrendingUp, Shield, Trophy, Calendar, Zap } from 'lucide-react';
 import Link from 'next/link';
@@ -94,6 +96,12 @@ export default function CategoriesPage({ params }: { params: Promise<{ tournamen
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
+    // Wallet-scoped quest progress for the badge grid
+    const router = useRouter();
+    const walletParam = searchParams.get('wallet') || '';
+    const [walletInput, setWalletInput] = useState(walletParam);
+    const [questData, setQuestData] = useState<QuestProgressDetails | null>(null);
+
     const activeTab = CATEGORY_TABS.find(t => t.slug === tab)!;
     const isLeverageTab = tab === 'leverage_master_long' || tab === 'leverage_master_short';
 
@@ -108,6 +116,17 @@ export default function CategoriesPage({ params }: { params: Promise<{ tournamen
             loadDailyScores();
         }
     }, [dailyDate, tab]);
+
+    // Fetch quest progress when wallet param is present and a leverage tab is active
+    useEffect(() => {
+        if (walletParam && isLeverageTab && !isNaN(tournamentId)) {
+            getQuestProgress(tournamentId, walletParam)
+                .then(setQuestData)
+                .catch(() => setQuestData(null));
+        } else {
+            setQuestData(null);
+        }
+    }, [walletParam, tab, tournamentId]);
 
     async function loadLeaderboard() {
         try {
@@ -257,8 +276,43 @@ export default function CategoriesPage({ params }: { params: Promise<{ tournamen
                         <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: 'var(--space-md)' }}>
                             Each badge represents a leverage tier. Open a position at the target leverage (\u00b12x tolerance) to complete a step.
                         </p>
+
+                        {/* Wallet input for quest lookup */}
+                        <div style={{ display: 'flex', gap: 'var(--space-sm)', marginBottom: 'var(--space-md)', alignItems: 'center' }}>
+                            <input
+                                type="text"
+                                className="input input--mono"
+                                placeholder="Enter wallet address to view progress..."
+                                value={walletInput}
+                                onChange={(e) => setWalletInput(e.target.value)}
+                                style={{ flex: 1, fontSize: '13px' }}
+                            />
+                            <button
+                                className="btn btn--secondary"
+                                style={{ fontSize: '13px', padding: '8px 16px', whiteSpace: 'nowrap' }}
+                                onClick={() => {
+                                    if (walletInput.trim()) {
+                                        const params = new URLSearchParams(searchParams.toString());
+                                        params.set('wallet', walletInput.trim());
+                                        router.replace(`?${params.toString()}`, { scroll: false });
+                                    }
+                                }}
+                                disabled={!walletInput.trim()}
+                            >
+                                View Progress
+                            </button>
+                        </div>
+
+                        {walletParam && (
+                            <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: 'var(--space-sm)', fontFamily: 'var(--font-mono)' }}>
+                                {walletParam.slice(0, 4)}...{walletParam.slice(-4)}
+                            </p>
+                        )}
+
                         <LeverageBadgeGrid
-                            steps={Array(10).fill(false)}
+                            steps={questData
+                                ? (tab === 'leverage_master_long' ? questData.long : questData.short)
+                                : Array(10).fill(false)}
                             color={activeTab.color}
                         />
                     </div>
