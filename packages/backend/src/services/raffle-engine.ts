@@ -198,7 +198,21 @@ export async function executeDeterministicDraw(
     blockHash: string,
     prizeCount: number,
 ): Promise<{ winners: string[]; seed: number }> {
-    // Read eligible entries (not top 30%, ≥10 closed positions, tickets > 0)
+    // Enforce one draw per tournament — provable fairness requires a single result
+    const [existingDraw] = await db
+        .select({ id: raffleDraws.id })
+        .from(raffleDraws)
+        .where(eq(raffleDraws.tournamentId, tournamentId))
+        .limit(1);
+
+    if (existingDraw) {
+        throw new Error(
+            `A raffle draw already exists for tournament ${tournamentId} (draw #${existingDraw.id}). ` +
+            `Each tournament may only be drawn once to preserve verifiability.`
+        );
+    }
+
+    // Read eligible entries (not top 30%, tickets > 0)
     const eligible = await db
         .select({
             wallet: raffleResults.wallet,
@@ -208,7 +222,6 @@ export async function executeDeterministicDraw(
         .where(and(
             eq(raffleResults.tournamentId, tournamentId),
             eq(raffleResults.isTopPercent, false),
-            eq(raffleResults.isWinner, false),
         ))
         .orderBy(asc(raffleResults.wallet));
 
@@ -328,4 +341,36 @@ export async function verifyDraw(
     );
 
     return { verified, mismatches, drawId: draw.id };
+}
+
+// --------------------------------------------------------------------------
+// Reset Draw
+//
+// Clears all draw records and resets isWinner flags for a tournament.
+// Use only if a draw was executed with incorrect parameters.
+// --------------------------------------------------------------------------
+
+export async function resetDraw(
+    tournamentId: number,
+): Promise<{ deletedDraws: number; resetWinners: number }> {
+    // Delete all draw audit records
+    const deleted = await db.delete(raffleDraws)
+        .where(eq(raffleDraws.tournamentId, tournamentId))
+        .returning({ id: raffleDraws.id });
+
+    // Reset all isWinner flags back to false
+    const reset = await db.update(raffleResults)
+        .set({ isWinner: false })
+        .where(and(
+            eq(raffleResults.tournamentId, tournamentId),
+            eq(raffleResults.isWinner, true),
+        ))
+        .returning({ wallet: raffleResults.wallet });
+
+    console.log(
+        `[RaffleEngine] Reset draw for tournament ${tournamentId}: ` +
+        `${deleted.length} draw(s) deleted, ${reset.length} winner flag(s) cleared`,
+    );
+
+    return { deletedDraws: deleted.length, resetWinners: reset.length };
 }

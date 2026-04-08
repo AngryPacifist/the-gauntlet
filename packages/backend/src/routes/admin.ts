@@ -7,6 +7,7 @@
 // POST /api/admin/cancel/:id        — Cancel a tournament
 // POST /api/admin/raffle/:id/compute — Compute raffle tickets for a tournament
 // POST /api/admin/raffle/:id/draw   — Execute deterministic raffle draw
+// POST /api/admin/raffle/:id/reset  — Reset raffle draw (clear winners + audit trail)
 // ============================================================================
 
 import { Router } from 'express';
@@ -18,7 +19,7 @@ import {
 import { db } from '../db/index.js';
 import { tournaments } from '../db/schema.js';
 import { eq } from 'drizzle-orm';
-import { computeAllTickets, executeDeterministicDraw } from '../services/raffle-engine.js';
+import { computeAllTickets, executeDeterministicDraw, resetDraw } from '../services/raffle-engine.js';
 
 const router = Router();
 
@@ -195,6 +196,26 @@ router.post('/raffle/:id/draw', async (req, res) => {
         res.json({ success: true, data: result });
     } catch (error) {
         console.error('[Admin] Error executing raffle draw:', error);
+        res.status(500).json({
+            success: false,
+            error: error instanceof Error ? error.message : 'Internal server error',
+        });
+    }
+});
+
+// POST /api/admin/raffle/:id/reset — Reset raffle draw (clear winners + audit trail)
+router.post('/raffle/:id/reset', async (req, res) => {
+    try {
+        const tournamentId = parseInt(req.params.id, 10);
+        if (isNaN(tournamentId)) {
+            res.status(400).json({ success: false, error: 'Invalid tournament ID' });
+            return;
+        }
+
+        const result = await resetDraw(tournamentId);
+        res.json({ success: true, data: result });
+    } catch (error) {
+        console.error('[Admin] Error resetting raffle draw:', error);
         res.status(500).json({
             success: false,
             error: error instanceof Error ? error.message : 'Internal server error',
