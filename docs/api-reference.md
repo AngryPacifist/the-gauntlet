@@ -641,7 +641,7 @@ Computes ticket counts and eligibility for all wallets in a tournament. Must be 
 POST /api/admin/raffle/:id/draw
 ```
 
-Executes a deterministic weighted draw using a Solana block hash as the PRNG seed.
+Executes a deterministic weighted draw using a Bitcoin block hash as the PRNG seed. The first 8 hex characters of the hash are converted to a 32-bit integer, seeding a Mulberry32 PRNG for weighted random selection without replacement. Results are fully reproducible via the Verify endpoint.
 
 **Request body:**
 ```json
@@ -744,37 +744,43 @@ Finalizes the season after the Grand Final tournament completes. Awards final po
 
 ## Category Endpoints
 
-### All Around Trader Leaderboard
+Categories use two aggregation modes:
+- **SUM** categories (daily additive): `all_around`, `top_tick_traveler`, `bottom_fisher`
+- **MAX** categories (best single window): `risk_manager`, `humble_one`, `leverage_master_long`, `leverage_master_short`
+
+All leaderboards use deterministic ordering: score DESC, wallet ASC.
+
+### Category Leaderboard
 
 ```
-GET /api/categories/:tournamentId/all-around
+GET /api/categories/:tournamentId/:category
 ```
 
-Returns cumulative All Around scores aggregated across all days: `wallet`, `totalScore`, `daysScored`.
+Valid category slugs: `all_around`, `top_tick_traveler`, `bottom_fisher`, `risk_manager`, `humble_one`, `leverage_master_long`, `leverage_master_short`.
 
-### Daily All Around Scores
+Returns cumulative scores aggregated across all scored days.
 
-```
-GET /api/categories/:tournamentId/all-around/:date
-```
-
-Returns All Around scores for a specific UTC day (format: `YYYY-MM-DD`).
-
-### Fisher Leaderboard
-
-```
-GET /api/categories/:tournamentId/fisher
-```
-
-Returns cumulative Top Bottom Fisher scores aggregated across all days.
-
-### Daily Fisher Scores
-
-```
-GET /api/categories/:tournamentId/fisher/:date
+**Response:**
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "wallet": "AbcXyz...",
+      "totalScore": 185.4,
+      "daysScored": 3
+    }
+  ]
+}
 ```
 
-Returns Fisher scores for a specific UTC day.
+### Daily Category Scores
+
+```
+GET /api/categories/:tournamentId/:category/:date
+```
+
+Returns scores for a specific UTC day (format: `YYYY-MM-DD`).
 
 ### Trigger Category Scoring (Admin)
 
@@ -784,7 +790,17 @@ Headers: X-Admin-Secret: <secret>
 Body: { "tournamentId": 1, "date": "2026-03-10" }
 ```
 
-Manually triggers daily category scoring for a specific tournament and date. Fetches OHLC data from Pyth, computes scores for all registered wallets, and persists results. If the tournament belongs to a season, both Fisher season points (3/2/1 for top 3 in each direction) and All Around season points (3/2/1 for top 3 by score) are also awarded.
+Manually triggers daily category scoring for a specific tournament and date. Computes all 7 categories:
+
+1. **All Around** — Position diversity and sizing metrics
+2. **Top-Tick Traveler** — Short entry proximity to daily high (Pyth OHLC)
+3. **Bottom Fisher** — Long entry proximity to daily low (Pyth OHLC)
+4. **Risk Manager** — Best risk-adjusted trade in 2-day windows (scored every 2nd day)
+5. **The Humble One** — Best low-leverage profitable trade in 2-day windows
+6. **Leverage Master (Long)** — 10-step badge grid, 10x-100x long positions
+7. **Leverage Master (Short)** — 10-step badge grid, 10x-100x short positions
+
+If the tournament belongs to a season, Fisher (3/2/1 for top 3 each direction) and All Around (3/2/1 for top 3) season points are also awarded.
 
 **Response:**
 ```json

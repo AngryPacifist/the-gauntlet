@@ -11,6 +11,17 @@
     color: var(--text-primary);
 }
 
+.sectionHeader {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: var(--space-md);
+}
+
+.sectionHeader .sectionTitle {
+    margin-bottom: 0;
+}
+
 .center {
     display: flex;
     justify-content: center;

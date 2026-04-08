@@ -63,6 +63,17 @@ CREATE TABLE IF NOT EXISTS registrations (
   UNIQUE(tournament_id, wallet)
 );
 
+-- Seasons (must be created before season_registrations which references it)
+CREATE TABLE IF NOT EXISTS seasons (
+  id SERIAL PRIMARY KEY,
+  name VARCHAR(255) NOT NULL,
+  status VARCHAR(20) NOT NULL DEFAULT 'registration',
+  config JSONB NOT NULL,
+  current_week INTEGER NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 -- Season Registrations (register once, enrolled for all season weeks)
 CREATE TABLE IF NOT EXISTS season_registrations (
   id SERIAL PRIMARY KEY,
@@ -87,17 +98,6 @@ CREATE TABLE IF NOT EXISTS trade_cache (
   wallet VARCHAR(44) NOT NULL,
   position_data JSONB NOT NULL,
   fetched_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
--- Seasons
-CREATE TABLE IF NOT EXISTS seasons (
-  id SERIAL PRIMARY KEY,
-  name VARCHAR(255) NOT NULL,
-  status VARCHAR(20) NOT NULL DEFAULT 'registration',
-  config JSONB NOT NULL,
-  current_week INTEGER NOT NULL DEFAULT 0,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 -- Season Standings

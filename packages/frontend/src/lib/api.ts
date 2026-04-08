@@ -8,6 +8,10 @@
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || '';
 
+// Direct backend URL — bypasses Next.js rewrite proxy (which has a 30s timeout)
+// Used for admin endpoints that may take longer (e.g. raffle compute hits Adrena API)
+const BACKEND_DIRECT = 'http://localhost:3001';
+
 interface ApiResponse<T> {
     success: boolean;
     error: string | null;
@@ -18,7 +22,9 @@ async function apiFetch<T>(
     path: string,
     options?: RequestInit,
 ): Promise<T> {
-    const url = `${API_BASE}${path}`;
+    // Admin paths bypass the Next.js proxy to avoid its 30s timeout
+    const base = path.startsWith('/api/admin') ? BACKEND_DIRECT : API_BASE;
+    const url = `${base}${path}`;
     const res = await fetch(url, {
         ...options,
         headers: {
@@ -26,6 +32,13 @@ async function apiFetch<T>(
             ...options?.headers,
         },
     });
+
+    // Handle non-JSON responses (e.g. proxy timeout returning plain text)
+    const contentType = res.headers.get('content-type') || '';
+    if (!contentType.includes('application/json')) {
+        const text = await res.text();
+        throw new Error(text || `Server returned ${res.status}`);
+    }
 
     const json: ApiResponse<T> = await res.json();
 
@@ -510,4 +523,45 @@ export async function getWalletRaffleInfo(
     wallet: string,
 ): Promise<RaffleResult> {
     return apiFetch<RaffleResult>(`/api/raffle/${tournamentId}/${wallet}`);
+}
+
+export async function adminComputeRaffle(
+    tournamentId: number,
+    adminSecret: string,
+): Promise<{ total: number; eligible: number; excluded: number }> {
+    return apiFetch('/api/admin/raffle/' + tournamentId + '/compute', {
+        method: 'POST',
+        headers: { 'X-Admin-Secret': adminSecret },
+    });
+}
+
+export async function adminDrawRaffle(
+    tournamentId: number,
+    blockHash: string,
+    prizeCount: number,
+    adminSecret: string,
+): Promise<{ winners: string[]; seed: number }> {
+    return apiFetch('/api/admin/raffle/' + tournamentId + '/draw', {
+        method: 'POST',
+        body: JSON.stringify({ blockHash, prizeCount }),
+        headers: { 'X-Admin-Secret': adminSecret },
+    });
+}
+
+export async function verifyRaffleDraw(
+    tournamentId: number,
+): Promise<RaffleVerification> {
+    return apiFetch<RaffleVerification>(`/api/raffle/${tournamentId}/verify`);
+}
+
+export async function adminScoreCategories(
+    tournamentId: number,
+    date: string,
+    adminSecret: string,
+): Promise<{ date: string; tournamentId: number; walletsScored: number; ohlcAssetsAvailable: number }> {
+    return apiFetch('/api/categories/score', {
+        method: 'POST',
+        body: JSON.stringify({ tournamentId, date }),
+        headers: { 'X-Admin-Secret': adminSecret },
+    });
 }
