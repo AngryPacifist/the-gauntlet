@@ -559,7 +559,7 @@ Ranks each bracket by CPI, eliminates the bottom half (except in the final main 
 }
 ```
 
-`roundType` is optional (defaults to `"main"`). Use `"consolation"` to advance the Fallen Fighters round (which completes the tournament).
+`roundType` is optional. When omitted, the engine **auto-detects** the active round type — if a Fallen Fighters (consolation) round exists, it advances that; otherwise it advances the main round. You can still pass `"main"` or `"consolation"` explicitly to override.
 
 **Response (next round created):**
 ```json
@@ -573,7 +573,7 @@ Ranks each bracket by CPI, eliminates the bottom half (except in the final main 
 }
 ```
 
-When the main bracket finishes, the response returns the FF round as `nextRoundId`. When the FF round is advanced (with `roundType: "consolation"`), the tournament completes.
+When the main bracket finishes, the response returns the FF round as `nextRoundId`. The next advance auto-detects the FF round and completes the tournament.
 
 **Response (tournament completed):**
 ```json
