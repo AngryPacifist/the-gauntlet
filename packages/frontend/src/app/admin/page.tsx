@@ -14,6 +14,7 @@ import {
     adminDrawRaffle,
     verifyRaffleDraw,
     adminScoreCategories,
+    adminResetRaffle,
     listSeasons,
     adminCreateSeason,
     adminStartSeason,
@@ -41,6 +42,7 @@ import {
     CalendarDays,
     Layers,
     Flag,
+    RotateCcw,
 } from 'lucide-react';
 import styles from './page.module.css';
 
@@ -323,6 +325,24 @@ export default function AdminPage() {
         }
     }
 
+    async function handleResetRaffle(tournamentId: number, tournamentName: string) {
+        if (!adminSecret) { showToast('Enter admin secret first', 'error'); return; }
+        if (!confirm(`Reset raffle draw for "${tournamentName}"? This will clear all winners and the audit trail.`)) return;
+        try {
+            setActionLoading(true);
+            const result = await adminResetRaffle(tournamentId, adminSecret);
+            addLog(`Raffle reset for "${tournamentName}": ${result.deletedDraws} draw(s) deleted, ${result.resetWinners} winner(s) cleared`);
+            showToast(`Raffle reset: ${result.resetWinners} winners cleared`, 'success');
+            loadAll();
+        } catch (err) {
+            const msg = err instanceof Error ? err.message : 'Failed to reset raffle';
+            addLog(`Error: ${msg}`);
+            showToast(msg, 'error');
+        } finally {
+            setActionLoading(false);
+        }
+    }
+
     // ── Category scoring handler ─────────────────────────────────────────────
 
     async function handleScoreCategories(e: React.FormEvent) {
@@ -529,6 +549,9 @@ export default function AdminPage() {
                                     <button className="btn btn--secondary" onClick={() => { setDrawTournamentId(t.id); setShowDrawModal(true); }} disabled={actionLoading}>
                                         <Sparkles size={14} /> Draw Raffle
                                     </button>
+                                    <button className="btn btn--danger" onClick={() => handleResetRaffle(t.id, t.name)} disabled={actionLoading}>
+                                        <RotateCcw size={14} /> Reset Draw
+                                    </button>
                                     <button className="btn btn--danger" onClick={() => handleCancel(t.id, t.name)} disabled={actionLoading}>
                                         <Ban size={14} /> Cancel
                                     </button>
@@ -547,6 +570,9 @@ export default function AdminPage() {
                                     </button>
                                     <button className="btn btn--secondary" onClick={() => handleVerifyRaffle(t.id)} disabled={actionLoading}>
                                         <CheckCircle2 size={14} /> Verify Draw
+                                    </button>
+                                    <button className="btn btn--danger" onClick={() => handleResetRaffle(t.id, t.name)} disabled={actionLoading}>
+                                        <RotateCcw size={14} /> Reset Draw
                                     </button>
                                 </>
                             )}

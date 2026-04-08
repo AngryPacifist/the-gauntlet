@@ -565,3 +565,13 @@ export async function adminScoreCategories(
         headers: { 'X-Admin-Secret': adminSecret },
     });
 }
+
+export async function adminResetRaffle(
+    tournamentId: number,
+    adminSecret: string,
+): Promise<{ deletedDraws: number; resetWinners: number }> {
+    return apiFetch(`/api/admin/raffle/${tournamentId}/reset`, {
+        method: 'POST',
+        headers: { 'X-Admin-Secret': adminSecret },
+    });
+}
