@@ -624,6 +624,86 @@ Gauntlet rounds naturally integrate with Adrena's streak mechanic:
 
 ---
 
+## Raffle System — Provably Fair Draw
+
+The Gauntlet includes a weighted raffle for non-podium participants. The draw is deterministic and publicly verifiable — anyone can independently reproduce the results using the published algorithm and inputs.
+
+### Eligibility
+
+After a tournament completes, raffle eligibility is computed per-wallet:
+
+- **Minimum activity**: ≥10 closed positions on Adrena during the tournament
+- **Top 30% excluded**: Wallets ranked in the top 30% by final score receive skill-based prizes instead and are excluded from the raffle pool
+- Must have at least 1 ticket (see below)
+
+### Ticket Computation
+
+Each eligible wallet receives tickets based on two factors:
+
+```
+tickets = floor(CPI × 0.5) + floor(questPoints × 20)
+```
+
+- **CPI contribution**: A player with CPI 60 gets 30 tickets from performance
+- **Quest contribution**: A player with 3 quest points gets 60 tickets from engagement
+- Higher ticket counts = higher probability of winning, but it's still random
+
+Tickets are computed via the **Compute Raffle** admin action after final scoring.
+
+### The Draw: Bitcoin Block Hash Seeding
+
+The draw uses a Bitcoin block hash as the randomness source. The process:
+
+1. **Pre-commitment**: Before the block is mined, the admin announces which future Bitcoin block number will be used (e.g. "Block 944,200"). This prevents anyone from choosing a favorable hash.
+2. **Block mined**: Once the target block is mined, its hash is publicly visible on any Bitcoin explorer (e.g. [mempool.space](https://mempool.space)).
+3. **Seed extraction**: The first 8 hex characters of the block hash are converted to a 32-bit unsigned integer. This becomes the PRNG seed.
+
+```
+Example:
+  Block hash: 0000000000000000000053f74eb4e9a1049c7eb095a05e46b2de79440d6a6054
+  Seed chars: 00000000
+  Seed value: 0 → parseInt("00000000", 16)
+```
+
+### PRNG: Mulberry32
+
+The seed drives a **Mulberry32** pseudo-random number generator — a deterministic 32-bit PRNG that produces a sequence of floats in [0, 1) from any given seed. The same seed always produces the exact same sequence.
+
+### Weighted Selection Without Replacement
+
+The draw loop:
+
+1. Sort the eligible pool alphabetically by wallet address (deterministic ordering)
+2. Sum all tickets to get `totalWeight`
+3. Generate a random float via Mulberry32 → multiply by `totalWeight` to get a target
+4. Walk through the sorted pool, subtracting each wallet's ticket count from the target
+5. When the target reaches ≤ 0, that wallet wins
+6. Remove the winner from the pool (no replacement) and repeat for the next prize
+
+This ensures wallets with more tickets have proportionally higher odds, while the alphabetical sort guarantees that database query order never affects results.
+
+### Verification
+
+After a draw, anyone can verify it:
+
+1. Read the stored block hash and eligible pool from the database
+2. Re-run the exact same algorithm: seed → Mulberry32 → sorted pool → weighted draw
+3. Compare the reproduced winners against the stored winners
+
+The **Verify Draw** action does exactly this. If all positions match, the draw is confirmed authentic. Any tampering would produce mismatches.
+
+### Audit Trail
+
+Every draw is persisted in the `raffle_draws` table:
+- `blockHash`: The Bitcoin block hash used
+- `seed`: The derived 32-bit integer seed
+- `eligibleCount`: Number of wallets in the pool
+- `totalTickets`: Sum of all tickets
+- `winnerCount`: Number of winners drawn
+- `winners`: Ordered array of winning wallet addresses
+
+---
+
 ## Future Integration Paths
 
 - **Frontend embedding**: The bracket view could be embedded directly in Adrena's trading interface via iframe or as a React component library.
