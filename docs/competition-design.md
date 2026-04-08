@@ -536,7 +536,7 @@ Top 30% wallets receive zero tickets (they are excluded from the raffle and rece
 
 ### Draw Mechanism
 
-1. **Seed**: A future Solana block hash is selected after ticket computation is finalized. The first 8 hex characters are parsed as a 32-bit integer to seed the PRNG.
+1. **Seed**: A future Bitcoin block hash is selected after ticket computation is finalized. The first 8 hex characters are parsed as a 32-bit integer to seed the PRNG.
 2. **PRNG**: Mulberry32 — a deterministic 32-bit PRNG that produces the same sequence of floats in [0, 1) for any given seed.
 3. **Selection**: Weighted random selection without replacement. Each wallet's ticket count is its weight.
 4. **Determinism**: The eligible pool is sorted by `wallet ASC` before the draw loop begins. This ensures that two runs with the same block hash always produce identical winners, regardless of database query order.
@@ -553,10 +553,11 @@ The `verifyDraw()` function re-runs the identical algorithm using the stored blo
 
 1. Tournament completes and all scoring is finalized.
 2. Admin calls `POST /api/admin/raffle/:id/compute` — populates ticket counts and eligibility.
-3. Admin selects a future Solana block hash (announced publicly before the block is mined).
+3. Admin selects a future Bitcoin block hash (announced publicly before the block is mined, e.g. via [mempool.space](https://mempool.space)).
 4. Admin calls `POST /api/admin/raffle/:id/draw` with the block hash and prize count.
-5. Winners are marked in `raffle_results` and the draw audit trail is persisted.
-6. Anyone can verify via `GET /api/raffle/:tournamentId/verify`.
+5. Only **one draw per tournament** is permitted. Use `POST /api/admin/raffle/:id/reset` to clear a draw before re-drawing if needed.
+6. Winners are marked in `raffle_results` and the draw audit trail is persisted.
+7. Anyone can verify via `GET /api/raffle/:tournamentId/verify`.
 
 ### Frontend Access
 
