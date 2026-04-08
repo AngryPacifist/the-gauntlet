@@ -662,6 +662,27 @@ Executes a deterministic weighted draw using a Bitcoin block hash as the PRNG se
 }
 ```
 
+**Note:** Only one draw is permitted per tournament. Attempting a second draw returns a `500` error with a message explaining that a draw already exists. Use the Reset endpoint below to clear a draw before re-drawing.
+
+### Reset Raffle Draw (Admin)
+
+```
+POST /api/admin/raffle/:id/reset
+```
+
+Clears all draw records and resets winner flags for a tournament. Use only if a draw was executed with incorrect parameters (e.g. wrong block hash, test data).
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "deletedDraws": 1,
+    "resetWinners": 3
+  }
+}
+```
+
 ---
 
 ## Season Endpoints
