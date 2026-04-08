@@ -86,14 +86,15 @@ router.post('/score/:roundId', async (req, res) => {
 // POST /api/admin/advance — Advance to next round
 router.post('/advance', async (req, res) => {
     try {
-        const { tournamentId } = req.body as { tournamentId: number };
+        const { tournamentId, roundType } = req.body as { tournamentId: number; roundType?: 'main' | 'consolation' };
 
         if (!tournamentId) {
             res.status(400).json({ success: false, error: 'tournamentId is required' });
             return;
         }
 
-        const result = await advanceRound(tournamentId);
+        // roundType is optional — if omitted, the tournament manager auto-detects
+        const result = await advanceRound(tournamentId, roundType);
         res.json({ success: true, data: result });
     } catch (error) {
         console.error('[Admin] Error advancing round:', error);

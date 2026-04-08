@@ -420,7 +420,7 @@ export async function computeRoundScores(roundId: number): Promise<number> {
 // --------------------------------------------------------------------------
 export async function advanceRound(
     tournamentId: number,
-    roundType: 'main' | 'consolation' = 'main',
+    roundType?: 'main' | 'consolation',
 ): Promise<{ nextRoundId: number; advanced: number; eliminated: number } | { completed: true }> {
     // Get tournament
     const [tournament] = await db
@@ -432,7 +432,7 @@ export async function advanceRound(
     if (!tournament) throw new Error('Tournament not found');
     const config = resolveConfig(tournament.config);
 
-    // Get active round of the specified type
+    // Get active rounds
     const activeRounds = await db
         .select()
         .from(rounds)
@@ -443,9 +443,24 @@ export async function advanceRound(
             ),
         );
 
-    // Find the active round matching the requested type
-    const currentRound = activeRounds.find(r => (r.type ?? 'main') === roundType);
-    if (!currentRound) throw new Error(`No active ${roundType} round found`);
+    // Auto-detect round type if not specified:
+    // Prefer consolation if one exists, otherwise main
+    let effectiveType = roundType;
+    if (!effectiveType) {
+        const hasConsolation = activeRounds.some(r => (r.type ?? 'main') === 'consolation');
+        const hasMain = activeRounds.some(r => (r.type ?? 'main') === 'main');
+        if (hasConsolation) {
+            effectiveType = 'consolation';
+        } else if (hasMain) {
+            effectiveType = 'main';
+        } else {
+            throw new Error('No active round found');
+        }
+    }
+
+    // Find the active round matching the resolved type
+    const currentRound = activeRounds.find(r => (r.type ?? 'main') === effectiveType);
+    if (!currentRound) throw new Error(`No active ${effectiveType} round found`);
 
     // Get brackets and entries for current round
     const currentBrackets = await db
@@ -460,8 +475,8 @@ export async function advanceRound(
     // - Consolation (FF pool): flat ranking, no elimination
     // - Final main round: round that would trigger completion
     const nextRoundNumber = currentRound.roundNumber + 1;
-    const isRankOnly = roundType === 'consolation'
-        || (roundType === 'main' && nextRoundNumber > 3);
+    const isRankOnly = effectiveType === 'consolation'
+        || (effectiveType === 'main' && nextRoundNumber > 3);
 
     for (const bracket of currentBrackets) {
         const entries = await db
@@ -502,7 +517,7 @@ export async function advanceRound(
         .where(eq(rounds.id, currentRound.id));
 
     // --- Handle consolation rounds (Fallen Fighters pool) ---
-    if (roundType === 'consolation') {
+    if (effectiveType === 'consolation') {
         // FF pool complete — rank only, no advancement. Set tournament to completed.
         await db
             .update(tournaments)
