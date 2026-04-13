@@ -338,6 +338,17 @@ All category scoring is fully deterministic. Given the same input data, the same
 | API leaderboard queries | score DESC, wallet ASC |
 | Raffle draw pool order | wallet ASC (before PRNG selection) |
 
+### Cross-Category Scoring
+
+A single closed position can score in multiple categories simultaneously. For example, a long entry near the daily low may earn points in both **Bottom Fisher** (entry precision) and **All Around** (best ROI per asset). This is intentional — each category evaluates a different aspect of the same trade:
+
+- **Bottom Fisher / Top-Tick Traveler:** Entry precision relative to daily extremes
+- **All Around:** ROI diversification across assets
+- **Risk Manager / Humble One:** SL/TP discipline within a 2-day window
+- **Leverage Master:** Progressive leverage tier completion over a week
+
+The day / 2-day / weekly window separation across categories further limits any gaming potential. A trade that scores in a daily category cannot also score in a weekly category through the same mechanism — the evaluation logic and time windows are fully independent.
+
 ### 2-Day Window Mechanics
 
 The 2-day window is anchored to the tournament's **first round startTime**, not the calendar:
