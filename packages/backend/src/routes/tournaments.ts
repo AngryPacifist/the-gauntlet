@@ -7,6 +7,7 @@
 // PUT    /api/tournaments/:id         — Update tournament (admin, registration only)
 // DELETE /api/tournaments/:id         — Delete tournament (admin, full cascade)
 // GET    /api/tournaments/:id/brackets — Get all brackets for active round
+// GET    /api/tournaments/:id/forge   — The Forge merged leaderboard
 // ============================================================================
 
 import { Router } from 'express';
@@ -333,6 +334,73 @@ router.get('/:id/brackets', async (req, res) => {
         });
     } catch (error) {
         console.error('[API] Error getting brackets:', error);
+        res.status(500).json({
+            success: false,
+            error: error instanceof Error ? error.message : 'Internal server error',
+        });
+    }
+});
+// --------------------------------------------------------------------------
+// GET /api/tournaments/:id/forge — The Forge merged leaderboard (CPI + quests + raffle)
+//
+// Returns all participants with CPI sub-scores, quest points, raffle tickets,
+// and top 30% status. Powers "The Forge" competition page.
+// --------------------------------------------------------------------------
+router.get('/:id/forge', async (req, res) => {
+    try {
+        const tournamentId = parseInt(req.params.id, 10);
+        if (isNaN(tournamentId)) {
+            res.status(400).json({ success: false, error: 'Invalid tournament ID' });
+            return;
+        }
+
+        // Verify tournament exists
+        const [tournament] = await db
+            .select()
+            .from(tournaments)
+            .where(eq(tournaments.id, tournamentId))
+            .limit(1);
+
+        if (!tournament) {
+            res.status(404).json({ success: false, error: 'Tournament not found' });
+            return;
+        }
+
+        const { computeFinalScores } = await import('../services/final-score.js');
+        const results = await computeFinalScores(tournamentId);
+
+        // Compute top 30% threshold
+        const top30Index = Math.ceil(results.length * 0.3);
+
+        const entries = results.map((r, i) => ({
+            rank: i + 1,
+            wallet: r.wallet,
+            cpiScore: r.cpiScore,
+            pnlScore: r.pnlScore,
+            riskScore: r.riskScore,
+            consistencyScore: r.consistencyScore,
+            activityScore: r.activityScore,
+            questPoints: r.questPoints,
+            finalScore: r.finalScore,
+            raffleTickets: r.raffleTickets,
+            isTopPercent: i < top30Index,
+        }));
+
+        res.json({
+            success: true,
+            data: {
+                tournament: {
+                    id: tournament.id,
+                    name: tournament.name,
+                    status: tournament.status,
+                },
+                totalParticipants: results.length,
+                top30Cutoff: top30Index,
+                entries,
+            },
+        });
+    } catch (error) {
+        console.error('[API] Error getting forge leaderboard:', error);
         res.status(500).json({
             success: false,
             error: error instanceof Error ? error.message : 'Internal server error',

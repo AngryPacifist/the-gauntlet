@@ -310,7 +310,7 @@ export function computeFisherScores(
         const candidate = allLongs[i];
         const rank = i < FISHER_RANK_POINTS.length ? i + 1 : null;
         const rankPoints = rank !== null ? FISHER_RANK_POINTS[i] : 0;
-        const pointsFromLong = rankPoints * Math.max(candidate.roi, 0) * 100;
+        const pointsFromLong = rankPoints * candidate.roi * 100;
 
         const existing = results.get(candidate.wallet)!;
         existing.longEntry = {
@@ -335,7 +335,7 @@ export function computeFisherScores(
         const candidate = allShorts[i];
         const rank = i < FISHER_RANK_POINTS.length ? i + 1 : null;
         const rankPoints = rank !== null ? FISHER_RANK_POINTS[i] : 0;
-        const pointsFromShort = rankPoints * Math.max(candidate.roi, 0) * 100;
+        const pointsFromShort = rankPoints * candidate.roi * 100;
 
         const existing = results.get(candidate.wallet)!;
         existing.shortEntry = {

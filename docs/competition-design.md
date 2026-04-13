@@ -244,6 +244,8 @@ Rewards diversified profitable trading across multiple assets within a single UT
 
 **Season points:** Top 3 wallets by daily All Around score earn 3 / 2 / 1 season points respectively. **Tie-sharing**: tied wallets all receive the highest tied rank's points (standard competition ranking). Three wallets tied for 1st all receive 3 points; the next wallet is ranked 4th and receives no season points.
 
+**Inclusive ranking:** Wallets with 0 scores are included in rankings. In bear market conditions where all wallets score 0, they all tie at rank 1 and earn full top-rank season points. The only filtered rows are internal sentinel records (wallet prefix `__`).
+
 ### Bottom Fisher (Long Direction)
 
 Rewards precise long entry timing -- *"I see the bottom and try to go long to catch a reversal."*
@@ -257,7 +259,9 @@ Rewards precise long entry timing -- *"I see the bottom and try to go long to ca
 2. Long proximity: `1 - ((entry_price - day_low) / (day_high - day_low))`
 3. Rank all traders' best longs by proximity (descending). Tiebreaker: wallet address alphabetical.
 4. Top 3 receive rank points: 3, 2, 1.
-5. Score = `rank_points * max(ROI, 0) * 100`
+5. Score = `rank_points * ROI * 100`
+
+**Negative scores:** Fisher scores can be negative when a top-3 proximity trader has negative ROI. The formula is uncapped — no floor at zero. This ensures leaderboards always have entries regardless of market conditions. Wallets with negative Fisher scores are still eligible for quest points if they rank in the top 5.
 
 **Season points:** Top 3 earn 3 / 2 / 1 season points daily.
 
@@ -272,7 +276,7 @@ Rewards precise short entry timing -- *"I see the top and try to go short to cat
 2. Short proximity: `(entry_price - day_low) / (day_high - day_low)`
 3. Rank all traders' best shorts by proximity (descending). Tiebreaker: wallet address alphabetical.
 4. Top 3 receive rank points: 3, 2, 1.
-5. Score = `rank_points * max(ROI, 0) * 100`
+5. Score = `rank_points * ROI * 100`
 
 **Edge cases (both directions):**
 - Degenerate price range (< 0.1% daily spread, or high = low): that asset is skipped entirely. Protects against stale oracle feeds, exchange outages, and permanently cached degenerate OHLC bars.
@@ -330,6 +334,7 @@ All category scoring is fully deterministic. Given the same input data, the same
 | All Around best asset position | ROI DESC (single-valued per asset) |
 | Leverage Master leaderboard | stepCount DESC, wallet ASC |
 | Season point awards (top-3 boundary) | score DESC, wallet ASC |
+| Quest point rankings (daily/2-day/weekly) | score DESC, category-specific ROI DESC, wallet ASC |
 | API leaderboard queries | score DESC, wallet ASC |
 | Raffle draw pool order | wallet ASC (before PRNG selection) |
 

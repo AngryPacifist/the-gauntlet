@@ -575,3 +575,52 @@ export async function adminResetRaffle(
         headers: { 'X-Admin-Secret': adminSecret },
     });
 }
+
+// --------------------------------------------------------------------------
+// The Forge — Merged Leaderboard
+// --------------------------------------------------------------------------
+
+export interface ForgeEntry {
+    rank: number;
+    wallet: string;
+    cpiScore: number;
+    pnlScore: number;
+    riskScore: number;
+    consistencyScore: number;
+    activityScore: number;
+    questPoints: number;
+    finalScore: number;
+    raffleTickets: number;
+    isTopPercent: boolean;
+}
+
+export interface ForgeLeaderboard {
+    tournament: { id: number; name: string; status: string };
+    totalParticipants: number;
+    top30Cutoff: number;
+    entries: ForgeEntry[];
+}
+
+export async function getForgeLeaderboard(
+    tournamentId: number,
+): Promise<ForgeLeaderboard> {
+    return apiFetch<ForgeLeaderboard>(`/api/tournaments/${tournamentId}/forge`);
+}
+
+// --------------------------------------------------------------------------
+// Per-Wallet Quest Breakdown
+// --------------------------------------------------------------------------
+
+export interface WalletBreakdown {
+    wallet: string;
+    tournamentId: number;
+    totalQuestPoints: number;
+    breakdown: Record<string, { totalScore: number; daysScored: number }>;
+}
+
+export async function getWalletBreakdown(
+    tournamentId: number,
+    wallet: string,
+): Promise<WalletBreakdown> {
+    return apiFetch<WalletBreakdown>(`/api/categories/${tournamentId}/wallet/${wallet}`);
+}

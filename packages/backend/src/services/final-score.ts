@@ -17,7 +17,7 @@
 // ranks within that day (tie-aware), assigns quest points, and sums.
 // ============================================================================
 
-import { eq, and, desc, asc } from 'drizzle-orm';
+import { eq, and, asc } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import {
     bracketEntries,
@@ -39,6 +39,10 @@ const WEEKLY_CATEGORIES = ['leverage_master_long', 'leverage_master_short'];
 export interface FinalScoreResult {
     wallet: string;
     cpiScore: number;
+    pnlScore: number;
+    riskScore: number;
+    consistencyScore: number;
+    activityScore: number;
     questPoints: number;
     finalScore: number;        // CPI + questPoints
     raffleTickets: number;     // floor(CPI × 0.5) + floor(questPoints × 20)
@@ -67,11 +71,47 @@ function getCompetitionRank(
 }
 
 // --------------------------------------------------------------------------
+// Helper: extract category-specific ROI for tiebreaker sorting
+// Uses the details JSONB column from daily_category_scores.
+// Falls back to 0 when no ROI is available (e.g. Leverage Master).
+// --------------------------------------------------------------------------
+function extractTiebreakerRoi(category: string, details: Record<string, unknown> | null): number {
+    if (!details) return 0;
+    try {
+        switch (category) {
+            case 'all_around': {
+                const scores = details.assetScores as Array<{ bestROI: number }> | undefined;
+                if (!scores || scores.length === 0) return 0;
+                return Math.max(...scores.map((s) => s.bestROI));
+            }
+            case 'bottom_fisher': {
+                const entry = details.longEntry as { roi: number } | null;
+                return entry?.roi ?? 0;
+            }
+            case 'top_tick_traveler': {
+                const entry = details.shortEntry as { roi: number } | null;
+                return entry?.roi ?? 0;
+            }
+            case 'risk_manager':
+            case 'humble_one': {
+                const trade = details.bestTrade as { roi: number } | null;
+                return trade?.roi ?? 0;
+            }
+            default:
+                // Leverage Master — no ROI concept
+                return 0;
+        }
+    } catch {
+        return 0;
+    }
+}
+
+// --------------------------------------------------------------------------
 // Compute quest points for a wallet by replaying each day's scores
 //
 // For each day/window/week and each category:
 //   1. Query that period's scores from daily_category_scores
-//   2. Rank wallets by score (tie-aware, wallet ASC tiebreaker)
+//   2. Rank wallets by score (tie-aware, ROI DESC, wallet ASC tiebreaker)
 //   3. Top 5 earn quest points from the appropriate table
 //   4. Sum across all periods
 // --------------------------------------------------------------------------
@@ -93,11 +133,8 @@ export async function computeQuestPoints(
         const allPerDayCategories = [...DAILY_CATEGORIES, ...MULTIDAY_CATEGORIES];
 
         for (const category of allPerDayCategories) {
-            const dayScores = await db
-                .select({
-                    wallet: dailyCategoryScores.wallet,
-                    score: dailyCategoryScores.score,
-                })
+            const dayScoresRaw = await db
+                .select()
                 .from(dailyCategoryScores)
                 .where(
                     and(
@@ -105,16 +142,20 @@ export async function computeQuestPoints(
                         eq(dailyCategoryScores.category, category),
                         eq(dailyCategoryScores.scoreDate, scoreDate),
                     ),
-                )
-                .orderBy(
-                    desc(dailyCategoryScores.score),
-                    asc(dailyCategoryScores.wallet),
                 );
 
-            // Filter zero/negative scores and sentinel rows
-            const valid = dayScores.filter(
-                (r) => r.score > 0 && !r.wallet.startsWith('__'),
+            // Filter sentinels, sort by score DESC → ROI DESC → wallet ASC
+            const validRows = dayScoresRaw.filter(
+                (r) => !r.wallet.startsWith('__'),
             );
+            validRows.sort((a, b) => {
+                if (b.score !== a.score) return b.score - a.score;
+                const roiA = extractTiebreakerRoi(category, a.details as Record<string, unknown> | null);
+                const roiB = extractTiebreakerRoi(category, b.details as Record<string, unknown> | null);
+                if (roiB !== roiA) return roiB - roiA;
+                return a.wallet.localeCompare(b.wallet);
+            });
+            const valid = validRows.map((r) => ({ wallet: r.wallet, score: r.score }));
 
             if (valid.length === 0) continue;
 
@@ -148,11 +189,8 @@ export async function computeQuestPoints(
             .orderBy(asc(dailyCategoryScores.scoreDate));
 
         for (const { scoreDate } of weekDates) {
-            const weekScores = await db
-                .select({
-                    wallet: dailyCategoryScores.wallet,
-                    score: dailyCategoryScores.score,
-                })
+            const weekScoresRaw = await db
+                .select()
                 .from(dailyCategoryScores)
                 .where(
                     and(
@@ -160,15 +198,20 @@ export async function computeQuestPoints(
                         eq(dailyCategoryScores.category, category),
                         eq(dailyCategoryScores.scoreDate, scoreDate),
                     ),
-                )
-                .orderBy(
-                    desc(dailyCategoryScores.score),
-                    asc(dailyCategoryScores.wallet),
                 );
 
-            const valid = weekScores.filter(
-                (r) => r.score > 0 && !r.wallet.startsWith('__'),
+            // Filter sentinels, sort by score DESC → ROI DESC → wallet ASC
+            const validRows = weekScoresRaw.filter(
+                (r) => !r.wallet.startsWith('__'),
             );
+            validRows.sort((a, b) => {
+                if (b.score !== a.score) return b.score - a.score;
+                const roiA = extractTiebreakerRoi(category, a.details as Record<string, unknown> | null);
+                const roiB = extractTiebreakerRoi(category, b.details as Record<string, unknown> | null);
+                if (roiB !== roiA) return roiB - roiA;
+                return a.wallet.localeCompare(b.wallet);
+            });
+            const valid = validRows.map((r) => ({ wallet: r.wallet, score: r.score }));
 
             if (valid.length === 0) continue;
 
@@ -196,7 +239,13 @@ export async function computeFinalScores(
         .from(rounds)
         .where(eq(rounds.tournamentId, tournamentId));
 
-    const walletCPIs = new Map<string, number>();
+    const walletCPIs = new Map<string, {
+        cpiScore: number;
+        pnlScore: number;
+        riskScore: number;
+        consistencyScore: number;
+        activityScore: number;
+    }>();
 
     for (const round of tournamentRounds) {
         const roundBrackets = await db
@@ -211,9 +260,15 @@ export async function computeFinalScores(
                 .where(eq(bracketEntries.bracketId, bracket.id));
 
             for (const entry of entries) {
-                const existing = walletCPIs.get(entry.wallet) ?? 0;
-                if (entry.cpiScore > existing) {
-                    walletCPIs.set(entry.wallet, entry.cpiScore);
+                const existing = walletCPIs.get(entry.wallet);
+                if (!existing || entry.cpiScore > existing.cpiScore) {
+                    walletCPIs.set(entry.wallet, {
+                        cpiScore: entry.cpiScore,
+                        pnlScore: entry.pnlScore,
+                        riskScore: entry.riskScore,
+                        consistencyScore: entry.consistencyScore,
+                        activityScore: entry.activityScore,
+                    });
                 }
             }
         }
@@ -221,14 +276,18 @@ export async function computeFinalScores(
 
     const results: FinalScoreResult[] = [];
 
-    for (const [wallet, cpiScore] of walletCPIs) {
+    for (const [wallet, scores] of walletCPIs) {
         const questPoints = await computeQuestPoints(tournamentId, wallet);
-        const finalScore = cpiScore + questPoints;
-        const raffleTickets = Math.floor(cpiScore * 0.5) + Math.floor(questPoints * 20);
+        const finalScore = scores.cpiScore + questPoints;
+        const raffleTickets = Math.floor(scores.cpiScore * 0.5) + Math.floor(questPoints * 20);
 
         results.push({
             wallet,
-            cpiScore,
+            cpiScore: scores.cpiScore,
+            pnlScore: scores.pnlScore,
+            riskScore: scores.riskScore,
+            consistencyScore: scores.consistencyScore,
+            activityScore: scores.activityScore,
             questPoints,
             finalScore,
             raffleTickets,

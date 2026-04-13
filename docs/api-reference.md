@@ -451,6 +451,49 @@ Returns aggregate post-tournament analytics: per-round statistics, CPI score dis
 
 ---
 
+### The Forge — Merged Leaderboard
+
+```
+GET /api/tournaments/:id/forge
+```
+
+Returns the merged competition leaderboard combining CPI scores, quest points, and raffle ticket counts for all participants. Powers "The Forge" competition page.
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "tournament": { "id": 1, "name": "Season 1", "status": "active" },
+    "totalParticipants": 50,
+    "top30Cutoff": 15,
+    "entries": [
+      {
+        "rank": 1,
+        "wallet": "AbcXyz...",
+        "cpiScore": 72.5,
+        "pnlScore": 80.1,
+        "riskScore": 68.3,
+        "consistencyScore": 71.0,
+        "activityScore": 55.2,
+        "questPoints": 12,
+        "finalScore": 84.5,
+        "raffleTickets": 276,
+        "isTopPercent": true
+      }
+    ]
+  }
+}
+```
+
+**Notes:**
+- `isTopPercent` indicates whether the wallet is in the top 30% by final score.
+- CPI sub-scores (`pnlScore`, `riskScore`, `consistencyScore`, `activityScore`) reflect the wallet's best bracket entry across all rounds.
+- `finalScore = cpiScore + questPoints`.
+- `raffleTickets = floor(cpiScore × 0.5) + floor(questPoints × 20)`.
+
+---
+
 ## Admin Endpoints
 
 All admin endpoints require the `X-Admin-Secret` header matching the `ADMIN_SECRET` environment variable. Returns `401 Unauthorized` if the secret is missing or incorrect.
@@ -683,6 +726,80 @@ Clears all draw records and resets winner flags for a tournament. Use only if a 
 }
 ```
 
+### Daily Analytics (Admin)
+
+```
+GET /api/admin/analytics/:tournamentId/daily?date=YYYY-MM-DD
+```
+
+Returns per-wallet position metrics (trade count, size, leverage, fees) for a specific date. Uses parallel batch fetching (concurrency=10) with 5-minute cache.
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "stats": {
+      "date": "2026-04-10",
+      "activeTraders": 42,
+      "totalTrades": 186,
+      "size": { "min": 50.0, "max": 5000.0, "avg": 480.3 },
+      "leverage": { "min": 1.1, "max": 50.0, "avg": 8.7 },
+      "fees": { "total": 234.5, "max": 45.2, "min": 0.1, "avg": 5.6 },
+      "tradesPerTrader": { "min": 1, "max": 22, "avg": 4.4 }
+    },
+    "walletMetrics": [
+      {
+        "wallet": "AbcXyz...",
+        "tradeCount": 12,
+        "longCount": 8,
+        "shortCount": 4,
+        "avgSize": 500.0,
+        "maxSize": 2000.0,
+        "minSize": 100.0,
+        "avgLeverage": 5.5,
+        "maxLeverage": 20.0,
+        "minLeverage": 1.1,
+        "totalFees": 45.2
+      }
+    ]
+  }
+}
+```
+
+**Notes:**
+- `walletMetrics` is sorted by `totalFees` descending (most active first).
+- Stats fields (`size`, `leverage`, `fees`, `tradesPerTrader`) are `null` when no activity exists.
+
+### Anomaly Detection (Admin)
+
+```
+GET /api/admin/analytics/:tournamentId/anomalies
+```
+
+Detects wallets with consecutive-day top-5 streaks (≥3 days) across quest categories. Flags potential gaming or bot patterns.
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "tournamentId": 1,
+    "streakThreshold": 3,
+    "anomalyCount": 2,
+    "anomalies": [
+      {
+        "wallet": "AbcXyz...",
+        "category": "all_around",
+        "streakLength": 5,
+        "dates": ["2026-04-06", "2026-04-07", "2026-04-08", "2026-04-09", "2026-04-10"],
+        "type": "consecutive_top5"
+      }
+    ]
+  }
+}
+```
+
 ---
 
 ## Season Endpoints
@@ -769,7 +886,36 @@ Categories use two aggregation modes:
 - **SUM** categories (daily additive): `all_around`, `top_tick_traveler`, `bottom_fisher`
 - **MAX** categories (best single window): `risk_manager`, `humble_one`, `leverage_master_long`, `leverage_master_short`
 
-All leaderboards use deterministic ordering: score DESC, wallet ASC.
+All leaderboards use deterministic ordering: score DESC, wallet ASC. Quest point rankings additionally use category-specific ROI as a secondary tiebreaker before wallet (see competition-design.md Determinism Guarantees).
+
+### Wallet Quest Breakdown
+
+```
+GET /api/categories/:tournamentId/wallet/:wallet
+```
+
+Returns cumulative scores across all 7 quest categories for a single wallet. Used by The Forge expanded row "Quests Breakdown" panel.
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "wallet": "AbcXyz...",
+    "tournamentId": 1,
+    "totalQuestPoints": 15,
+    "breakdown": {
+      "all_around": { "totalScore": 185.4, "daysScored": 3 },
+      "top_tick_traveler": { "totalScore": 42.1, "daysScored": 2 },
+      "bottom_fisher": { "totalScore": 67.8, "daysScored": 3 },
+      "risk_manager": { "totalScore": 12.5, "daysScored": 1 },
+      "humble_one": { "totalScore": 8.3, "daysScored": 1 },
+      "leverage_master_long": { "totalScore": 5, "daysScored": 1 },
+      "leverage_master_short": { "totalScore": 3, "daysScored": 1 }
+    }
+  }
+}
+```
 
 ### Category Leaderboard
 

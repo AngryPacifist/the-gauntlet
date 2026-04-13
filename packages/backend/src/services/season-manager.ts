@@ -660,7 +660,7 @@ export async function awardDailyAllAroundPoints(
     let rank = 0;
     for (let i = 0; i < allAroundRows.length; i++) {
         const row = allAroundRows[i];
-        if (row.score <= 0) continue;
+        if (row.wallet.startsWith('__')) continue;
 
         // New rank if score differs from previous
         if (i === 0 || row.score !== allAroundRows[i - 1].score) {

@@ -1,6 +1,7 @@
 // ============================================================================
 // Daily Category API Routes
 //
+// GET /api/categories/:tournamentId/wallet/:wallet  -- Per-wallet quest breakdown
 // GET /api/categories/:tournamentId/:category       -- Category leaderboard (cumulative)
 // GET /api/categories/:tournamentId/:category/:date -- Single day scores
 //
@@ -196,6 +197,84 @@ router.post('/score', async (req, res) => {
         });
     } catch (error) {
         console.error('[Categories] Error scoring categories:', error);
+        res.status(500).json({
+            success: false,
+            error: error instanceof Error ? error.message : 'Internal server error',
+        });
+    }
+});
+
+// --------------------------------------------------------------------------
+// GET /api/categories/:tournamentId/wallet/:wallet — All quest scores for one wallet
+//
+// Returns cumulative scores across all 7 categories for a single wallet.
+// Used by The Forge expanded row "Quests Breakdown" panel.
+//
+// IMPORTANT: This route MUST be registered BEFORE /:tournamentId/:category
+// otherwise Express will match "wallet" as a :category param.
+// --------------------------------------------------------------------------
+router.get('/:tournamentId/wallet/:wallet', async (req, res) => {
+    try {
+        const tournamentId = parseInt(req.params.tournamentId, 10);
+        const wallet = req.params.wallet;
+
+        if (isNaN(tournamentId)) {
+            res.status(400).json({ success: false, error: 'Invalid tournament ID' });
+            return;
+        }
+
+        if (!wallet || wallet.length < 32 || wallet.length > 44) {
+            res.status(400).json({ success: false, error: 'Invalid wallet address' });
+            return;
+        }
+
+        const categories = [
+            'all_around', 'top_tick_traveler', 'bottom_fisher',
+            'risk_manager', 'humble_one', 'leverage_master_long', 'leverage_master_short',
+        ] as const;
+
+        const breakdown: Record<string, { totalScore: number; daysScored: number }> = {};
+
+        for (const category of categories) {
+            const agg = SUM_CATEGORIES.has(category)
+                ? sql<number>`SUM(${dailyCategoryScores.score})`
+                : sql<number>`MAX(${dailyCategoryScores.score})`;
+
+            const [result] = await db
+                .select({
+                    totalScore: agg.as('total_score'),
+                    daysScored: sql<number>`COUNT(*)`.as('days_scored'),
+                })
+                .from(dailyCategoryScores)
+                .where(
+                    and(
+                        eq(dailyCategoryScores.tournamentId, tournamentId),
+                        eq(dailyCategoryScores.category, category),
+                        eq(dailyCategoryScores.wallet, wallet),
+                    ),
+                );
+
+            breakdown[category] = {
+                totalScore: result?.totalScore ?? 0,
+                daysScored: result?.daysScored ?? 0,
+            };
+        }
+
+        // Also compute quest points using the final-score module
+        const { computeQuestPoints } = await import('../services/final-score.js');
+        const totalQuestPoints = await computeQuestPoints(tournamentId, wallet);
+
+        res.json({
+            success: true,
+            data: {
+                wallet,
+                tournamentId,
+                totalQuestPoints,
+                breakdown,
+            },
+        });
+    } catch (error) {
+        console.error('[Categories] Error getting wallet breakdown:', error);
         res.status(500).json({
             success: false,
             error: error instanceof Error ? error.message : 'Internal server error',
