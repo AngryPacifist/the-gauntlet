@@ -228,7 +228,86 @@ export async function computeQuestPoints(
 }
 
 // --------------------------------------------------------------------------
+// Batch Compute Quest Points — ALL wallets in ONE query
+//
+// Fetches every daily_category_scores row for the tournament in a single
+// query, then groups, ranks, and awards quest points entirely in-memory.
+// Returns Map<wallet, questPoints>.
+//
+// This replaces the per-wallet approach when computing final scores,
+// reducing ~3000 queries to 1 for a 30-wallet × 14-day tournament.
+// --------------------------------------------------------------------------
+export async function computeAllQuestPoints(
+    tournamentId: number,
+): Promise<Map<string, number>> {
+    // Single query: fetch all scores for this tournament
+    const allScores = await db
+        .select()
+        .from(dailyCategoryScores)
+        .where(eq(dailyCategoryScores.tournamentId, tournamentId));
+
+    // Group by (category, scoreDate) for ranking
+    const groups = new Map<string, typeof allScores>();
+    for (const row of allScores) {
+        // Skip sentinel rows
+        if (row.wallet.startsWith('__')) continue;
+        const key = `${row.category}::${row.scoreDate}`;
+        let group = groups.get(key);
+        if (!group) {
+            group = [];
+            groups.set(key, group);
+        }
+        group.push(row);
+    }
+
+    // Accumulate quest points per wallet
+    const walletPoints = new Map<string, number>();
+
+    for (const [key, rows] of groups) {
+        const category = key.split('::')[0];
+
+        // Sort: score DESC → ROI DESC → wallet ASC (deterministic)
+        rows.sort((a, b) => {
+            if (b.score !== a.score) return b.score - a.score;
+            const roiA = extractTiebreakerRoi(category, a.details as Record<string, unknown> | null);
+            const roiB = extractTiebreakerRoi(category, b.details as Record<string, unknown> | null);
+            if (roiB !== roiA) return roiB - roiA;
+            return a.wallet.localeCompare(b.wallet);
+        });
+
+        // Determine which points table to use
+        let pointsTable: number[];
+        if (DAILY_CATEGORIES.includes(category)) {
+            pointsTable = DAILY_QUEST_POINTS;
+        } else if (MULTIDAY_CATEGORIES.includes(category)) {
+            pointsTable = MULTIDAY_QUEST_POINTS;
+        } else if (WEEKLY_CATEGORIES.includes(category)) {
+            pointsTable = LEVERAGE_QUEST_POINTS;
+        } else {
+            continue;
+        }
+
+        // Assign quest points using tie-aware competition ranking
+        let competitionRank = 0;
+        for (let i = 0; i < rows.length; i++) {
+            if (i > 0 && rows[i].score !== rows[i - 1].score) {
+                competitionRank = i;
+            }
+            if (competitionRank < pointsTable.length) {
+                const current = walletPoints.get(rows[i].wallet) ?? 0;
+                walletPoints.set(rows[i].wallet, current + pointsTable[competitionRank]);
+            }
+        }
+    }
+
+    return walletPoints;
+}
+
+// --------------------------------------------------------------------------
 // Compute Final Score for all wallets in a tournament
+//
+// Uses batch quest point computation (1 DB query) instead of per-wallet
+// queries (~3000 queries). Critical for remote DB connections.
 // --------------------------------------------------------------------------
 export async function computeFinalScores(
     tournamentId: number,
@@ -274,10 +353,13 @@ export async function computeFinalScores(
         }
     }
 
+    // Batch quest point computation — 1 query for all wallets
+    const questPointsMap = await computeAllQuestPoints(tournamentId);
+
     const results: FinalScoreResult[] = [];
 
     for (const [wallet, scores] of walletCPIs) {
-        const questPoints = await computeQuestPoints(tournamentId, wallet);
+        const questPoints = questPointsMap.get(wallet) ?? 0;
         const finalScore = scores.cpiScore + questPoints;
         const raffleTickets = Math.floor(scores.cpiScore * 0.5) + Math.floor(questPoints * 20);
 
