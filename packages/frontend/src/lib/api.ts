@@ -576,6 +576,71 @@ export async function adminResetRaffle(
     });
 }
 
+// --- Admin Analytics Functions ---
+
+export interface AdminDailyWalletMetrics {
+    wallet: string;
+    tradeCount: number;
+    longCount: number;
+    shortCount: number;
+    avgSize: number;
+    maxSize: number;
+    minSize: number;
+    avgLeverage: number;
+    maxLeverage: number;
+    minLeverage: number;
+    totalFees: number;
+}
+
+export interface AdminDailyStats {
+    date: string;
+    activeTraders: number;
+    totalTrades: number;
+    size: { min: number; max: number; avg: number } | null;
+    leverage: { min: number; max: number; avg: number } | null;
+    fees: { total: number; max: number; min: number; avg: number } | null;
+    tradesPerTrader: { min: number; max: number; avg: number } | null;
+}
+
+export interface AdminDailyAnalytics {
+    stats: AdminDailyStats;
+    walletMetrics: AdminDailyWalletMetrics[];
+}
+
+export async function adminGetDailyAnalytics(
+    tournamentId: number,
+    date: string,
+    adminSecret: string,
+): Promise<AdminDailyAnalytics> {
+    return apiFetch(`/api/admin/analytics/${tournamentId}/daily?date=${date}`, {
+        headers: { 'X-Admin-Secret': adminSecret },
+    });
+}
+
+export interface AnomalyEntry {
+    wallet: string;
+    category: string;
+    streakLength: number;
+    dates: string[];
+    type: 'consecutive_top5';
+}
+
+export interface AdminAnomalyAnalytics {
+    tournamentId: number;
+    streakThreshold: number;
+    anomalyCount: number;
+    anomalies: AnomalyEntry[];
+}
+
+export async function adminGetAnomalies(
+    tournamentId: number,
+    adminSecret: string,
+): Promise<AdminAnomalyAnalytics> {
+    return apiFetch(`/api/admin/analytics/${tournamentId}/anomalies`, {
+        headers: { 'X-Admin-Secret': adminSecret },
+    });
+}
+
 // --------------------------------------------------------------------------
 // The Forge — Merged Leaderboard
 // --------------------------------------------------------------------------

@@ -16,6 +16,8 @@ import {
     adminScoreCategories,
     adminResetRaffle,
     getTournamentAnalytics,
+    adminGetDailyAnalytics,
+    adminGetAnomalies,
     listSeasons,
     adminCreateSeason,
     adminStartSeason,
@@ -24,6 +26,8 @@ import {
     type Tournament,
     type Season,
     type TournamentAnalytics,
+    type AdminDailyAnalytics,
+    type AdminAnomalyAnalytics,
 } from '@/lib/api';
 import {
     Shield,
@@ -46,6 +50,8 @@ import {
     Flag,
     RotateCcw,
     Flame,
+    Activity,
+    AlertTriangle,
 } from 'lucide-react';
 import styles from './page.module.css';
 
@@ -94,6 +100,17 @@ export default function AdminPage() {
     const [analyticsId, setAnalyticsId] = useState<number | null>(null);
     const [analyticsData, setAnalyticsData] = useState<TournamentAnalytics | null>(null);
     const [analyticsLoading, setAnalyticsLoading] = useState(false);
+
+    // Daily metrics
+    const [dailyId, setDailyId] = useState<number | null>(null);
+    const [dailyDate, setDailyDate] = useState(new Date().toISOString().split('T')[0]);
+    const [dailyData, setDailyData] = useState<AdminDailyAnalytics | null>(null);
+    const [dailyLoading, setDailyLoading] = useState(false);
+
+    // Anomaly detection
+    const [anomalyId, setAnomalyId] = useState<number | null>(null);
+    const [anomalyData, setAnomalyData] = useState<AdminAnomalyAnalytics | null>(null);
+    const [anomalyLoading, setAnomalyLoading] = useState(false);
 
     // Toast notification
     const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
@@ -394,6 +411,69 @@ export default function AdminPage() {
         }
     }
 
+    // ── Daily metrics handler ─────────────────────────────────────────────────
+
+    async function handleLoadDaily(tournamentId: number) {
+        if (dailyId === tournamentId) {
+            setDailyId(null);
+            setDailyData(null);
+            return;
+        }
+        if (!adminSecret) { showToast('Enter admin secret first', 'error'); return; }
+        setDailyId(tournamentId);
+        setDailyLoading(true);
+        try {
+            const data = await adminGetDailyAnalytics(tournamentId, dailyDate, adminSecret);
+            setDailyData(data);
+        } catch (err) {
+            const msg = err instanceof Error ? err.message : 'Failed to load daily metrics';
+            addLog(`Error: ${msg}`);
+            showToast(msg, 'error');
+            setDailyId(null);
+        } finally {
+            setDailyLoading(false);
+        }
+    }
+
+    async function handleRefreshDaily(tournamentId: number) {
+        if (!adminSecret) { showToast('Enter admin secret first', 'error'); return; }
+        setDailyLoading(true);
+        try {
+            const data = await adminGetDailyAnalytics(tournamentId, dailyDate, adminSecret);
+            setDailyData(data);
+        } catch (err) {
+            const msg = err instanceof Error ? err.message : 'Failed to load daily metrics';
+            addLog(`Error: ${msg}`);
+            showToast(msg, 'error');
+        } finally {
+            setDailyLoading(false);
+        }
+    }
+
+    // ── Anomaly detection handler ─────────────────────────────────────────────
+
+    async function handleLoadAnomalies(tournamentId: number) {
+        if (anomalyId === tournamentId) {
+            setAnomalyId(null);
+            setAnomalyData(null);
+            return;
+        }
+        if (!adminSecret) { showToast('Enter admin secret first', 'error'); return; }
+        setAnomalyId(tournamentId);
+        setAnomalyLoading(true);
+        try {
+            const data = await adminGetAnomalies(tournamentId, adminSecret);
+            setAnomalyData(data);
+        } catch (err) {
+            const msg = err instanceof Error ? err.message : 'Failed to load anomalies';
+            addLog(`Error: ${msg}`);
+            showToast(msg, 'error');
+            setAnomalyId(null);
+        } finally {
+            setAnomalyLoading(false);
+        }
+    }
+
     // ── Season handlers ──────────────────────────────────────────────────────
 
     async function handleCreateSeason(e: React.FormEvent) {
@@ -616,6 +696,12 @@ export default function AdminPage() {
                             <button className="btn btn--secondary" onClick={() => handleLoadAnalytics(t.id)} disabled={actionLoading}>
                                 <BarChart3 size={14} /> Analytics
                             </button>
+                            <button className="btn btn--secondary" onClick={() => handleLoadDaily(t.id)} disabled={actionLoading}>
+                                <Activity size={14} /> Daily Metrics
+                            </button>
+                            <button className="btn btn--secondary" onClick={() => handleLoadAnomalies(t.id)} disabled={actionLoading}>
+                                <AlertTriangle size={14} /> Anomalies
+                            </button>
                         </div>
 
                         {/* Analytics panel */}
@@ -707,6 +793,140 @@ export default function AdminPage() {
                                                     ))}
                                                 </div>
                                             </>
+                                        )}
+                                    </>
+                                ) : null}
+                            </div>
+                        )}
+
+                        {/* Daily Metrics panel */}
+                        {dailyId === t.id && (
+                            <div style={{ marginTop: 'var(--space-md)', padding: 'var(--space-md)', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-md)', marginBottom: 'var(--space-md)', flexWrap: 'wrap' }}>
+                                    <h4 style={{ fontSize: '0.8125rem', fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>Daily Position Metrics</h4>
+                                    <input
+                                        type="date"
+                                        className="input input--mono"
+                                        value={dailyDate}
+                                        onChange={(e) => setDailyDate(e.target.value)}
+                                        style={{ maxWidth: '180px', fontSize: '0.75rem' }}
+                                    />
+                                    <button className="btn btn--secondary" onClick={() => handleRefreshDaily(t.id)} disabled={dailyLoading} style={{ fontSize: '0.75rem', padding: '4px 12px' }}>
+                                        {dailyLoading ? 'Loading...' : 'Fetch'}
+                                    </button>
+                                </div>
+                                {dailyLoading ? (
+                                    <div style={{ textAlign: 'center', padding: 'var(--space-md)', color: 'var(--text-muted)' }}>Loading daily metrics...</div>
+                                ) : dailyData ? (
+                                    <>
+                                        {/* Aggregate stats */}
+                                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 'var(--space-sm)', marginBottom: 'var(--space-md)' }}>
+                                            <div style={{ padding: '8px', background: 'var(--bg-primary)', borderRadius: 'var(--radius-sm)', textAlign: 'center' }}>
+                                                <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Active Traders</div>
+                                                <div style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--text-primary)' }}>{dailyData.stats.activeTraders}</div>
+                                            </div>
+                                            <div style={{ padding: '8px', background: 'var(--bg-primary)', borderRadius: 'var(--radius-sm)', textAlign: 'center' }}>
+                                                <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Total Trades</div>
+                                                <div style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--text-primary)' }}>{dailyData.stats.totalTrades}</div>
+                                            </div>
+                                            {dailyData.stats.fees && (
+                                                <div style={{ padding: '8px', background: 'var(--bg-primary)', borderRadius: 'var(--radius-sm)', textAlign: 'center' }}>
+                                                    <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Total Fees</div>
+                                                    <div style={{ fontSize: '1rem', fontWeight: 700, color: '#f59e0b' }}>${dailyData.stats.fees.total.toFixed(2)}</div>
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        {/* Min/Max/Avg rows */}
+                                        {dailyData.stats.size && (
+                                            <div style={{ marginBottom: 'var(--space-sm)', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                                                <strong>Position Size:</strong> min ${dailyData.stats.size.min.toFixed(2)} / max ${dailyData.stats.size.max.toFixed(2)} / avg ${dailyData.stats.size.avg.toFixed(2)}
+                                            </div>
+                                        )}
+                                        {dailyData.stats.leverage && (
+                                            <div style={{ marginBottom: 'var(--space-sm)', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                                                <strong>Leverage at Open:</strong> min {dailyData.stats.leverage.min.toFixed(1)}x / max {dailyData.stats.leverage.max.toFixed(1)}x / avg {dailyData.stats.leverage.avg.toFixed(1)}x
+                                            </div>
+                                        )}
+                                        {dailyData.stats.tradesPerTrader && (
+                                            <div style={{ marginBottom: 'var(--space-md)', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                                                <strong>Trades/Trader:</strong> min {dailyData.stats.tradesPerTrader.min} / max {dailyData.stats.tradesPerTrader.max} / avg {dailyData.stats.tradesPerTrader.avg.toFixed(1)}
+                                            </div>
+                                        )}
+
+                                        {/* Per-wallet table */}
+                                        {dailyData.walletMetrics.length > 0 && (
+                                            <div style={{ overflowX: 'auto' }}>
+                                                <table style={{ width: '100%', fontSize: '0.75rem', borderCollapse: 'collapse' }}>
+                                                    <thead>
+                                                        <tr style={{ borderBottom: '1px solid var(--border-subtle)' }}>
+                                                            <th style={{ textAlign: 'left', padding: '6px 8px', color: 'var(--text-muted)', fontWeight: 600 }}>Wallet</th>
+                                                            <th style={{ textAlign: 'right', padding: '6px 8px', color: 'var(--text-muted)', fontWeight: 600 }}>Trades</th>
+                                                            <th style={{ textAlign: 'right', padding: '6px 8px', color: 'var(--text-muted)', fontWeight: 600 }}>L/S</th>
+                                                            <th style={{ textAlign: 'right', padding: '6px 8px', color: 'var(--text-muted)', fontWeight: 600 }}>Avg Size</th>
+                                                            <th style={{ textAlign: 'right', padding: '6px 8px', color: 'var(--text-muted)', fontWeight: 600 }}>Avg Lev.</th>
+                                                            <th style={{ textAlign: 'right', padding: '6px 8px', color: 'var(--text-muted)', fontWeight: 600 }}>Fees</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        {dailyData.walletMetrics.slice(0, 20).map((w) => (
+                                                            <tr key={w.wallet} style={{ borderBottom: '1px solid var(--border-subtle)' }}>
+                                                                <td style={{ padding: '6px 8px', fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)' }}>{w.wallet.slice(0, 4)}...{w.wallet.slice(-4)}</td>
+                                                                <td style={{ padding: '6px 8px', textAlign: 'right', color: 'var(--text-primary)' }}>{w.tradeCount}</td>
+                                                                <td style={{ padding: '6px 8px', textAlign: 'right', color: 'var(--text-secondary)' }}>{w.longCount}/{w.shortCount}</td>
+                                                                <td style={{ padding: '6px 8px', textAlign: 'right', fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)' }}>${w.avgSize.toFixed(2)}</td>
+                                                                <td style={{ padding: '6px 8px', textAlign: 'right', fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)' }}>{w.avgLeverage.toFixed(1)}x</td>
+                                                                <td style={{ padding: '6px 8px', textAlign: 'right', fontFamily: 'var(--font-mono)', color: '#f59e0b' }}>${w.totalFees.toFixed(2)}</td>
+                                                            </tr>
+                                                        ))}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        )}
+                                    </>
+                                ) : (
+                                    <div style={{ textAlign: 'center', padding: 'var(--space-md)', color: 'var(--text-muted)', fontSize: '0.8125rem' }}>Select a date and click Fetch</div>
+                                )}
+                            </div>
+                        )}
+
+                        {/* Anomaly detection panel */}
+                        {anomalyId === t.id && (
+                            <div style={{ marginTop: 'var(--space-md)', padding: 'var(--space-md)', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)' }}>
+                                <h4 style={{ fontSize: '0.8125rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: 'var(--space-sm)' }}>Quest Anomaly Detection</h4>
+                                {anomalyLoading ? (
+                                    <div style={{ textAlign: 'center', padding: 'var(--space-md)', color: 'var(--text-muted)' }}>Scanning for anomalies...</div>
+                                ) : anomalyData ? (
+                                    <>
+                                        <div style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)', marginBottom: 'var(--space-md)' }}>
+                                            Streak threshold: <strong style={{ color: 'var(--text-primary)' }}>{anomalyData.streakThreshold}+ consecutive days</strong> in top 5 •{' '}
+                                            <strong style={{ color: anomalyData.anomalyCount > 0 ? '#f59e0b' : '#22c55e' }}>{anomalyData.anomalyCount}</strong> anomalies detected
+                                        </div>
+                                        {anomalyData.anomalies.length > 0 ? (
+                                            <div style={{ overflowX: 'auto' }}>
+                                                <table style={{ width: '100%', fontSize: '0.75rem', borderCollapse: 'collapse' }}>
+                                                    <thead>
+                                                        <tr style={{ borderBottom: '1px solid var(--border-subtle)' }}>
+                                                            <th style={{ textAlign: 'left', padding: '6px 8px', color: 'var(--text-muted)', fontWeight: 600 }}>Wallet</th>
+                                                            <th style={{ textAlign: 'left', padding: '6px 8px', color: 'var(--text-muted)', fontWeight: 600 }}>Category</th>
+                                                            <th style={{ textAlign: 'right', padding: '6px 8px', color: 'var(--text-muted)', fontWeight: 600 }}>Streak</th>
+                                                            <th style={{ textAlign: 'left', padding: '6px 8px', color: 'var(--text-muted)', fontWeight: 600 }}>Dates</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        {anomalyData.anomalies.map((a, i) => (
+                                                            <tr key={`${a.wallet}-${a.category}-${i}`} style={{ borderBottom: '1px solid var(--border-subtle)' }}>
+                                                                <td style={{ padding: '6px 8px', fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)' }}>{a.wallet.slice(0, 4)}...{a.wallet.slice(-4)}</td>
+                                                                <td style={{ padding: '6px 8px', color: 'var(--text-primary)' }}>{a.category.replace(/_/g, ' ')}</td>
+                                                                <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 700, color: a.streakLength >= 5 ? '#ef4444' : '#f59e0b' }}>{a.streakLength}d</td>
+                                                                <td style={{ padding: '6px 8px', fontFamily: 'var(--font-mono)', fontSize: '0.6875rem', color: 'var(--text-muted)' }}>{a.dates[0]} → {a.dates[a.dates.length - 1]}</td>
+                                                            </tr>
+                                                        ))}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        ) : (
+                                            <div style={{ textAlign: 'center', padding: 'var(--space-md)', color: '#22c55e', fontSize: '0.8125rem' }}>✓ No anomalies detected</div>
                                         )}
                                     </>
                                 ) : null}
