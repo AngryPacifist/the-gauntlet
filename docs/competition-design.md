@@ -226,6 +226,22 @@ Alongside the main CPI-based bracket tournament, seven tactical categories provi
 **2-day window categories** (scored on even-numbered tournament days): Risk Manager, The Humble One
 **Weekly categories** (scored at week boundary): Leverage Master (Long), Leverage Master (Short)
 
+### Hourly Provisional Updates
+
+All categories are also scored provisionally every hour (`0 * * * *`) during the current UTC day. This provides traders with near-real-time leaderboard positions throughout the day. Key differences from the midnight (final) scoring:
+
+| Aspect | Midnight Job | Hourly Job |
+|--------|-------------|------------|
+| Date targeted | Yesterday (completed day) | Today (in-progress day) |
+| OHLC data source | `resolution=D` (daily bar, cached in DB) | `resolution=60` (hourly bars, NOT cached) |
+| Season point awards | Yes | No (prevents sentinel collision) |
+| Leverage leaderboard | Computed at week boundary | Progress evaluation only |
+| Status label | FINAL | LIVE |
+
+The hourly job writes to the same `daily_category_scores` table via the existing idempotent upsert (`onConflictDoUpdate`). The midnight job overwrites hourly data with finalized daily OHLC bars, making the midnight run the authoritative source.
+
+The frontend displays a **LIVE** badge (green, pulsing) when viewing today's quest scores, and a **FINAL** badge (muted) for any past date. This sets correct expectations — hourly scores are provisional and may shift as the day progresses.
+
 ### All Around Trader
 
 Rewards diversified profitable trading across multiple assets within a single UTC day.
@@ -250,7 +266,9 @@ Rewards diversified profitable trading across multiple assets within a single UT
 
 Rewards precise long entry timing -- *"I see the bottom and try to go long to catch a reversal."*
 
-**Data source:** Daily OHLC candles from the [Pyth Benchmarks TradingView shim](https://benchmarks.pyth.network/v1/shims/tradingview/history). No API key required. Bars are cached in the database (immutable after the day ends).
+**Data source:** OHLC candles from the [Pyth Benchmarks TradingView shim](https://benchmarks.pyth.network/v1/shims/tradingview/history). No API key required.
+- **Midnight job (final):** Uses `resolution=D` (single daily bar). Cached permanently in the `pyth_ohlc_cache` table — immutable after the day ends.
+- **Hourly job (provisional):** Uses `resolution=60` (hourly bars), aggregated into a running high/low for the day so far. NOT cached in the database — intraday data is provisional and changes every hour.
 
 **Algorithm (tournament-wide):**
 1. For each trader's positions opened on the UTC day:

@@ -657,8 +657,17 @@ function QuestLeaderboards({
                     <button onClick={() => onNavigateDate(-1)} style={dateNavBtnStyle}>
                         <ChevronLeft size={16} />
                     </button>
-                    <span style={{ color: '#94a3b8', fontSize: '0.8125rem', minWidth: '140px', textAlign: 'center' }}>
+                    <span style={{ color: '#94a3b8', fontSize: '0.8125rem', minWidth: '180px', textAlign: 'center', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
                         {periodLabel}
+                        <span style={{
+                            padding: '2px 8px', borderRadius: '9999px',
+                            fontSize: '0.625rem', fontWeight: 700, letterSpacing: '0.05em',
+                            background: questDate === todayUTC() ? 'rgba(34, 197, 94, 0.15)' : 'rgba(100, 116, 139, 0.15)',
+                            color: questDate === todayUTC() ? '#22c55e' : '#64748b',
+                            ...(questDate === todayUTC() ? { animation: 'pulse 2s infinite' } : {}),
+                        }}>
+                            {questDate === todayUTC() ? 'LIVE' : 'FINAL'}
+                        </span>
                     </span>
                     <button onClick={() => onNavigateDate(1)} style={dateNavBtnStyle}>
                         <ChevronRight size={16} />

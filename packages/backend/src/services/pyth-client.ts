@@ -234,3 +234,128 @@ export async function fetchDailyOHLCBatch(
 
     return results;
 }
+
+// --------------------------------------------------------------------------
+// Fetch INTRADAY OHLC for a single asset — current UTC day only
+//
+// Uses resolution=60 (hourly bars) instead of resolution=D (daily).
+// Aggregates all hourly bars into a running high/low for the day so far.
+//
+// Does NOT write to pyth_ohlc_cache — intraday data is provisional and
+// changes every hour. Only the midnight job's fetchDailyOHLC caches
+// finalized daily bars.
+//
+// Returns null if:
+//   - Symbol not mapped
+//   - Fetch fails
+//   - No bars returned (day just started, no data yet)
+// --------------------------------------------------------------------------
+export async function fetchIntradayOHLC(
+    adrenaSymbol: string,
+    dateStr: string,
+): Promise<OHLCBar | null> {
+    // 1. Resolve Pyth symbol
+    const pythSymbol = ADRENA_TO_PYTH_SYMBOL[adrenaSymbol];
+    if (!pythSymbol) {
+        console.warn(`[PythClient] No Pyth mapping for Adrena symbol "${adrenaSymbol}"`);
+        return null;
+    }
+
+    // 2. Build time range: midnight UTC of dateStr → now
+    const from = Math.floor(new Date(dateStr + 'T00:00:00Z').getTime() / 1000);
+    const to = Math.floor(Date.now() / 1000);
+
+    // Safety check: if 'to' is before 'from', the date is in the future
+    if (to < from) {
+        console.warn(`[PythClient] Intraday request for future date ${dateStr}, skipping`);
+        return null;
+    }
+
+    const url =
+        `${PYTH_BENCHMARKS_BASE}/v1/shims/tradingview/history` +
+        `?symbol=${encodeURIComponent(pythSymbol)}` +
+        `&resolution=60` +
+        `&from=${from}` +
+        `&to=${to}`;
+
+    try {
+        const response = await fetchWithRetry(url);
+
+        if (!response.ok) {
+            console.error(
+                `[PythClient] HTTP ${response.status} fetching intraday OHLC for ${adrenaSymbol} on ${dateStr}`,
+            );
+            return null;
+        }
+
+        const data = (await response.json()) as TradingViewHistoryResponse;
+
+        if (data.s !== 'ok') {
+            console.warn(
+                `[PythClient] Pyth returned status "${data.s}" for intraday ${adrenaSymbol} on ${dateStr}` +
+                (data.errmsg ? `: ${data.errmsg}` : ''),
+            );
+            return null;
+        }
+
+        // Validate response arrays exist and are non-empty
+        if (
+            !data.t || !data.o || !data.h || !data.l || !data.c ||
+            data.t.length === 0
+        ) {
+            console.warn(
+                `[PythClient] No intraday bars for ${adrenaSymbol} on ${dateStr} (day may have just started)`,
+            );
+            return null;
+        }
+
+        // 3. Aggregate hourly bars into a single running OHLCBar
+        const bar: OHLCBar = {
+            open: data.o[0],
+            high: Math.max(...data.h),
+            low: Math.min(...data.l),
+            close: data.c[data.c.length - 1],
+        };
+
+        console.log(
+            `[PythClient] Intraday OHLC for ${adrenaSymbol} on ${dateStr} (${data.t.length} hourly bars): ` +
+            `O=${bar.open.toFixed(2)} H=${bar.high.toFixed(2)} L=${bar.low.toFixed(2)} C=${bar.close.toFixed(2)}`,
+        );
+
+        // Intentionally NO cache write — intraday data is provisional
+
+        return bar;
+    } catch (error) {
+        console.error(
+            `[PythClient] Failed to fetch intraday OHLC for ${adrenaSymbol} on ${dateStr}:`,
+            error instanceof Error ? error.message : error,
+        );
+        return null;
+    }
+}
+
+// --------------------------------------------------------------------------
+// Fetch intraday OHLC for ALL supported Adrena assets for a given date
+//
+// Returns a Map<adrenaSymbol, OHLCBar>. Missing bars are omitted (not null).
+// Same pattern as fetchDailyOHLCBatch but using fetchIntradayOHLC.
+// --------------------------------------------------------------------------
+export async function fetchIntradayOHLCBatch(
+    dateStr: string,
+): Promise<Map<string, OHLCBar>> {
+    const results = new Map<string, OHLCBar>();
+    const symbols = Object.keys(ADRENA_TO_PYTH_SYMBOL);
+
+    for (const symbol of symbols) {
+        const bar = await fetchIntradayOHLC(symbol, dateStr);
+        if (bar) {
+            results.set(symbol, bar);
+        }
+    }
+
+    console.log(
+        `[PythClient] Intraday batch for ${dateStr}: ${results.size}/${symbols.length} assets fetched`,
+    );
+
+    return results;
+}

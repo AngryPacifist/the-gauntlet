@@ -147,7 +147,7 @@ adrena-the-gauntlet/
 │   │       └── services/
 │   │           ├── tournament-manager.ts  # Tournament lifecycle logic
 │   │           ├── scoring-engine.ts      # CPI computation
-│   │           ├── scheduler.ts           # Automated scoring + round/category advancement
+│   │           ├── scheduler.ts           # Automated scoring, round advancement, daily + hourly category scoring
 │   │           ├── adrena-client.ts       # Adrena API client
 │   │           ├── season-manager.ts      # Season lifecycle + daily category season points (Fisher/All Around)
 │   │           ├── category-engine.ts     # All Around + Fisher daily scoring
