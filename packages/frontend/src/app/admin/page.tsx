@@ -15,6 +15,7 @@ import {
     verifyRaffleDraw,
     adminScoreCategories,
     adminResetRaffle,
+    getTournamentAnalytics,
     listSeasons,
     adminCreateSeason,
     adminStartSeason,
@@ -22,6 +23,7 @@ import {
     adminCompleteSeason,
     type Tournament,
     type Season,
+    type TournamentAnalytics,
 } from '@/lib/api';
 import {
     Shield,
@@ -43,6 +45,7 @@ import {
     Layers,
     Flag,
     RotateCcw,
+    Flame,
 } from 'lucide-react';
 import styles from './page.module.css';
 
@@ -86,6 +89,11 @@ export default function AdminPage() {
     // Action feedback
     const [actionLog, setActionLog] = useState<string[]>([]);
     const [actionLoading, setActionLoading] = useState(false);
+
+    // Analytics
+    const [analyticsId, setAnalyticsId] = useState<number | null>(null);
+    const [analyticsData, setAnalyticsData] = useState<TournamentAnalytics | null>(null);
+    const [analyticsLoading, setAnalyticsLoading] = useState(false);
 
     // Toast notification
     const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
@@ -363,6 +371,29 @@ export default function AdminPage() {
         }
     }
 
+    // ── Analytics handler ─────────────────────────────────────────────────────
+
+    async function handleLoadAnalytics(tournamentId: number) {
+        if (analyticsId === tournamentId) {
+            setAnalyticsId(null);
+            setAnalyticsData(null);
+            return;
+        }
+        setAnalyticsId(tournamentId);
+        setAnalyticsLoading(true);
+        try {
+            const data = await getTournamentAnalytics(tournamentId);
+            setAnalyticsData(data);
+        } catch (err) {
+            const msg = err instanceof Error ? err.message : 'Failed to load analytics';
+            addLog(`Error: ${msg}`);
+            showToast(msg, 'error');
+            setAnalyticsId(null);
+        } finally {
+            setAnalyticsLoading(false);
+        }
+    }
+
     // ── Season handlers ──────────────────────────────────────────────────────
 
     async function handleCreateSeason(e: React.FormEvent) {
@@ -579,7 +610,108 @@ export default function AdminPage() {
                             <a href={`/tournament/${t.id}`} className="btn btn--secondary">
                                 <ExternalLink size={14} /> View
                             </a>
+                            <a href={`/forge/${t.id}`} className="btn btn--secondary">
+                                <Flame size={14} /> Forge
+                            </a>
+                            <button className="btn btn--secondary" onClick={() => handleLoadAnalytics(t.id)} disabled={actionLoading}>
+                                <BarChart3 size={14} /> Analytics
+                            </button>
                         </div>
+
+                        {/* Analytics panel */}
+                        {analyticsId === t.id && (
+                            <div style={{ marginTop: 'var(--space-md)', padding: 'var(--space-md)', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)' }}>
+                                {analyticsLoading ? (
+                                    <div style={{ textAlign: 'center', padding: 'var(--space-md)', color: 'var(--text-muted)' }}>Loading analytics...</div>
+                                ) : analyticsData ? (
+                                    <>
+                                        {/* Summary */}
+                                        <div style={{ display: 'flex', gap: 'var(--space-lg)', marginBottom: 'var(--space-md)', flexWrap: 'wrap' }}>
+                                            <div style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)' }}>
+                                                <strong style={{ color: 'var(--text-primary)' }}>{analyticsData.tournament.totalTraders}</strong> traders
+                                            </div>
+                                            <div style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)' }}>
+                                                <strong style={{ color: 'var(--text-primary)' }}>{analyticsData.tournament.totalRounds}</strong> rounds
+                                            </div>
+                                            <div style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)' }}>
+                                                <strong style={{ color: 'var(--text-primary)' }}>{analyticsData.tournament.totalRegistrations}</strong> registrations
+                                            </div>
+                                        </div>
+
+                                        {/* Round Stats Table */}
+                                        {analyticsData.roundStats.length > 0 && (
+                                            <>
+                                                <h4 style={{ fontSize: '0.8125rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: 'var(--space-sm)' }}>Round Progression</h4>
+                                                <div style={{ overflowX: 'auto', marginBottom: 'var(--space-md)' }}>
+                                                    <table style={{ width: '100%', fontSize: '0.75rem', borderCollapse: 'collapse' }}>
+                                                        <thead>
+                                                            <tr style={{ borderBottom: '1px solid var(--border-subtle)' }}>
+                                                                <th style={{ textAlign: 'left', padding: '6px 8px', color: 'var(--text-muted)', fontWeight: 600 }}>Round</th>
+                                                                <th style={{ textAlign: 'right', padding: '6px 8px', color: 'var(--text-muted)', fontWeight: 600 }}>Traders</th>
+                                                                <th style={{ textAlign: 'right', padding: '6px 8px', color: 'var(--text-muted)', fontWeight: 600 }}>Elim.</th>
+                                                                <th style={{ textAlign: 'right', padding: '6px 8px', color: 'var(--text-muted)', fontWeight: 600 }}>Adv.</th>
+                                                                <th style={{ textAlign: 'right', padding: '6px 8px', color: 'var(--text-muted)', fontWeight: 600 }}>Avg CPI</th>
+                                                                <th style={{ textAlign: 'right', padding: '6px 8px', color: 'var(--text-muted)', fontWeight: 600 }}>Max CPI</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody>
+                                                            {analyticsData.roundStats.map((r) => (
+                                                                <tr key={r.roundNumber} style={{ borderBottom: '1px solid var(--border-subtle)' }}>
+                                                                    <td style={{ padding: '6px 8px', color: 'var(--text-primary)' }}>{r.roundName}</td>
+                                                                    <td style={{ padding: '6px 8px', textAlign: 'right', color: 'var(--text-secondary)' }}>{r.traderCount}</td>
+                                                                    <td style={{ padding: '6px 8px', textAlign: 'right', color: '#ef4444' }}>{r.eliminatedCount}</td>
+                                                                    <td style={{ padding: '6px 8px', textAlign: 'right', color: '#22c55e' }}>{r.advancedCount}</td>
+                                                                    <td style={{ padding: '6px 8px', textAlign: 'right', color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)' }}>{r.avgCpi.toFixed(1)}</td>
+                                                                    <td style={{ padding: '6px 8px', textAlign: 'right', color: '#f59e0b', fontFamily: 'var(--font-mono)' }}>{r.maxCpi.toFixed(1)}</td>
+                                                                </tr>
+                                                            ))}
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                            </>
+                                        )}
+
+                                        {/* Component Insights */}
+                                        {analyticsData.componentInsights && (
+                                            <>
+                                                <h4 style={{ fontSize: '0.8125rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: 'var(--space-sm)' }}>Component Insights (Advanced vs Eliminated)</h4>
+                                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 'var(--space-sm)', marginBottom: 'var(--space-md)' }}>
+                                                    {(['pnl', 'risk', 'consistency', 'activity'] as const).map((key) => (
+                                                        <div key={key} style={{ padding: '8px', background: 'var(--bg-primary)', borderRadius: 'var(--radius-sm)', textAlign: 'center' }}>
+                                                            <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '4px' }}>{key}</div>
+                                                            <div style={{ fontSize: '0.8125rem', fontWeight: 700, color: '#22c55e', fontFamily: 'var(--font-mono)' }}>
+                                                                {analyticsData.componentInsights!.advancedAvg[key].toFixed(1)}
+                                                            </div>
+                                                            <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)' }}>vs</div>
+                                                            <div style={{ fontSize: '0.8125rem', fontWeight: 700, color: '#ef4444', fontFamily: 'var(--font-mono)' }}>
+                                                                {analyticsData.componentInsights!.eliminatedAvg[key].toFixed(1)}
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </>
+                                        )}
+
+                                        {/* Top Performers */}
+                                        {analyticsData.topPerformers.length > 0 && (
+                                            <>
+                                                <h4 style={{ fontSize: '0.8125rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: 'var(--space-sm)' }}>Top Performers</h4>
+                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                                    {analyticsData.topPerformers.slice(0, 5).map((p, i) => (
+                                                        <div key={p.wallet} style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-sm)', padding: '4px 8px', fontSize: '0.75rem' }}>
+                                                            <span style={{ color: i === 0 ? '#f59e0b' : 'var(--text-muted)', fontWeight: 700, width: '20px' }}>#{i + 1}</span>
+                                                            <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)' }}>{p.wallet.slice(0, 4)}...{p.wallet.slice(-4)}</span>
+                                                            <span style={{ fontFamily: 'var(--font-mono)', color: '#f59e0b', fontWeight: 600 }}>{p.cpiScore.toFixed(1)}</span>
+                                                            <span style={{ color: 'var(--text-muted)' }}>{p.roundName}</span>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </>
+                                        )}
+                                    </>
+                                ) : null}
+                            </div>
+                        )}
                     </div>
                 ))}
             </section>

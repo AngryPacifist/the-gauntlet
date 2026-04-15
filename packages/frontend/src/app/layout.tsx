@@ -15,6 +15,7 @@ export default function RootLayout({
   const navLinks = [
     { href: '/', label: 'Dashboard' },
     { href: '/seasons', label: 'Seasons' },
+    { href: '/forge', label: 'The Forge' },
     { href: '/register', label: 'Register' },
     { href: '/admin', label: 'Admin' },
   ];

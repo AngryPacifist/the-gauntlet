@@ -254,7 +254,10 @@ export default function ForgePage({ params }: { params: Promise<{ tournamentId: 
     // Date navigation
     function navigateDate(direction: number) {
         const step = questPeriod === 'weekly' ? 7 : questPeriod === '2day' ? 2 : 1;
-        setQuestDate((prev) => stepDate(prev, direction * step));
+        setQuestDate((prev) => {
+            const next = stepDate(prev, direction * step);
+            return next > todayUTC() ? todayUTC() : next;
+        });
     }
 
     // Filter entries by search
@@ -659,6 +662,7 @@ function QuestLeaderboards({
                     </button>
                     <span style={{ color: '#94a3b8', fontSize: '0.8125rem', minWidth: '180px', textAlign: 'center', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
                         {periodLabel}
+                        {questDate <= todayUTC() && (
                         <span style={{
                             padding: '2px 8px', borderRadius: '9999px',
                             fontSize: '0.625rem', fontWeight: 700, letterSpacing: '0.05em',
@@ -668,6 +672,7 @@ function QuestLeaderboards({
                         }}>
                             {questDate === todayUTC() ? 'LIVE' : 'FINAL'}
                         </span>
+                    )}
                     </span>
                     <button onClick={() => onNavigateDate(1)} style={dateNavBtnStyle}>
                         <ChevronRight size={16} />
