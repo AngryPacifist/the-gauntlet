@@ -18,11 +18,11 @@ Traders register with their wallet, compete in timed rounds, and are scored on a
 ### CPI Scoring
 
 ```
-CPI = (0.35 x PnL) + (0.20 x Risk) + (0.30 x Consistency) + (0.15 x Activity)
+CPI = (0.35 x PnL) + (0.30 x Risk) + (0.20 x Consistency) + (0.15 x Activity)
 ```
 
 - **PnL**: ROI (PnL / notional USD exposure). Measures profitability.
-- **Risk**: Penalizes liquidations and leverage above configurable threshold (default 30x).
+- **Risk**: Penalizes liquidations and equity drawdowns. Drawdown ratio (max drawdown / closed exposure) drives penalty, capped at 80.
 - **Consistency**: Profitable days ratio + win rate bonus. Rewards steady green days.
 - **Activity**: Trade count, volume, and market diversity (variety weighted 40%).
 
@@ -37,7 +37,7 @@ Full methodology: [docs/competition-design.md](docs/competition-design.md)
 | Backend   | Node.js, Express 5, TypeScript      |
 | Database  | PostgreSQL (Neon), Drizzle ORM      |
 | Frontend  | Next.js 16, React 19, Vanilla CSS   |
-| Data      | Adrena Public HTTP API              |
+| Data      | Adrena Public HTTP API, Pyth Benchmarks (OHLC) |
 | Monorepo  | npm workspaces                      |
 
 ---
@@ -100,9 +100,10 @@ npm run dev
 - **Bracket Elimination** — Traders compete in groups. Bottom 50% eliminated each round.
 - **Fallen Fighters** — All eliminated traders compete in a single consolation pool. All participants earn season points.
 - **Multi-Dimensional Scoring** — CPI combines PnL, Risk, Consistency, and Activity.
-- **Daily Categories** — All Around Trader (diversified ROI) and Top Bottom Fisher (entry timing) award 3/2/1 season points to top 3 daily.
-- **Leverage Master Quest** —  Progressive 10-step leverage quest (10x–100x) with independent Long/Short tracks. Weekly resets, anti-gaming filters, badge grid UI.
-- **Deterministic Raffle** — Weighted raffle draw using Mulberry32 PRNG seeded by a future Solana block hash. Full audit trail and public verification endpoint.
+- **Daily Categories** — 7 quest categories across 3 time horizons: All Around + Bottom Fisher + Top-Tick Traveler (daily), Risk Manager + Humble One (2-day windows), Leverage Master Long/Short (weekly). Top 3 Fisher and All Around earn season points daily.
+- **Leverage Master Quest** — Progressive 10-step leverage quest (10x–100x) with independent Long/Short tracks. Weekly resets, anti-gaming filters, badge grid UI.
+- **The Forge** — Merged leaderboard combining CPI bracket performance with quest points. Expandable per-wallet CPI and quest breakdowns, LIVE/FINAL scoring badges, and hourly provisional updates.
+- **Deterministic Raffle** — Weighted raffle draw using Mulberry32 PRNG seeded by a future Bitcoin block hash. Full audit trail and public verification endpoint.
 - **Seasons** — Multi-week seasons with aggregate standings, seeded bracket finals, and automatic weekly tournament progression.
 - **Configurable Rounds** — Per-round durations, leverage thresholds, and asset counts.
 - **Anti-Gaming Filters** — Dust trade, wash trade, and duration filters prevent abuse.
@@ -126,15 +127,16 @@ Full reference: [docs/api-reference.md](docs/api-reference.md)
 adrena-the-gauntlet/
 ├── packages/
 │   ├── backend/           # Express API server
-│   │   └── src/
-│   │       ├── routes/    # API route handlers (tournaments, registration, brackets, admin, seasons, categories, quests, raffle)
-│   │       ├── services/  # Business logic (tournament, scoring, scheduler, seasons, daily categories, quest engine, raffle engine, Adrena client)
-│   │       └── db/        # Schema, migrations, connection
+│   │   ├── src/
+│   │   │   ├── routes/    # API route handlers (tournaments, registration, brackets, admin, seasons, categories, quests, raffle)
+│   │   │   ├── services/  # Business logic (tournament, scoring, scheduler, seasons, categories, quest engine, raffle engine, Adrena client, Pyth client, final score)
+│   │   │   └── db/        # Schema, migrations, connection
+│   │   └── scripts/       # Backfill and test scripts
 │   └── frontend/          # Next.js dashboard
 │       └── src/
 │           ├── components/ # Shared components (ShareButton)
-│           ├── lib/       # API client
-│           └── app/       # Pages (dashboard, tournament, analytics, admin, register, leaderboard, trader)
+│           ├── lib/       # API client, quest descriptions
+│           └── app/       # Pages (dashboard, tournament, analytics, admin, register, leaderboard, trader, forge, raffle, categories, season)
 ├── docs/                  # Documentation
 │   ├── competition-design.md
 │   ├── api-reference.md

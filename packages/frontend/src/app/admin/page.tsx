@@ -741,8 +741,8 @@ export default function AdminPage() {
                                                             </tr>
                                                         </thead>
                                                         <tbody>
-                                                            {analyticsData.roundStats.map((r) => (
-                                                                <tr key={r.roundNumber} style={{ borderBottom: '1px solid var(--border-subtle)' }}>
+                                                            {analyticsData.roundStats.map((r, i) => (
+                                                                <tr key={`${r.roundName}-${i}`} style={{ borderBottom: '1px solid var(--border-subtle)' }}>
                                                                     <td style={{ padding: '6px 8px', color: 'var(--text-primary)' }}>{r.roundName}</td>
                                                                     <td style={{ padding: '6px 8px', textAlign: 'right', color: 'var(--text-secondary)' }}>{r.traderCount}</td>
                                                                     <td style={{ padding: '6px 8px', textAlign: 'right', color: '#ef4444' }}>{r.eliminatedCount}</td>
@@ -784,7 +784,7 @@ export default function AdminPage() {
                                                 <h4 style={{ fontSize: '0.8125rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: 'var(--space-sm)' }}>Top Performers</h4>
                                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                                                     {analyticsData.topPerformers.slice(0, 5).map((p, i) => (
-                                                        <div key={p.wallet} style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-sm)', padding: '4px 8px', fontSize: '0.75rem' }}>
+                                                        <div key={`${p.wallet}-${p.roundNumber}`} style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-sm)', padding: '4px 8px', fontSize: '0.75rem' }}>
                                                             <span style={{ color: i === 0 ? '#f59e0b' : 'var(--text-muted)', fontWeight: 700, width: '20px' }}>#{i + 1}</span>
                                                             <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)' }}>{p.wallet.slice(0, 4)}...{p.wallet.slice(-4)}</span>
                                                             <span style={{ fontFamily: 'var(--font-mono)', color: '#f59e0b', fontWeight: 600 }}>{p.cpiScore.toFixed(1)}</span>

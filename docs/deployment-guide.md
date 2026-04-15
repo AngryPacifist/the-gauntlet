@@ -138,20 +138,24 @@ adrena-the-gauntlet/
 │   │       │   ├── index.ts          # Database connection pool
 │   │       │   └── migrate.ts        # Migration script (raw SQL)
 │   │       ├── routes/
-│   │       │   ├── tournaments.ts    # Tournament CRUD (list, get, create, edit, delete)
+│   │       │   ├── tournaments.ts    # Tournament CRUD (list, get, create, edit, delete) + Forge leaderboard
 │   │       │   ├── registration.ts   # Wallet registration
-│   │       │   ├── admin.ts          # Admin actions (start, score, advance, cancel)
+│   │       │   ├── admin.ts          # Admin actions (start, score, advance, cancel, raffle, analytics)
 │   │       │   ├── brackets.ts       # Bracket details, trader profiles, leaderboard, analytics
 │   │       │   ├── seasons.ts        # Season CRUD + lifecycle (start, advance, complete)
-│   │       │   └── categories.ts     # Daily category leaderboards + manual scoring
+│   │       │   ├── categories.ts     # Daily category leaderboards + manual scoring + wallet breakdown
+│   │       │   ├── quests.ts         # Leverage Master quest progress
+│   │       │   └── raffle.ts         # Raffle results, verification, per-wallet info
 │   │       └── services/
 │   │           ├── tournament-manager.ts  # Tournament lifecycle logic
 │   │           ├── scoring-engine.ts      # CPI computation
 │   │           ├── scheduler.ts           # Automated scoring, round advancement, daily + hourly category scoring
 │   │           ├── adrena-client.ts       # Adrena API client
 │   │           ├── season-manager.ts      # Season lifecycle + daily category season points (Fisher/All Around)
-│   │           ├── category-engine.ts     # All Around + Fisher daily scoring
-│   │           ├── final-score.ts         # CPI + quest points join, raffle ticket computation
+│   │           ├── category-engine.ts     # All Around + Fisher + Risk Manager + Humble One scoring
+│   │           ├── quest-engine.ts        # Leverage Master step evaluation + leaderboard
+│   │           ├── raffle-engine.ts       # Raffle ticket computation, deterministic draw, verification
+│   │           ├── final-score.ts         # CPI + quest points join, batch computation, raffle tickets
 │   │           └── pyth-client.ts         # Pyth Benchmarks OHLC fetcher with DB cache
 │   └── frontend/
 │       └── src/
@@ -163,12 +167,16 @@ adrena-the-gauntlet/
 │               ├── page.tsx          # Dashboard (tournament list)
 │               ├── admin/page.tsx    # Admin panel
 │               ├── register/page.tsx # Public registration
+│               ├── forge/page.tsx    # Forge index (auto-redirect)
+│               ├── forge/[tournamentId]/page.tsx  # Forge leaderboard + quest tabs
 │               ├── tournament/[id]/page.tsx           # Tournament detail
 │               ├── tournament/[id]/analytics/page.tsx # Post-tournament analytics
 │               ├── leaderboard/[id]/page.tsx          # Leaderboard
 │               ├── trader/[wallet]/page.tsx           # Trader profile
+│               ├── raffle/[tournamentId]/page.tsx     # Raffle results + verification
 │               ├── season/[id]/page.tsx               # Season detail + standings
-│               └── categories/[tournamentId]/page.tsx # Category leaderboards
+│               ├── seasons/page.tsx                   # Season list
+│               └── categories/[tournamentId]/page.tsx # Category leaderboards + badge grid
 ├── docs/
 │   ├── competition-design.md         # Competition mechanics
 │   ├── api-reference.md              # API documentation
