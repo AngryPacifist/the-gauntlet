@@ -31,6 +31,7 @@ import {
     rounds,
     brackets,
     bracketEntries,
+    registrations,
     seasonRegistrations,
     dailyCategoryScores,
 } from '../db/schema.js';
@@ -727,6 +728,132 @@ export async function awardDailyAllAroundPoints(
 }
 
 // --------------------------------------------------------------------------
+// 4d. Award season points for 2-day category results (Risk Manager + Humble One)
+//
+// Top 3 wallets by score in each 2-day category earn 3 / 2 / 1 season points.
+// Same pattern as Fisher/AllAround: sentinel guard, tie-aware ranking, upsert.
+// Gated by SeasonConfig.award2DayCategorySeasonPoints (default: false).
+// --------------------------------------------------------------------------
+export async function awardDaily2DayCategoryPoints(
+    tournamentId: number,
+    seasonId: number,
+    scoreDate: string, // YYYY-MM-DD (end of the 2-day window)
+): Promise<void> {
+    const SENTINEL_WALLET = '__2day_season_sentinel__';
+    const SENTINEL_CATEGORY = '2day_season';
+    const SEASON_POINTS = [3, 2, 1]; // 1st, 2nd, 3rd
+    const TWO_DAY_CATEGORIES = ['risk_manager', 'humble_one'];
+
+    // Idempotency check
+    const [existing] = await db
+        .select()
+        .from(dailyCategoryScores)
+        .where(
+            and(
+                eq(dailyCategoryScores.tournamentId, tournamentId),
+                eq(dailyCategoryScores.wallet, SENTINEL_WALLET),
+                eq(dailyCategoryScores.category, SENTINEL_CATEGORY),
+                eq(dailyCategoryScores.scoreDate, scoreDate),
+            ),
+        )
+        .limit(1);
+
+    if (existing) {
+        console.log(
+            `[SeasonManager] 2-day category season points already awarded for tournament ${tournamentId} ` +
+            `date ${scoreDate}. Skipping.`,
+        );
+        return;
+    }
+
+    const pointsToAward = new Map<string, number>();
+
+    for (const category of TWO_DAY_CATEGORIES) {
+        // Read scores for this date, sorted by score descending
+        const rows = await db
+            .select()
+            .from(dailyCategoryScores)
+            .where(
+                and(
+                    eq(dailyCategoryScores.tournamentId, tournamentId),
+                    eq(dailyCategoryScores.category, category),
+                    eq(dailyCategoryScores.scoreDate, scoreDate),
+                ),
+            )
+            .orderBy(desc(dailyCategoryScores.score), asc(dailyCategoryScores.wallet));
+
+        // Tie-aware ranking — top 3 earn season points
+        let rank = 0;
+        for (let i = 0; i < rows.length; i++) {
+            const row = rows[i];
+            if (row.wallet.startsWith('__')) continue;
+
+            if (i === 0 || row.score !== rows[i - 1].score) {
+                rank = i;
+            }
+
+            if (rank < SEASON_POINTS.length) {
+                const current = pointsToAward.get(row.wallet) ?? 0;
+                pointsToAward.set(row.wallet, current + SEASON_POINTS[rank]);
+            }
+        }
+    }
+
+    if (pointsToAward.size === 0) {
+        console.log(
+            `[SeasonManager] No 2-day category scores found for tournament ${tournamentId} ` +
+            `date ${scoreDate}. Skipping 2-day season points.`,
+        );
+        return;
+    }
+
+    // Upsert season standings
+    for (const [wallet, pts] of pointsToAward) {
+        const [existingStanding] = await db
+            .select()
+            .from(seasonStandings)
+            .where(
+                and(
+                    eq(seasonStandings.seasonId, seasonId),
+                    eq(seasonStandings.wallet, wallet),
+                ),
+            )
+            .limit(1);
+
+        if (existingStanding) {
+            await db
+                .update(seasonStandings)
+                .set({ totalPoints: existingStanding.totalPoints + pts })
+                .where(eq(seasonStandings.id, existingStanding.id));
+        } else {
+            await db.insert(seasonStandings).values({
+                seasonId,
+                wallet,
+                totalPoints: pts,
+                weeksParticipated: 0,
+                bestPlacement: null,
+            });
+        }
+    }
+
+    // Write sentinel
+    await db.insert(dailyCategoryScores).values({
+        tournamentId,
+        seasonId,
+        wallet: SENTINEL_WALLET,
+        category: SENTINEL_CATEGORY,
+        scoreDate,
+        score: 0,
+        details: {},
+    });
+
+    console.log(
+        `[SeasonManager] Awarded 2-day category season points for tournament ${tournamentId} ` +
+        `date ${scoreDate}: ${pointsToAward.size} wallets.`,
+    );
+}
+
+// --------------------------------------------------------------------------
 // 5. Qualify ALL season participants for the Season Final
 //
 // All season participants enter the Final tournament. Brackets are seeded
@@ -891,4 +1018,51 @@ export async function getSeasonDetails(seasonId: number) {
         ...season,
         tournaments: seasonTournaments,
     };
+}
+
+// --------------------------------------------------------------------------
+// 9. Carryover Forge participants into a Gauntlet season
+//
+// Takes all wallets registered in a Forge tournament and enrolls them
+// in a Gauntlet season's seasonRegistrations table. Idempotent — skips
+// wallets already enrolled. Returns count of newly enrolled wallets.
+// --------------------------------------------------------------------------
+export async function carryoverForgeParticipants(
+    forgeTournamentId: number,
+    targetSeasonId: number,
+): Promise<number> {
+    const forgeRegs = await db
+        .select()
+        .from(registrations)
+        .where(eq(registrations.tournamentId, forgeTournamentId));
+
+    if (forgeRegs.length === 0) {
+        console.log(
+            `[SeasonManager] No registrations found for Forge tournament ${forgeTournamentId}`,
+        );
+        return 0;
+    }
+
+    let enrolled = 0;
+    for (const reg of forgeRegs) {
+        try {
+            await db.insert(seasonRegistrations).values({
+                seasonId: targetSeasonId,
+                wallet: reg.wallet,
+            });
+            enrolled++;
+        } catch (err) {
+            // UNIQUE constraint violation = already enrolled (idempotent)
+            if (!(err instanceof Error && err.message.includes('unique'))) {
+                throw err;
+            }
+        }
+    }
+
+    console.log(
+        `[SeasonManager] Carried over ${enrolled}/${forgeRegs.length} wallets ` +
+        `from Forge tournament ${forgeTournamentId} to season ${targetSeasonId}`,
+    );
+
+    return enrolled;
 }

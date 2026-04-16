@@ -99,7 +99,7 @@ export async function registerWallet(
     tournamentId: number,
     wallet: string,
 ): Promise<{ registered: boolean; reason?: string }> {
-    // Check tournament exists and is in registration phase
+    // Check tournament exists and is accepting registrations
     const [tournament] = await db
         .select()
         .from(tournaments)
@@ -109,7 +109,15 @@ export async function registerWallet(
     if (!tournament) {
         return { registered: false, reason: 'Tournament not found' };
     }
-    if (tournament.status !== 'registration') {
+
+    const config = resolveConfig(tournament.config);
+
+    // Rank-only (Forge): accept registrations while active (open entry)
+    // Bracket (Gauntlet): only accept during registration phase
+    if (tournament.status === 'completed' || tournament.status === 'cancelled') {
+        return { registered: false, reason: 'Tournament has ended' };
+    }
+    if (tournament.status !== 'registration' && config.format !== 'rank_only') {
         return { registered: false, reason: 'Tournament is not accepting registrations' };
     }
 
@@ -146,6 +154,36 @@ export async function registerWallet(
             // UNIQUE constraint violation = already season-registered (idempotent)
             if (!(err instanceof Error && err.message.includes('unique'))) {
                 throw err;
+            }
+        }
+    }
+
+    // For rank-only active tournaments: add wallet to the existing bracket immediately
+    // so the scoring pipeline picks them up on the next refresh cycle
+    if (config.format === 'rank_only' && tournament.status === 'active') {
+        const [activeRound] = await db
+            .select()
+            .from(rounds)
+            .where(
+                and(
+                    eq(rounds.tournamentId, tournamentId),
+                    eq(rounds.status, 'active'),
+                ),
+            )
+            .limit(1);
+
+        if (activeRound) {
+            const [bracket] = await db
+                .select()
+                .from(brackets)
+                .where(eq(brackets.roundId, activeRound.id))
+                .limit(1);
+
+            if (bracket) {
+                await db.insert(bracketEntries).values({
+                    bracketId: bracket.id,
+                    wallet,
+                });
             }
         }
     }
@@ -189,6 +227,59 @@ export async function startTournament(
     if (allRegs.length < 2) {
         throw new Error(`Need at least 2 registered traders. Found ${allRegs.length}.`);
     }
+
+    // --- Rank-only mode (The Forge): one round, one bracket, all wallets ---
+    if (config.format === 'rank_only') {
+        const wallets = allRegs.map((r) => r.wallet);
+        const now = new Date();
+        // Full competition duration = sum of all round durations
+        const durationHours = config.roundDurations.reduce((a, b) => a + b, 0);
+        const roundEnd = new Date(now.getTime() + durationHours * 60 * 60 * 1000);
+
+        const [round] = await db
+            .insert(rounds)
+            .values({
+                tournamentId,
+                roundNumber: 1,
+                name: 'The Forge',
+                type: 'main',
+                startTime: now,
+                endTime: roundEnd,
+                status: 'active',
+            })
+            .returning({ id: rounds.id });
+
+        // Single bracket containing all participants
+        const [bracket] = await db
+            .insert(brackets)
+            .values({
+                roundId: round.id,
+                bracketNumber: 1,
+            })
+            .returning({ id: brackets.id });
+
+        for (const wallet of wallets) {
+            await db.insert(bracketEntries).values({
+                bracketId: bracket.id,
+                wallet,
+            });
+        }
+
+        // Activate tournament
+        await db
+            .update(tournaments)
+            .set({ status: 'active', updatedAt: new Date() })
+            .where(eq(tournaments.id, tournamentId));
+
+        console.log(
+            `[TournamentManager] Started rank-only tournament ${tournamentId} (The Forge): ` +
+            `1 round, 1 bracket, ${wallets.length} traders, ${durationHours}h duration`,
+        );
+
+        return { roundId: round.id, bracketCount: 1 };
+    }
+
+    // --- Bracket mode (The Gauntlet): standard bracket elimination ---
 
     // Use seeded order if provided (Final tournaments), otherwise shuffle randomly
     let wallets: string[];
@@ -474,9 +565,11 @@ export async function advanceRound(
     // Rank-only detection:
     // - Consolation (FF pool): flat ranking, no elimination
     // - Final main round: round that would trigger completion
+    // - Forge (rank_only format): flat leaderboard, no elimination ever
     const nextRoundNumber = currentRound.roundNumber + 1;
     const isRankOnly = effectiveType === 'consolation'
-        || (effectiveType === 'main' && nextRoundNumber > 3);
+        || (effectiveType === 'main' && nextRoundNumber > 3)
+        || config.format === 'rank_only';
 
     for (const bracket of currentBrackets) {
         const entries = await db
@@ -533,8 +626,8 @@ export async function advanceRound(
 
     // --- Main round logic ---
 
-    // If 3 or fewer traders remain, or we've done 3 rounds, main track is done
-    if (advancingWallets.length <= 3 || nextRoundNumber > 3) {
+    // If 3 or fewer traders remain, we've done 3 rounds, or this is rank-only — main track is done
+    if (advancingWallets.length <= 3 || nextRoundNumber > 3 || config.format === 'rank_only') {
         // Collect ALL eliminated wallets from ALL main rounds
         const allMainRounds = await db
             .select()

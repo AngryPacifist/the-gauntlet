@@ -12,6 +12,7 @@ export type RoundType = 'main' | 'consolation';
 export const CONSOLATION_ROUND_NAMES = ['Redemption Arc', 'Last Stand', 'Final Reckoning'] as const;
 
 export interface TournamentConfig {
+    format: 'bracket' | 'rank_only'; // 'bracket' = Gauntlet (elimination), 'rank_only' = Forge (flat leaderboard)
     bracketSize: number;              // Traders per bracket in Round 1 (default: 8)
     advanceRatio: number;             // Fraction that advance per round (default: 0.5)
     roundDurations: number[];         // Duration of each round in hours [R1, R2, R3] (default: [72, 48, 48])
@@ -22,9 +23,16 @@ export interface TournamentConfig {
     useHistoricalWindow: boolean;     // If true, scoring uses historical window instead of round dates (default: false)
     historicalWindowDays: number;     // Number of days for historical window (default: 90)
     seededWallets?: string[];         // For Final tournaments: wallets ordered by season standing
+    prizeTable?: {                    // Prize distribution (optional — set when prizes are defined)
+        totalPool: number;            // Total prize pool amount
+        currency: string;             // Prize currency (e.g. 'ADX', 'USDC')
+        skillPrizes: number[];        // Amounts for rank 1, 2, 3... (top 30% skill prizes)
+        rafflePrizes: number[];       // Amounts for raffle winner 1, 2, 3...
+    };
 }
 
 export const DEFAULT_TOURNAMENT_CONFIG: TournamentConfig = {
+    format: 'bracket',
     bracketSize: 8,
     advanceRatio: 0.5,
     roundDurations: [72, 48, 48],

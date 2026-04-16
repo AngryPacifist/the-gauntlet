@@ -57,6 +57,7 @@ export interface Tournament {
     name: string;
     status: 'registration' | 'active' | 'completed' | 'cancelled';
     config: {
+        format: 'bracket' | 'rank_only';
         bracketSize: number;
         advanceRatio: number;
         roundDurations: number[];
@@ -67,6 +68,12 @@ export interface Tournament {
         useHistoricalWindow: boolean;
         historicalWindowDays: number;
         seededWallets?: string[];
+        prizeTable?: {
+            totalPool: number;
+            currency: string;
+            skillPrizes: number[];
+            rafflePrizes: number[];
+        };
     };
     createdAt: string;
     updatedAt: string;
@@ -661,7 +668,7 @@ export interface ForgeEntry {
 }
 
 export interface ForgeLeaderboard {
-    tournament: { id: number; name: string; status: string };
+    tournament: { id: number; name: string; status: string; config: Tournament['config'] };
     totalParticipants: number;
     top30Cutoff: number;
     entries: ForgeEntry[];

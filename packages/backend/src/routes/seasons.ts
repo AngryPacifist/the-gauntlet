@@ -11,6 +11,7 @@
 //   POST /api/seasons/:id/start   — Start the season (creates Week 1)
 //   POST /api/seasons/:id/advance — Advance to next week
 //   POST /api/seasons/:id/complete — Complete the season (after Final)
+//   POST /api/seasons/:id/carryover — Enroll Forge participants into this season
 // ============================================================================
 
 import { Router } from 'express';
@@ -24,6 +25,7 @@ import {
     completeSeason,
     getSeasonStandings,
     getSeasonDetails,
+    carryoverForgeParticipants,
 } from '../services/season-manager.js';
 import type { SeasonConfig } from '../types.js';
 
@@ -195,6 +197,38 @@ router.post('/:id/complete', requireAdmin, async (req, res) => {
         res.json({ success: true, data: { seasonId, status: 'completed' } });
     } catch (error) {
         console.error('[Seasons] Error completing season:', error);
+        res.status(500).json({
+            success: false,
+            error: error instanceof Error ? error.message : 'Internal server error',
+        });
+    }
+});
+
+// POST /api/seasons/:id/carryover — Enroll Forge participants into this season
+router.post('/:id/carryover', requireAdmin, async (req, res) => {
+    try {
+        const seasonId = parseInt(req.params.id, 10);
+        if (isNaN(seasonId)) {
+            res.status(400).json({ success: false, error: 'Invalid season ID' });
+            return;
+        }
+
+        const { forgeTournamentId } = req.body as { forgeTournamentId: number };
+        if (!forgeTournamentId || typeof forgeTournamentId !== 'number') {
+            res.status(400).json({
+                success: false,
+                error: 'forgeTournamentId is required (the Forge tournament to carry over from)',
+            });
+            return;
+        }
+
+        const enrolled = await carryoverForgeParticipants(forgeTournamentId, seasonId);
+        res.json({
+            success: true,
+            data: { seasonId, forgeTournamentId, enrolled },
+        });
+    } catch (error) {
+        console.error('[Seasons] Error carrying over Forge participants:', error);
         res.status(500).json({
             success: false,
             error: error instanceof Error ? error.message : 'Internal server error',

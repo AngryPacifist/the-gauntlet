@@ -24,7 +24,7 @@ import { db } from '../db/index.js';
 import { tournaments, rounds, registrations } from '../db/schema.js';
 import { eq, and, asc } from 'drizzle-orm';
 import { computeRoundScores, advanceRound } from './tournament-manager.js';
-import { awardDailyFisherPoints, awardDailyAllAroundPoints } from './season-manager.js';
+import { awardDailyFisherPoints, awardDailyAllAroundPoints, awardDaily2DayCategoryPoints } from './season-manager.js';
 import { AdrenaClient } from './adrena-client.js';
 import { fetchDailyOHLCBatch, fetchIntradayOHLCBatch } from './pyth-client.js';
 import {
@@ -335,6 +335,12 @@ async function scoreDailyCategories(): Promise<void> {
             if (seasonId !== null) {
                 await awardDailyFisherPoints(tournament.id, seasonId, dateStr);
                 await awardDailyAllAroundPoints(tournament.id, seasonId, dateStr);
+
+                // 2-day category season points (Risk Manager + Humble One) — gated by config flag
+                const tournamentConfig = tournament.config as Record<string, unknown>;
+                if (tournamentConfig?.award2DayCategorySeasonPoints) {
+                    await awardDaily2DayCategoryPoints(tournament.id, seasonId, dateStr);
+                }
             }
 
             console.log(

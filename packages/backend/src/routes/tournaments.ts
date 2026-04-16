@@ -372,19 +372,26 @@ router.get('/:id/forge', async (req, res) => {
         // Compute top 30% threshold
         const top30Index = Math.ceil(results.length * 0.3);
 
-        const entries = results.map((r, i) => ({
-            rank: i + 1,
-            wallet: r.wallet,
-            cpiScore: r.cpiScore,
-            pnlScore: r.pnlScore,
-            riskScore: r.riskScore,
-            consistencyScore: r.consistencyScore,
-            activityScore: r.activityScore,
-            questPoints: r.questPoints,
-            finalScore: r.finalScore,
-            raffleTickets: r.raffleTickets,
-            isTopPercent: i < top30Index,
-        }));
+        // Tie-aware competition ranking: tied wallets share the same rank
+        let currentRank = 1;
+        const entries = results.map((r, i) => {
+            if (i > 0 && r.finalScore !== results[i - 1].finalScore) {
+                currentRank = i + 1;
+            }
+            return {
+                rank: currentRank,
+                wallet: r.wallet,
+                cpiScore: r.cpiScore,
+                pnlScore: r.pnlScore,
+                riskScore: r.riskScore,
+                consistencyScore: r.consistencyScore,
+                activityScore: r.activityScore,
+                questPoints: r.questPoints,
+                finalScore: r.finalScore,
+                raffleTickets: r.raffleTickets,
+                isTopPercent: currentRank <= top30Index,
+            };
+        });
 
         res.json({
             success: true,
@@ -393,6 +400,7 @@ router.get('/:id/forge', async (req, res) => {
                     id: tournament.id,
                     name: tournament.name,
                     status: tournament.status,
+                    config: tournament.config as TournamentConfig,
                 },
                 totalParticipants: results.length,
                 top30Cutoff: top30Index,

@@ -12,6 +12,17 @@ export interface QuestDescription {
     rules: string[];
 }
 
+// Fallen Fighters — displayed as a banner/info block on the Forge page
+// during Gauntlet tournaments where elimination has occurred.
+export const FF_DESCRIPTION = {
+    title: 'Fallen Fighters',
+    description:
+        'All eliminated traders are automatically scored during the Endgame round. ' +
+        'Your trades during this period count toward the Fallen Fighters pool — ' +
+        'keep trading for a shot at consolation prizes. ' +
+        'The top 3 Fallen Fighters earn season points (6, 4, 3), and all participants earn at least 1.',
+};
+
 export const QUEST_DESCRIPTIONS: Record<string, QuestDescription> = {
     all_around: {
         tagline: 'Master every asset, dominate the scoreboard.',

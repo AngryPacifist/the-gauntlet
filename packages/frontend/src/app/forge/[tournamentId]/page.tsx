@@ -11,7 +11,7 @@ import {
     type DailyCategoryScore,
     type CategorySlug,
 } from '@/lib/api';
-import { QUEST_DESCRIPTIONS, type QuestDescription } from '@/lib/quest-descriptions';
+import { QUEST_DESCRIPTIONS, FF_DESCRIPTION, type QuestDescription } from '@/lib/quest-descriptions';
 import {
     ArrowLeft,
     ChevronDown,
@@ -335,6 +335,25 @@ export default function ForgePage({ params }: { params: Promise<{ tournamentId: 
                     </button>
                 ))}
             </div>
+
+            {/* Fallen Fighters info — shown for bracket tournaments */}
+            {data.tournament.config?.format === 'bracket' && (
+                <div style={{
+                    marginBottom: '1rem', padding: '0.75rem 1rem', borderRadius: '0.5rem',
+                    background: 'rgba(245, 158, 11, 0.08)', border: '1px solid rgba(245, 158, 11, 0.2)',
+                    display: 'flex', alignItems: 'flex-start', gap: '0.75rem',
+                }}>
+                    <Info size={18} style={{ color: '#f59e0b', flexShrink: 0, marginTop: '2px' }} />
+                    <div>
+                        <p style={{ color: '#f59e0b', fontWeight: 600, fontSize: '0.8125rem', margin: 0 }}>
+                            {FF_DESCRIPTION.title}
+                        </p>
+                        <p style={{ color: '#94a3b8', fontSize: '0.75rem', margin: '0.25rem 0 0', lineHeight: 1.5 }}>
+                            {FF_DESCRIPTION.description}
+                        </p>
+                    </div>
+                </div>
+            )}
 
             {/* Tab content */}
             {activeTab === 'general' ? (

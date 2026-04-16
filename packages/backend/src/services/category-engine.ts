@@ -308,8 +308,8 @@ export function computeFisherScores(
     allLongs.sort((a, b) => b.proximity - a.proximity || a.wallet.localeCompare(b.wallet));
     for (let i = 0; i < allLongs.length; i++) {
         const candidate = allLongs[i];
-        const rank = i < FISHER_RANK_POINTS.length ? i + 1 : null;
-        const rankPoints = rank !== null ? FISHER_RANK_POINTS[i] : 0;
+        const rank = i + 1; // All entries get a rank (1-indexed)
+        const rankPoints = i < FISHER_RANK_POINTS.length ? FISHER_RANK_POINTS[i] : 0;
         const pointsFromLong = rankPoints * candidate.roi * 100;
 
         const existing = results.get(candidate.wallet)!;
@@ -333,8 +333,8 @@ export function computeFisherScores(
     allShorts.sort((a, b) => b.proximity - a.proximity || a.wallet.localeCompare(b.wallet));
     for (let i = 0; i < allShorts.length; i++) {
         const candidate = allShorts[i];
-        const rank = i < FISHER_RANK_POINTS.length ? i + 1 : null;
-        const rankPoints = rank !== null ? FISHER_RANK_POINTS[i] : 0;
+        const rank = i + 1; // All entries get a rank (1-indexed)
+        const rankPoints = i < FISHER_RANK_POINTS.length ? FISHER_RANK_POINTS[i] : 0;
         const pointsFromShort = rankPoints * candidate.roi * 100;
 
         const existing = results.get(candidate.wallet)!;
