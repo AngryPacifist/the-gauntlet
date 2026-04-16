@@ -50,6 +50,7 @@ import {
     Flag,
     RotateCcw,
     Flame,
+    Swords,
     Activity,
     AlertTriangle,
 } from 'lucide-react';
@@ -67,6 +68,7 @@ export default function AdminPage() {
     const [creating, setCreating] = useState(false);
 
     // Config fields (defaults match DEFAULT_TOURNAMENT_CONFIG)
+    const [cfgFormat, setCfgFormat] = useState<'bracket' | 'rank_only'>('bracket');
     const [cfgBracketSize, setCfgBracketSize] = useState(8);
     const [cfgAdvanceRatio, setCfgAdvanceRatio] = useState(0.5);
     const [cfgRoundDurations, setCfgRoundDurations] = useState('72, 48, 48');
@@ -146,6 +148,7 @@ export default function AdminPage() {
 
     function resetConfigDefaults() {
         setNewName('');
+        setCfgFormat('bracket');
         setCfgBracketSize(8);
         setCfgAdvanceRatio(0.5);
         setCfgRoundDurations('72, 48, 48');
@@ -166,9 +169,10 @@ export default function AdminPage() {
             .filter((n) => !isNaN(n) && n > 0);
 
         const config = {
+            format: cfgFormat,
             bracketSize: cfgBracketSize,
             advanceRatio: cfgAdvanceRatio,
-            roundDurations: durations.length > 0 ? durations : [72, 48, 48],
+            roundDurations: durations.length > 0 ? durations : (cfgFormat === 'rank_only' ? [336] : [72, 48, 48]),
             minPositionCollateral: cfgMinCollateral,
             minTradeDurationSec: cfgMinDuration,
             supportedAssetCount: cfgAssetCount,
@@ -648,9 +652,11 @@ export default function AdminPage() {
                                     <button className="btn btn--secondary" onClick={() => handleScore(t.id, t.name)} disabled={actionLoading}>
                                         <BarChart3 size={14} /> Score
                                     </button>
+                                    {t.config.format !== 'rank_only' && (
                                     <button className="btn btn--primary" onClick={() => handleAdvance(t.id, t.name)} disabled={actionLoading}>
                                         <ChevronRight size={14} /> Advance
                                     </button>
+                                    )}
                                     <button className="btn btn--secondary" onClick={() => { setCategoryTournamentId(t.id); setShowCategoryModal(true); }} disabled={actionLoading}>
                                         <CalendarDays size={14} /> Categories
                                     </button>
@@ -687,12 +693,20 @@ export default function AdminPage() {
                                     </button>
                                 </>
                             )}
-                            <a href={`/tournament/${t.id}`} className="btn btn--secondary">
-                                <ExternalLink size={14} /> View
-                            </a>
-                            <a href={`/forge/${t.id}`} className="btn btn--secondary">
-                                <Flame size={14} /> Forge
-                            </a>
+                            {t.config.format === 'rank_only' ? (
+                                <a href={`/leaderboard/${t.id}`} className="btn btn--secondary">
+                                    <ExternalLink size={14} /> View
+                                </a>
+                            ) : (
+                                <>
+                                    <a href={`/tournament/${t.id}`} className="btn btn--secondary">
+                                        <ExternalLink size={14} /> View
+                                    </a>
+                                    <a href={`/leaderboard/${t.id}`} className="btn btn--secondary">
+                                        <BarChart3 size={14} /> Leaderboard
+                                    </a>
+                                </>
+                            )}
                             <button className="btn btn--secondary" onClick={() => handleLoadAnalytics(t.id)} disabled={actionLoading}>
                                 <BarChart3 size={14} /> Analytics
                             </button>
@@ -1034,19 +1048,52 @@ export default function AdminPage() {
                             </div>
 
                             <div className={styles.formDivider} />
+
+                            {/* Format selector */}
+                            <div className={styles.formGroup}>
+                                <label className={styles.formLabel}>Format</label>
+                                <div style={{ display: 'flex', gap: 'var(--space-sm)' }}>
+                                    <button
+                                        type="button"
+                                        className={`btn ${cfgFormat === 'bracket' ? 'btn--primary' : 'btn--secondary'}`}
+                                        onClick={() => { setCfgFormat('bracket'); setCfgRoundDurations('72, 48, 48'); }}
+                                        style={{ flex: 1 }}
+                                    >
+                                        <Swords size={14} /> Gauntlet
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className={`btn ${cfgFormat === 'rank_only' ? 'btn--primary' : 'btn--secondary'}`}
+                                        onClick={() => { setCfgFormat('rank_only'); setCfgRoundDurations('336'); }}
+                                        style={{ flex: 1 }}
+                                    >
+                                        <Flame size={14} /> Forge
+                                    </button>
+                                </div>
+                                <span className={styles.formHint}>
+                                    {cfgFormat === 'bracket'
+                                        ? 'Bracket elimination with rounds — The Gauntlet'
+                                        : 'Flat leaderboard, open registration — The Forge'}
+                                </span>
+                            </div>
+
                             <h3 className={styles.formSectionTitle}>Configuration</h3>
 
                             <div className={styles.formGrid}>
+                                {cfgFormat === 'bracket' && (
                                 <div className={styles.formGroup}>
                                     <label className={styles.formLabel}>Bracket Size</label>
                                     <input type="number" className="input input--mono" value={cfgBracketSize} onChange={(e) => setCfgBracketSize(Number(e.target.value))} min={2} />
                                     <span className={styles.formHint}>Traders per bracket in Round 1</span>
                                 </div>
+                                )}
+                                {cfgFormat === 'bracket' && (
                                 <div className={styles.formGroup}>
                                     <label className={styles.formLabel}>Advance Ratio</label>
                                     <input type="number" className="input input--mono" value={cfgAdvanceRatio} onChange={(e) => setCfgAdvanceRatio(Number(e.target.value))} min={0.1} max={0.9} step={0.1} />
                                     <span className={styles.formHint}>Fraction that survive each round</span>
                                 </div>
+                                )}
                                 <div className={styles.formGroup}>
                                     <label className={styles.formLabel}>Min Collateral ($)</label>
                                     <input type="number" className="input input--mono" value={cfgMinCollateral} onChange={(e) => setCfgMinCollateral(Number(e.target.value))} min={0} />
@@ -1065,9 +1112,15 @@ export default function AdminPage() {
                             </div>
 
                             <div className={styles.formGroup}>
-                                <label className={styles.formLabel}>Round Durations (hours)</label>
-                                <input type="text" className="input input--mono" value={cfgRoundDurations} onChange={(e) => setCfgRoundDurations(e.target.value)} placeholder="72, 48, 48" />
-                                <span className={styles.formHint}>Comma-separated hours per round (R1, R2, R3)</span>
+                                <label className={styles.formLabel}>
+                                    {cfgFormat === 'rank_only' ? 'Competition Duration (hours)' : 'Round Durations (hours)'}
+                                </label>
+                                <input type="text" className="input input--mono" value={cfgRoundDurations} onChange={(e) => setCfgRoundDurations(e.target.value)} placeholder={cfgFormat === 'rank_only' ? '336' : '72, 48, 48'} />
+                                <span className={styles.formHint}>
+                                    {cfgFormat === 'rank_only'
+                                        ? 'Total competition length in hours (e.g., 336 = 14 days)'
+                                        : 'Comma-separated hours per round (R1, R2, R3)'}
+                                </span>
                             </div>
 
                             <div className={styles.modalActions}>

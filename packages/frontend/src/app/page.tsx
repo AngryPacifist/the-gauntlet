@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { listTournaments, type Tournament } from '@/lib/api';
-import { Swords, Clock, Trophy, XCircle, ArrowRight, Users, ShieldCheck } from 'lucide-react';
+import { Swords, Clock, Trophy, XCircle, ArrowRight, Users, ShieldCheck, Flame } from 'lucide-react';
 import Link from 'next/link';
 import styles from './page.module.css';
 
@@ -116,10 +116,15 @@ export default function DashboardPage() {
 
       {!loading && tournaments.length > 0 && (
         <div className={styles.tournamentGrid}>
-          {tournaments.map((t, i) => (
+          {tournaments.map((t, i) => {
+            const isForge = t.config.format === 'rank_only';
+            const cardHref = isForge ? `/leaderboard/${t.id}` : `/tournament/${t.id}`;
+            const totalDuration = t.config.roundDurations?.reduce((a, b) => a + b, 0) ?? 168;
+
+            return (
             <Link
               key={t.id}
-              href={`/tournament/${t.id}`}
+              href={cardHref}
               className={`card ${styles.tournamentCard} ${styles[`status_${t.status}`] || ''}`}
               style={{ animationDelay: `${i * 60}ms` }}
             >
@@ -136,20 +141,41 @@ export default function DashboardPage() {
               </p>
 
               <div className={styles.tournamentMeta}>
-                <div className={styles.metaItem}>
-                  <span className={styles.metaLabel}>
-                    <Users size={10} style={{ marginRight: 3 }} />
-                    Bracket Size
-                  </span>
-                  <span className={styles.metaValue}>{t.config.bracketSize}</span>
-                </div>
-                <div className={styles.metaItem}>
-                  <span className={styles.metaLabel}>
-                    <Clock size={10} style={{ marginRight: 3 }} />
-                    Round Duration
-                  </span>
-                  <span className={styles.metaValue}>{t.config.roundDurations?.[0] ?? 72}h</span>
-                </div>
+                {isForge ? (
+                  <>
+                    <div className={styles.metaItem}>
+                      <span className={styles.metaLabel}>
+                        <Flame size={10} style={{ marginRight: 3 }} />
+                        Format
+                      </span>
+                      <span className={styles.metaValue}>Forge</span>
+                    </div>
+                    <div className={styles.metaItem}>
+                      <span className={styles.metaLabel}>
+                        <Clock size={10} style={{ marginRight: 3 }} />
+                        Duration
+                      </span>
+                      <span className={styles.metaValue}>{totalDuration}h</span>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className={styles.metaItem}>
+                      <span className={styles.metaLabel}>
+                        <Users size={10} style={{ marginRight: 3 }} />
+                        Bracket Size
+                      </span>
+                      <span className={styles.metaValue}>{t.config.bracketSize}</span>
+                    </div>
+                    <div className={styles.metaItem}>
+                      <span className={styles.metaLabel}>
+                        <Clock size={10} style={{ marginRight: 3 }} />
+                        Round Duration
+                      </span>
+                      <span className={styles.metaValue}>{t.config.roundDurations?.[0] ?? 72}h</span>
+                    </div>
+                  </>
+                )}
                 <div className={styles.metaItem}>
                   <span className={styles.metaLabel}>Min Collateral</span>
                   <span className={styles.metaValue}>${t.config.minPositionCollateral}</span>
@@ -163,7 +189,8 @@ export default function DashboardPage() {
                 <ArrowRight size={16} className={styles.arrowIcon} />
               </div>
             </Link>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

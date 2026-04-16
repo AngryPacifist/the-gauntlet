@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useRef, use } from 'react';
+import { useRouter } from 'next/navigation';
 import {
     getTournament,
     getTournamentBrackets,
@@ -30,6 +31,7 @@ import styles from './page.module.css';
 export default function TournamentPage({ params }: { params: Promise<{ id: string }> }) {
     const { id } = use(params);
     const tournamentId = parseInt(id, 10);
+    const router = useRouter();
 
     const [tournament, setTournament] = useState<TournamentState | null>(null);
     const [bracketsData, setBracketsData] = useState<{
@@ -74,6 +76,14 @@ export default function TournamentPage({ params }: { params: Promise<{ id: strin
         const interval = setInterval(() => setNow(Date.now()), ms);
         return () => clearInterval(interval);
     }, [tournament?.status]);
+
+    // Rank-only tournaments redirect to the unified leaderboard
+    // (bracket detail view is meaningless for Forge tournaments)
+    useEffect(() => {
+        if (tournament && tournament.config.format === 'rank_only') {
+            router.replace(`/leaderboard/${tournamentId}`);
+        }
+    }, [tournament, tournamentId, router]);
 
     // Poll for data updates while tournament is active or in registration
     useEffect(() => {

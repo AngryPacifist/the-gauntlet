@@ -21,19 +21,19 @@ export default function ForgeIndexPage() {
                 // Prefer active, then completed, then most recent by id
                 const active = tournaments.find((t) => t.status === 'active');
                 if (active) {
-                    router.replace(`/forge/${active.id}`);
+                    router.replace(`/leaderboard/${active.id}`);
                     return;
                 }
 
                 const completed = tournaments.find((t) => t.status === 'completed');
                 if (completed) {
-                    router.replace(`/forge/${completed.id}`);
+                    router.replace(`/leaderboard/${completed.id}`);
                     return;
                 }
 
                 // Fallback: highest id
                 const sorted = [...tournaments].sort((a, b) => b.id - a.id);
-                router.replace(`/forge/${sorted[0].id}`);
+                router.replace(`/leaderboard/${sorted[0].id}`);
             } catch {
                 setError('Failed to load tournaments.');
             }
