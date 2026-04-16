@@ -10,7 +10,8 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL || '';
 
 // Direct backend URL — bypasses Next.js rewrite proxy (which has a 30s timeout)
 // Used for admin endpoints that may take longer (e.g. raffle compute hits Adrena API)
-const BACKEND_DIRECT = 'http://localhost:3001';
+// In production, use the same API_BASE (no proxy to bypass). Locally, hit backend directly.
+const BACKEND_DIRECT = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
 interface ApiResponse<T> {
     success: boolean;
