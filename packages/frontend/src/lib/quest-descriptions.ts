@@ -27,7 +27,7 @@ export const QUEST_DESCRIPTIONS: Record<string, QuestDescription> = {
     all_around: {
         tagline: 'Master every asset, dominate the scoreboard.',
         description:
-            'The All Around quest rewards traders who perform consistently across ALL supported assets — BTC, ETH, SOL, and BONK. ' +
+            'The All Around quest rewards traders who perform consistently across ALL supported assets — SOL, BTC, and BONK. ' +
             'Each day, your best trade per asset is scored based on ROI, and the scores are combined. ' +
             'Only traders active across the full asset range can compete here. Diversification is king.',
         rules: [

@@ -1,10 +1,11 @@
 'use client';
 
-import { useState, useEffect, use, useCallback } from 'react';
+import { useState, useEffect, use, useCallback, useMemo } from 'react';
 import {
     getForgeLeaderboard,
     getWalletBreakdown,
     getDailyScores,
+    registerWallet,
     type ForgeLeaderboard,
     type ForgeEntry,
     type WalletBreakdown,
@@ -22,6 +23,10 @@ import {
     Ticket,
     Target,
     Info,
+    UserPlus,
+    X as CloseIcon,
+    CheckCircle,
+    XCircle,
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -77,6 +82,14 @@ function stepDate(dateStr: string, days: number): string {
 
 function todayUTC(): string {
     return formatDate(new Date());
+}
+
+function formatPrize(amount: number): string {
+    // Integer → "500"; split prize → "237.50"; larger → "1,234.56" (en-US thousands separator).
+    return amount.toLocaleString('en-US', {
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 2,
+    });
 }
 
 function shortWallet(wallet: string): string {
@@ -171,6 +184,12 @@ export default function LeaderboardPage({ params }: { params: Promise<{ id: stri
     const [questLoading, setQuestLoading] = useState(false);
     const [expandedRules, setExpandedRules] = useState<Set<string>>(new Set());
 
+    // Registration modal state (Item 3)
+    const [showRegModal, setShowRegModal] = useState(false);
+    const [walletInput, setWalletInput] = useState('');
+    const [registering, setRegistering] = useState(false);
+    const [regResult, setRegResult] = useState<{ registered: boolean; reason?: string } | null>(null);
+
     useEffect(() => {
         async function load() {
             try {
@@ -247,6 +266,35 @@ export default function LeaderboardPage({ params }: { params: Promise<{ id: stri
         });
     }
 
+    async function handleRegister(e: React.FormEvent) {
+        e.preventDefault();
+        if (!walletInput.trim()) return;
+        try {
+            setRegistering(true);
+            setRegResult(null);
+            const result = await registerWallet(tournamentId, walletInput.trim());
+            setRegResult(result);
+            if (result.registered) {
+                // Fire-and-forget reload: a reload failure must NOT overwrite success state.
+                getForgeLeaderboard(tournamentId)
+                    .then(setData)
+                    .catch((err) => console.error('[Forge] leaderboard reload failed after registration:', err));
+                setTimeout(() => {
+                    setShowRegModal(false);
+                    setWalletInput('');
+                    setRegResult(null);
+                }, 1500);
+            }
+        } catch (err) {
+            setRegResult({
+                registered: false,
+                reason: err instanceof Error ? err.message : 'Registration failed',
+            });
+        } finally {
+            setRegistering(false);
+        }
+    }
+
     const filteredEntries = data?.entries.filter((e) =>
         searchQuery ? e.wallet.toLowerCase().includes(searchQuery.toLowerCase()) : true,
     ) ?? [];
@@ -266,9 +314,6 @@ export default function LeaderboardPage({ params }: { params: Promise<{ id: stri
         return (
             <div style={{ textAlign: 'center', padding: '3rem', color: '#ef4444' }}>
                 <p>{error}</p>
-                <Link href="/" style={{ color: '#f59e0b', marginTop: '1rem', display: 'inline-block' }}>
-                    ← Back to Dashboard
-                </Link>
             </div>
         );
     }
@@ -283,28 +328,37 @@ export default function LeaderboardPage({ params }: { params: Promise<{ id: stri
         <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '2rem 1rem' }}>
             {/* Header */}
             <div style={{ marginBottom: '1.5rem' }}>
-                <Link
-                    href="/"
-                    style={{
-                        display: 'inline-flex', alignItems: 'center', gap: '0.5rem',
-                        color: '#94a3b8', fontSize: '0.875rem', marginBottom: '1rem',
-                        textDecoration: 'none',
-                    }}
-                >
-                    <ArrowLeft size={16} /> Back to Dashboard
-                </Link>
+                {!isForge && (
+                    <Link
+                        href={`/tournament/${tournamentId}`}
+                        style={{
+                            display: 'inline-flex', alignItems: 'center', gap: '0.5rem',
+                            color: '#94a3b8', fontSize: '0.875rem', marginBottom: '1rem',
+                            textDecoration: 'none',
+                        }}
+                    >
+                        <ArrowLeft size={16} /> Back to Tournament
+                    </Link>
+                )}
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
                     <Flame size={32} color="#f59e0b" />
-                    <div>
-                        <h1 style={{ fontSize: '1.75rem', fontWeight: 700, color: '#f1f5f9', margin: 0 }}>
-                            {pageTitle}
-                        </h1>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                            <h1 style={{ fontSize: '1.75rem', fontWeight: 700, color: '#f1f5f9', margin: 0 }}>
+                                {pageTitle}
+                            </h1>
+                            {isForge && <StatusBadge status={data.tournament.status} />}
+                        </div>
                         <p style={{ color: '#94a3b8', margin: '0.25rem 0 0', fontSize: '0.875rem' }}>
                             {data.tournament.name} • {data.totalParticipants} participants • Top {data.top30Cutoff} earn skill prizes
                         </p>
                     </div>
+                    {isForge && <RegisterButton status={data.tournament.status} onClick={() => setShowRegModal(true)} />}
                 </div>
+                {isForge && data.tournament.config.prizeTable && (
+                    <PrizeInfo prizeTable={data.tournament.config.prizeTable} />
+                )}
             </div>
 
             {/* Page-level tabs */}
@@ -355,6 +409,8 @@ export default function LeaderboardPage({ params }: { params: Promise<{ id: stri
                     searchQuery={searchQuery}
                     onSearch={setSearchQuery}
                     onToggle={toggleExpand}
+                    isForge={isForge}
+                    prizeTable={data.tournament.config.prizeTable}
                 />
             ) : (
                 <QuestLeaderboards
@@ -366,6 +422,22 @@ export default function LeaderboardPage({ params }: { params: Promise<{ id: stri
                     onPeriodChange={setQuestPeriod}
                     onNavigateDate={navigateDate}
                     onToggleRules={toggleRules}
+                    isForge={isForge}
+                />
+            )}
+
+            {showRegModal && (
+                <RegisterModal
+                    walletInput={walletInput}
+                    onWalletChange={setWalletInput}
+                    registering={registering}
+                    regResult={regResult}
+                    onSubmit={handleRegister}
+                    onClose={() => {
+                        setShowRegModal(false);
+                        setWalletInput('');
+                        setRegResult(null);
+                    }}
                 />
             )}
         </div>
@@ -384,12 +456,39 @@ interface GeneralLeaderboardProps {
     searchQuery: string;
     onSearch: (q: string) => void;
     onToggle: (wallet: string) => void;
+    isForge: boolean;
+    prizeTable?: {
+        totalPool: number;
+        currency: string;
+        skillPrizes: number[];
+        rafflePrizes: number[];
+    };
 }
 
 function GeneralLeaderboard({
     entries, expandedWallet, breakdown, breakdownLoading,
-    searchQuery, onSearch, onToggle,
+    searchQuery, onSearch, onToggle, isForge, prizeTable,
 }: GeneralLeaderboardProps) {
+    // Split-aware prize per rank (accounts for ties).
+    // Tied wallets at rank N share (sum of skillPrizes[N-1..N+K-2]) / K.
+    const prizesByRank = useMemo<Map<number, number>>(() => {
+        const map = new Map<number, number>();
+        if (!prizeTable) return map;
+        const rankCounts = new Map<number, number>();
+        for (const e of entries) {
+            if (!e.isTopPercent) continue;
+            rankCounts.set(e.rank, (rankCounts.get(e.rank) ?? 0) + 1);
+        }
+        for (const [rank, count] of rankCounts) {
+            let sum = 0;
+            for (let i = 0; i < count; i++) {
+                sum += prizeTable.skillPrizes[rank - 1 + i] ?? 0;
+            }
+            map.set(rank, sum / count);
+        }
+        return map;
+    }, [entries, prizeTable]);
+
     return (
         <>
             <div style={{ marginBottom: '1rem' }}>
@@ -416,6 +515,7 @@ function GeneralLeaderboard({
                             <th style={thStyle}>CPI</th>
                             <th style={thStyle}>Quests</th>
                             <th style={thStyle}>Final</th>
+                            <th style={thStyle}>Prize</th>
                             <th style={thStyle}>
                                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
                                     <Ticket size={12} /> Tickets
@@ -433,11 +533,14 @@ function GeneralLeaderboard({
                                 onToggle={() => onToggle(entry.wallet)}
                                 breakdown={expandedWallet === entry.wallet ? breakdown : null}
                                 breakdownLoading={expandedWallet === entry.wallet && breakdownLoading}
+                                isForge={isForge}
+                                prizeTable={prizeTable}
+                                prizesByRank={prizesByRank}
                             />
                         ))}
                         {entries.length === 0 && (
                             <tr>
-                                <td colSpan={8} style={{ textAlign: 'center', padding: '2rem', color: '#64748b' }}>
+                                <td colSpan={9} style={{ textAlign: 'center', padding: '2rem', color: '#64748b' }}>
                                     {searchQuery ? 'No wallets match your search' : 'No participants yet'}
                                 </td>
                             </tr>
@@ -459,9 +562,17 @@ interface ForgeRowProps {
     onToggle: () => void;
     breakdown: WalletBreakdown | null;
     breakdownLoading: boolean;
+    isForge: boolean;
+    prizeTable?: {
+        totalPool: number;
+        currency: string;
+        skillPrizes: number[];
+        rafflePrizes: number[];
+    };
+    prizesByRank: Map<number, number>;
 }
 
-function ForgeRow({ entry, isExpanded, onToggle, breakdown, breakdownLoading }: ForgeRowProps) {
+function ForgeRow({ entry, isExpanded, onToggle, breakdown, breakdownLoading, isForge, prizeTable, prizesByRank }: ForgeRowProps) {
     const medalColors = ['#fbbf24', '#94a3b8', '#cd7f32'];
 
     return (
@@ -489,16 +600,27 @@ function ForgeRow({ entry, isExpanded, onToggle, breakdown, breakdownLoading }: 
                     </span>
                 </td>
                 <td style={{ ...tdStyle, textAlign: 'left' }}>
-                    <Link
-                        href={`/trader/${entry.wallet}`}
-                        onClick={(e) => e.stopPropagation()}
-                        style={{
-                            fontFamily: 'monospace', color: '#94a3b8', textDecoration: 'none',
-                            borderBottom: '1px dashed #475569',
-                        }}
-                    >
-                        {shortWallet(entry.wallet)}
-                    </Link>
+                    {isForge ? (
+                        <span
+                            style={{
+                                fontFamily: 'monospace', color: '#94a3b8',
+                                borderBottom: '1px dashed #475569',
+                            }}
+                        >
+                            {shortWallet(entry.wallet)}
+                        </span>
+                    ) : (
+                        <Link
+                            href={`/trader/${entry.wallet}`}
+                            onClick={(e) => e.stopPropagation()}
+                            style={{
+                                fontFamily: 'monospace', color: '#94a3b8', textDecoration: 'none',
+                                borderBottom: '1px dashed #475569',
+                            }}
+                        >
+                            {shortWallet(entry.wallet)}
+                        </Link>
+                    )}
                 </td>
                 <td style={tdStyle}>{entry.cpiScore.toFixed(1)}</td>
                 <td style={{ ...tdStyle, color: '#a78bfa' }}>
@@ -508,6 +630,11 @@ function ForgeRow({ entry, isExpanded, onToggle, breakdown, breakdownLoading }: 
                 </td>
                 <td style={{ ...tdStyle, fontWeight: 600, color: '#f1f5f9' }}>
                     {entry.finalScore.toFixed(2)}
+                </td>
+                <td style={{ ...tdStyle, color: '#22c55e' }}>
+                    {entry.isTopPercent && prizeTable
+                        ? `${formatPrize(prizesByRank.get(entry.rank) ?? 0)} ${prizeTable.currency}`
+                        : '—'}
                 </td>
                 <td style={{ ...tdStyle, color: '#fbbf24' }}>
                     {entry.raffleTickets}
@@ -526,7 +653,7 @@ function ForgeRow({ entry, isExpanded, onToggle, breakdown, breakdownLoading }: 
 
             {isExpanded && (
                 <tr>
-                    <td colSpan={8} style={{ padding: '0', background: '#0f172a' }}>
+                    <td colSpan={9} style={{ padding: '0', background: '#0f172a' }}>
                         <div style={{ padding: '1rem 1.5rem', borderBottom: '1px solid #1e293b' }}>
                             {breakdownLoading ? (
                                 <p style={{ color: '#64748b', fontSize: '0.8125rem' }}>Loading breakdown...</p>
@@ -626,11 +753,12 @@ interface QuestLeaderboardsProps {
     onPeriodChange: (p: QuestPeriod) => void;
     onNavigateDate: (dir: number) => void;
     onToggleRules: (cat: string) => void;
+    isForge: boolean;
 }
 
 function QuestLeaderboards({
     questPeriod, questDate, questScores, questLoading,
-    expandedRules, onPeriodChange, onNavigateDate, onToggleRules,
+    expandedRules, onPeriodChange, onNavigateDate, onToggleRules, isForge,
 }: QuestLeaderboardsProps) {
     const periodLabel = questPeriod === 'daily' ? `Day: ${questDate}`
         : questPeriod === '2day' ? `Window: ${questDate}`
@@ -692,6 +820,7 @@ function QuestLeaderboards({
                         scores={questScores.get(cat) ?? []}
                         isRulesExpanded={expandedRules.has(cat)}
                         onToggleRules={() => onToggleRules(cat)}
+                        isForge={isForge}
                     />
                 ))
             )}
@@ -708,9 +837,10 @@ interface CategoryLeaderboardProps {
     scores: DailyCategoryScore[];
     isRulesExpanded: boolean;
     onToggleRules: () => void;
+    isForge: boolean;
 }
 
-function CategoryLeaderboard({ category, scores, isRulesExpanded, onToggleRules }: CategoryLeaderboardProps) {
+function CategoryLeaderboard({ category, scores, isRulesExpanded, onToggleRules, isForge }: CategoryLeaderboardProps) {
     const questInfo: QuestDescription | undefined = QUEST_DESCRIPTIONS[category];
     const label = QUEST_LABELS[category] ?? category;
 
@@ -799,15 +929,26 @@ function CategoryLeaderboard({ category, scores, isRulesExpanded, onToggleRules 
                                         </span>
                                     </td>
                                     <td style={{ ...tdStyle, textAlign: 'left' }}>
-                                        <Link
-                                            href={`/trader/${score.wallet}`}
-                                            style={{
-                                                fontFamily: 'monospace', color: '#94a3b8',
-                                                textDecoration: 'none', borderBottom: '1px dashed #475569',
-                                            }}
-                                        >
-                                            {shortWallet(score.wallet)}
-                                        </Link>
+                                        {isForge ? (
+                                            <span
+                                                style={{
+                                                    fontFamily: 'monospace', color: '#94a3b8',
+                                                    borderBottom: '1px dashed #475569',
+                                                }}
+                                            >
+                                                {shortWallet(score.wallet)}
+                                            </span>
+                                        ) : (
+                                            <Link
+                                                href={`/trader/${score.wallet}`}
+                                                style={{
+                                                    fontFamily: 'monospace', color: '#94a3b8',
+                                                    textDecoration: 'none', borderBottom: '1px dashed #475569',
+                                                }}
+                                            >
+                                                {shortWallet(score.wallet)}
+                                            </Link>
+                                        )}
                                     </td>
                                     {cols.map((col) => (
                                         <td key={col.label} style={tdStyle}>{col.value}</td>
@@ -825,6 +966,246 @@ function CategoryLeaderboard({ category, scores, isRulesExpanded, onToggleRules 
                     No data for this period.
                 </div>
             )}
+        </div>
+    );
+}
+
+// --------------------------------------------------------------------------
+// Status Badge — tournament lifecycle indicator in the Forge header
+// --------------------------------------------------------------------------
+
+function StatusBadge({ status }: { status: string }) {
+    const config = ({
+        registration: { bg: 'rgba(245, 158, 11, 0.15)', color: '#fbbf24', label: 'REGISTRATION' },
+        active:       { bg: 'rgba(34, 197, 94, 0.15)',  color: '#22c55e', label: 'ACTIVE' },
+        completed:    { bg: 'rgba(100, 116, 139, 0.15)', color: '#94a3b8', label: 'COMPLETED' },
+        cancelled:    { bg: 'rgba(239, 68, 68, 0.15)',   color: '#ef4444', label: 'CANCELLED' },
+    } as Record<string, { bg: string; color: string; label: string }>)[status];
+
+    if (!config) return null;
+
+    return (
+        <span style={{
+            padding: '3px 10px',
+            borderRadius: '9999px',
+            fontSize: '0.6875rem',
+            fontWeight: 700,
+            letterSpacing: '0.05em',
+            background: config.bg,
+            color: config.color,
+            ...(status === 'active' ? { animation: 'pulse 2s infinite' } : {}),
+        }}>
+            {config.label}
+        </span>
+    );
+}
+
+// --------------------------------------------------------------------------
+// Register Button — opens wallet-input modal on the Forge page
+// --------------------------------------------------------------------------
+
+function RegisterButton({ status, onClick }: {
+    status: string;
+    onClick: () => void;
+}) {
+    const isOpen = status === 'registration' || status === 'active';
+    const tooltip = isOpen ? undefined : 'Registration closed';
+
+    return (
+        <button
+            onClick={isOpen ? onClick : undefined}
+            title={tooltip}
+            disabled={!isOpen}
+            style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '8px 16px',
+                borderRadius: '8px',
+                border: 'none',
+                fontSize: '0.8125rem',
+                fontWeight: 600,
+                cursor: isOpen ? 'pointer' : 'not-allowed',
+                background: isOpen ? '#f59e0b' : '#334155',
+                color: isOpen ? '#0f172a' : '#64748b',
+                opacity: isOpen ? 1 : 0.7,
+                transition: 'all 0.15s',
+            }}
+        >
+            <UserPlus size={14} /> Register
+        </button>
+    );
+}
+
+// --------------------------------------------------------------------------
+// Register Modal — wallet input + submit for Forge registration
+// --------------------------------------------------------------------------
+
+function RegisterModal({
+    walletInput, onWalletChange, registering, regResult, onSubmit, onClose,
+}: {
+    walletInput: string;
+    onWalletChange: (v: string) => void;
+    registering: boolean;
+    regResult: { registered: boolean; reason?: string } | null;
+    onSubmit: (e: React.FormEvent) => void;
+    onClose: () => void;
+}) {
+    return (
+        <div
+            onClick={onClose}
+            style={{
+                position: 'fixed', inset: 0, background: 'rgba(0, 0, 0, 0.7)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                zIndex: 300, padding: '1rem',
+            }}
+        >
+            <div
+                onClick={(e) => e.stopPropagation()}
+                style={{
+                    background: '#1e293b', border: '1px solid #334155', borderRadius: '12px',
+                    padding: '1.5rem', maxWidth: '480px', width: '100%',
+                }}
+            >
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
+                    <h2 style={{ color: '#f1f5f9', fontSize: '1.125rem', fontWeight: 700, margin: 0 }}>
+                        Register for The Forge
+                    </h2>
+                    <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', padding: 0 }}>
+                        <CloseIcon size={20} />
+                    </button>
+                </div>
+
+                <form onSubmit={onSubmit}>
+                    <label style={{ display: 'block', color: '#cbd5e1', fontSize: '0.8125rem', marginBottom: '0.5rem' }}>
+                        Solana Wallet Address
+                    </label>
+                    <input
+                        type="text"
+                        value={walletInput}
+                        onChange={(e) => onWalletChange(e.target.value)}
+                        placeholder="Enter your wallet..."
+                        disabled={registering}
+                        style={{
+                            width: '100%', padding: '0.625rem 1rem',
+                            background: '#0f172a', border: '1px solid #334155', borderRadius: '8px',
+                            color: '#f1f5f9', fontSize: '0.875rem', fontFamily: 'monospace',
+                            outline: 'none', marginBottom: '1rem',
+                        }}
+                    />
+
+                    <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
+                        <button
+                            type="button"
+                            onClick={onClose}
+                            disabled={registering}
+                            style={{
+                                padding: '0.5rem 1rem', borderRadius: '8px', border: '1px solid #334155',
+                                background: 'transparent', color: '#94a3b8', cursor: 'pointer', fontSize: '0.8125rem',
+                            }}
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            type="submit"
+                            disabled={registering || !walletInput.trim()}
+                            style={{
+                                padding: '0.5rem 1rem', borderRadius: '8px', border: 'none',
+                                background: walletInput.trim() && !registering ? '#f59e0b' : '#334155',
+                                color: walletInput.trim() && !registering ? '#0f172a' : '#64748b',
+                                cursor: walletInput.trim() && !registering ? 'pointer' : 'not-allowed',
+                                fontWeight: 600, fontSize: '0.8125rem',
+                            }}
+                        >
+                            {registering ? 'Registering...' : 'Register'}
+                        </button>
+                    </div>
+                </form>
+
+                {regResult && (
+                    <div style={{
+                        marginTop: '1rem', padding: '0.75rem 1rem', borderRadius: '8px',
+                        background: regResult.registered ? 'rgba(34, 197, 94, 0.1)' : 'rgba(239, 68, 68, 0.1)',
+                        color: regResult.registered ? '#22c55e' : '#ef4444',
+                        display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.8125rem',
+                    }}>
+                        {regResult.registered
+                            ? <><CheckCircle size={16} /> Registered! You&apos;re in the Forge.</>
+                            : <><XCircle size={16} /> {regResult.reason ?? 'Registration failed'}</>
+                        }
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+}
+
+// --------------------------------------------------------------------------
+// Prize Info — totals displayed in the Forge header
+// --------------------------------------------------------------------------
+
+function PrizeInfo({ prizeTable }: {
+    prizeTable: {
+        totalPool: number;
+        currency: string;
+        skillPrizes: number[];
+        rafflePrizes: number[];
+    };
+}) {
+    const skillTotal = prizeTable.skillPrizes.reduce((sum, v) => sum + v, 0);
+    const raffleTotal = prizeTable.rafflePrizes.reduce((sum, v) => sum + v, 0);
+    const formatAmount = (n: number) => n.toLocaleString('en-US');
+
+    return (
+        <div style={{
+            marginTop: '1rem',
+            padding: '1rem 1.25rem',
+            borderRadius: '12px',
+            background: 'rgba(245, 158, 11, 0.05)',
+            border: '1px solid rgba(245, 158, 11, 0.2)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '1.5rem',
+            flexWrap: 'wrap',
+        }}>
+            <div>
+                <div style={{
+                    fontSize: '0.6875rem',
+                    color: '#94a3b8',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.05em',
+                    marginBottom: '0.25rem',
+                }}>
+                    Total Prize Pool
+                </div>
+                <div style={{
+                    fontSize: '1.75rem',
+                    fontWeight: 700,
+                    color: '#fbbf24',
+                    fontFamily: 'monospace',
+                }}>
+                    {formatAmount(prizeTable.totalPool)} {prizeTable.currency}
+                </div>
+            </div>
+            <div style={{ display: 'flex', gap: '2rem' }}>
+                <div>
+                    <div style={{ fontSize: '0.6875rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.25rem' }}>
+                        Top 30% Skill
+                    </div>
+                    <div style={{ fontSize: '1rem', fontWeight: 600, color: '#22c55e', fontFamily: 'monospace' }}>
+                        {formatAmount(skillTotal)} {prizeTable.currency}
+                    </div>
+                </div>
+                <div>
+                    <div style={{ fontSize: '0.6875rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.25rem' }}>
+                        Raffle
+                    </div>
+                    <div style={{ fontSize: '1rem', fontWeight: 600, color: '#a78bfa', fontFamily: 'monospace' }}>
+                        {formatAmount(raffleTotal)} {prizeTable.currency}
+                    </div>
+                </div>
+            </div>
         </div>
     );
 }
