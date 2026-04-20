@@ -13,6 +13,7 @@ import {
     type CategorySlug,
 } from '@/lib/api';
 import { QUEST_DESCRIPTIONS, FF_DESCRIPTION, type QuestDescription } from '@/lib/quest-descriptions';
+import { CPI_DESCRIPTION } from '@/lib/cpi-description';
 import {
     ArrowLeft,
     ChevronDown,
@@ -266,6 +267,10 @@ export default function LeaderboardPage({ params }: { params: Promise<{ id: stri
         });
     }
 
+    function jumpToToday() {
+        setQuestDate(todayUTC());
+    }
+
     async function handleRegister(e: React.FormEvent) {
         e.preventDefault();
         if (!walletInput.trim()) return;
@@ -298,6 +303,16 @@ export default function LeaderboardPage({ params }: { params: Promise<{ id: stri
     const filteredEntries = data?.entries.filter((e) =>
         searchQuery ? e.wallet.toLowerCase().includes(searchQuery.toLowerCase()) : true,
     ) ?? [];
+
+    // Resolve searchQuery to a specific wallet from the tournament roster.
+    // First-match wins for ambiguous substrings. Used by Quest Leaderboards for row 6.
+    const searchedWallet = useMemo<string | null>(() => {
+        if (!searchQuery || !data) return null;
+        const match = data.entries.find((e) =>
+            e.wallet.toLowerCase().includes(searchQuery.toLowerCase()),
+        );
+        return match?.wallet ?? null;
+    }, [searchQuery, data]);
 
     if (loading) {
         return (
@@ -422,6 +437,10 @@ export default function LeaderboardPage({ params }: { params: Promise<{ id: stri
                     onPeriodChange={setQuestPeriod}
                     onNavigateDate={navigateDate}
                     onToggleRules={toggleRules}
+                    onJumpToToday={jumpToToday}
+                    searchQuery={searchQuery}
+                    onSearch={setSearchQuery}
+                    searchedWallet={searchedWallet}
                     isForge={isForge}
                 />
             )}
@@ -491,6 +510,7 @@ function GeneralLeaderboard({
 
     return (
         <>
+            <CPIExplanation />
             <div style={{ marginBottom: '1rem' }}>
                 <input
                     type="text"
@@ -753,12 +773,17 @@ interface QuestLeaderboardsProps {
     onPeriodChange: (p: QuestPeriod) => void;
     onNavigateDate: (dir: number) => void;
     onToggleRules: (cat: string) => void;
+    onJumpToToday: () => void;
+    searchQuery: string;
+    onSearch: (q: string) => void;
+    searchedWallet: string | null;
     isForge: boolean;
 }
 
 function QuestLeaderboards({
     questPeriod, questDate, questScores, questLoading,
-    expandedRules, onPeriodChange, onNavigateDate, onToggleRules, isForge,
+    expandedRules, onPeriodChange, onNavigateDate, onToggleRules, onJumpToToday,
+    searchQuery, onSearch, searchedWallet, isForge,
 }: QuestLeaderboardsProps) {
     const periodLabel = questPeriod === 'daily' ? `Day: ${questDate}`
         : questPeriod === '2day' ? `Window: ${questDate}`
@@ -766,6 +791,19 @@ function QuestLeaderboards({
 
     return (
         <>
+            <div style={{ marginBottom: '1rem' }}>
+                <input
+                    type="text"
+                    placeholder="Search by wallet address..."
+                    value={searchQuery}
+                    onChange={(e) => onSearch(e.target.value)}
+                    style={{
+                        width: '100%', maxWidth: '400px', padding: '0.625rem 1rem',
+                        background: '#1e293b', border: '1px solid #334155', borderRadius: '8px',
+                        color: '#f1f5f9', fontSize: '0.875rem', outline: 'none',
+                    }}
+                />
+            </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
                 {(Object.keys(PERIOD_LABELS) as QuestPeriod[]).map((p) => (
                     <button
@@ -805,6 +843,25 @@ function QuestLeaderboards({
                     <button onClick={() => onNavigateDate(1)} style={dateNavBtnStyle}>
                         <ChevronRight size={16} />
                     </button>
+                    <button
+                        onClick={onJumpToToday}
+                        disabled={questDate === todayUTC()}
+                        title={questDate === todayUTC() ? 'Already on today' : 'Jump to today'}
+                        style={{
+                            ...dateNavBtnStyle,
+                            width: 'auto',
+                            padding: '0 0.75rem',
+                            fontSize: '0.75rem',
+                            fontWeight: 600,
+                            opacity: questDate === todayUTC() ? 0.4 : 1,
+                            cursor: questDate === todayUTC() ? 'not-allowed' : 'pointer',
+                            color: questDate === todayUTC() ? '#94a3b8' : '#f59e0b',
+                            borderColor: questDate === todayUTC() ? '#334155' : 'rgba(245, 158, 11, 0.4)',
+                            background: questDate === todayUTC() ? '#1e293b' : 'rgba(245, 158, 11, 0.1)',
+                        }}
+                    >
+                        Today
+                    </button>
                 </div>
             </div>
 
@@ -821,6 +878,7 @@ function QuestLeaderboards({
                         isRulesExpanded={expandedRules.has(cat)}
                         onToggleRules={() => onToggleRules(cat)}
                         isForge={isForge}
+                        searchedWallet={searchedWallet}
                     />
                 ))
             )}
@@ -838,16 +896,28 @@ interface CategoryLeaderboardProps {
     isRulesExpanded: boolean;
     onToggleRules: () => void;
     isForge: boolean;
+    searchedWallet: string | null;
 }
 
-function CategoryLeaderboard({ category, scores, isRulesExpanded, onToggleRules, isForge }: CategoryLeaderboardProps) {
+function CategoryLeaderboard({ category, scores, isRulesExpanded, onToggleRules, isForge, searchedWallet }: CategoryLeaderboardProps) {
     const questInfo: QuestDescription | undefined = QUEST_DESCRIPTIONS[category];
     const label = QUEST_LABELS[category] ?? category;
 
-    const sorted = [...scores]
+    // Full sorted list (not sliced) — needed to compute the searched wallet's rank.
+    const fullSorted = [...scores]
         .filter((s) => !s.wallet.startsWith('__'))
-        .sort((a, b) => b.score - a.score)
-        .slice(0, 5);
+        .sort((a, b) => b.score - a.score);
+    const sorted = fullSorted.slice(0, 5);
+
+    // Row 6 info: is the searched wallet in this category's scores, and where does it rank?
+    const searchedEntry = searchedWallet
+        ? fullSorted.find((s) => s.wallet === searchedWallet)
+        : null;
+    const searchedRank = searchedEntry
+        ? fullSorted.indexOf(searchedEntry) + 1
+        : null;
+    const searchedInTop5 = searchedRank !== null && searchedRank <= 5;
+    const showRow6 = searchedWallet !== null && !searchedInTop5;
 
     const sampleColumns = sorted.length > 0
         ? extractQuestColumns(category, sorted[0].details)
@@ -916,7 +986,14 @@ function CategoryLeaderboard({ category, scores, isRulesExpanded, onToggleRules,
                         {sorted.map((score, idx) => {
                             const cols = extractQuestColumns(category, score.details);
                             return (
-                                <tr key={score.wallet} style={{ borderBottom: '1px solid #1e293b' }}>
+                                <tr
+                                    key={score.wallet}
+                                    style={{
+                                        borderBottom: '1px solid #1e293b',
+                                        background: score.wallet === searchedWallet ? 'rgba(245, 158, 11, 0.08)' : undefined,
+                                        borderLeft: score.wallet === searchedWallet ? '2px solid #f59e0b' : '2px solid transparent',
+                                    }}
+                                >
                                     <td style={{ ...tdStyle, textAlign: 'left' }}>
                                         <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
                                             {idx < 3 && <Trophy size={12} color={medalColors[idx]} />}
@@ -959,6 +1036,54 @@ function CategoryLeaderboard({ category, scores, isRulesExpanded, onToggleRules,
                                 </tr>
                             );
                         })}
+                        {showRow6 && (
+                            <tr style={{
+                                borderBottom: '1px solid #1e293b',
+                                borderTop: '1px dashed #334155',
+                                background: 'rgba(245, 158, 11, 0.04)',
+                            }}>
+                                {searchedEntry ? (
+                                    <>
+                                        <td style={{ ...tdStyle, textAlign: 'left' }}>
+                                            <span style={{ color: '#94a3b8', fontWeight: 400 }}>
+                                                #{searchedRank}
+                                            </span>
+                                        </td>
+                                        <td style={{ ...tdStyle, textAlign: 'left' }}>
+                                            <span
+                                                style={{
+                                                    fontFamily: 'monospace', color: '#94a3b8',
+                                                    borderBottom: '1px dashed #475569',
+                                                }}
+                                            >
+                                                {shortWallet(searchedWallet!)}
+                                            </span>
+                                        </td>
+                                        {extractQuestColumns(category, searchedEntry.details).map((col) => (
+                                            <td key={col.label} style={tdStyle}>{col.value}</td>
+                                        ))}
+                                        <td style={{ ...tdStyle, fontWeight: 600, color: '#f1f5f9' }}>
+                                            {searchedEntry.score.toFixed(2)}
+                                        </td>
+                                    </>
+                                ) : (
+                                    <td
+                                        colSpan={2 + sampleColumns.length + 1}
+                                        style={{
+                                            ...tdStyle,
+                                            textAlign: 'center',
+                                            color: '#64748b',
+                                            fontStyle: 'italic',
+                                        }}
+                                    >
+                                        <span style={{ fontFamily: 'monospace', marginRight: '0.5rem', color: '#94a3b8' }}>
+                                            {shortWallet(searchedWallet!)}
+                                        </span>
+                                        — Not ranked in this category
+                                    </td>
+                                )}
+                            </tr>
+                        )}
                     </tbody>
                 </table>
             ) : (
@@ -1206,6 +1331,119 @@ function PrizeInfo({ prizeTable }: {
                     </div>
                 </div>
             </div>
+        </div>
+    );
+}
+
+// --------------------------------------------------------------------------
+// CPI Explanation — expandable "How Scoring Works" panel on the General tab
+// --------------------------------------------------------------------------
+
+function CPIExplanation() {
+    const [expanded, setExpanded] = useState(false);
+
+    return (
+        <div style={{
+            marginBottom: '1rem',
+            borderRadius: '12px',
+            border: '1px solid #1e293b',
+            background: '#0f172a',
+            overflow: 'hidden',
+        }}>
+            <button
+                onClick={() => setExpanded(!expanded)}
+                aria-expanded={expanded}
+                style={{
+                    width: '100%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    padding: '0.75rem 1rem',
+                    background: 'none',
+                    border: 'none',
+                    color: '#f1f5f9',
+                    cursor: 'pointer',
+                    textAlign: 'left',
+                }}
+            >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', minWidth: 0 }}>
+                    <Info size={16} color="#f59e0b" style={{ flexShrink: 0 }} />
+                    <div style={{ minWidth: 0 }}>
+                        <div style={{ fontSize: '0.9375rem', fontWeight: 600 }}>
+                            {CPI_DESCRIPTION.title}
+                        </div>
+                        {!expanded && (
+                            <div style={{
+                                fontSize: '0.75rem',
+                                color: '#94a3b8',
+                                fontStyle: 'italic',
+                                marginTop: '0.125rem',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                whiteSpace: 'nowrap',
+                            }}>
+                                {CPI_DESCRIPTION.tagline}
+                            </div>
+                        )}
+                    </div>
+                </div>
+                {expanded
+                    ? <ChevronDown size={16} color="#94a3b8" style={{ flexShrink: 0 }} />
+                    : <ChevronRight size={16} color="#94a3b8" style={{ flexShrink: 0 }} />}
+            </button>
+
+            {expanded && (
+                <div style={{
+                    padding: '0 1rem 1rem',
+                    borderTop: '1px solid #1e293b',
+                }}>
+                    <p style={{
+                        color: '#cbd5e1',
+                        fontSize: '0.8125rem',
+                        margin: '0.75rem 0',
+                        lineHeight: 1.5,
+                    }}>
+                        {CPI_DESCRIPTION.tagline}
+                    </p>
+                    {CPI_DESCRIPTION.sections.map((section) => (
+                        <div key={section.heading} style={{ marginBottom: '1rem' }}>
+                            <h4 style={{
+                                color: '#f1f5f9',
+                                fontSize: '0.75rem',
+                                fontWeight: 700,
+                                margin: '0 0 0.375rem',
+                                textTransform: 'uppercase',
+                                letterSpacing: '0.05em',
+                            }}>
+                                {section.heading}
+                            </h4>
+                            {section.paragraph && (
+                                <p style={{
+                                    color: '#cbd5e1',
+                                    fontSize: '0.8125rem',
+                                    margin: '0 0 0.5rem',
+                                    lineHeight: 1.5,
+                                }}>
+                                    {section.paragraph}
+                                </p>
+                            )}
+                            {section.items && (
+                                <ul style={{
+                                    margin: 0,
+                                    padding: '0 0 0 1.25rem',
+                                    color: '#94a3b8',
+                                    fontSize: '0.75rem',
+                                    lineHeight: 1.7,
+                                }}>
+                                    {section.items.map((item, i) => (
+                                        <li key={i} style={{ marginBottom: '0.25rem' }}>{item}</li>
+                                    ))}
+                                </ul>
+                            )}
+                        </div>
+                    ))}
+                </div>
+            )}
         </div>
     );
 }
