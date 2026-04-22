@@ -40,20 +40,11 @@ import type {
     RoundName,
     CPIScores,
 } from '../types.js';
-import { DEFAULT_TOURNAMENT_CONFIG, DEFAULT_CPI_WEIGHTS } from '../types.js';
+import { DEFAULT_TOURNAMENT_CONFIG, DEFAULT_CPI_WEIGHTS, resolveConfig } from '../types.js';
 
 const ROUND_NAMES: RoundName[] = ['First Blood', 'The Crucible', 'Endgame'];
 
 const adrenaClient = new AdrenaClient();
-
-// --------------------------------------------------------------------------
-// Helper: merge stored config with defaults for backward compatibility
-// Old tournaments may not have new config fields (leveragePenaltyThreshold,
-// supportedAssetCount, roundDurations). This ensures they get default values.
-// --------------------------------------------------------------------------
-function resolveConfig(stored: unknown): TournamentConfig {
-    return { ...DEFAULT_TOURNAMENT_CONFIG, ...(stored as Partial<TournamentConfig>) };
-}
 
 // --------------------------------------------------------------------------
 // Helper: get round duration for a given round number from config

@@ -160,7 +160,18 @@ router.post('/raffle/:id/compute', async (req, res) => {
             return;
         }
 
-        const result = await computeAllTickets(tournamentId);
+        const [tournament] = await db
+            .select()
+            .from(tournaments)
+            .where(eq(tournaments.id, tournamentId))
+            .limit(1);
+        if (!tournament) {
+            res.status(404).json({ success: false, error: 'Tournament not found' });
+            return;
+        }
+        const { resolveConfig } = await import('../types.js');
+        const config = resolveConfig(tournament.config);
+        const result = await computeAllTickets(tournamentId, config);
         res.json({ success: true, data: result });
     } catch (error) {
         console.error('[Admin] Error computing raffle tickets:', error);

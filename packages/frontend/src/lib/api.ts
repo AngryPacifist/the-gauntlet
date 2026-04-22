@@ -52,29 +52,44 @@ async function apiFetch<T>(
 
 // --- Tournament Types (camelCase — matches Drizzle output) ---
 
+// Mirrors backend TournamentConfig in packages/backend/src/types.ts.
+// Phase 3 (2026-04-22): expanded with scoring/raffle config fields + assetList.
+// leveragePenaltyThreshold removed (D4 — unused per tournament-manager.ts:21-22).
+export interface TournamentConfig {
+    format: 'bracket' | 'rank_only';
+    bracketSize: number;
+    advanceRatio: number;
+    roundDurations: number[];
+    minPositionCollateral: number;
+    minTradeDurationSec: number;
+    supportedAssetCount: number;
+    useHistoricalWindow: boolean;
+    historicalWindowDays: number;
+    seededWallets?: string[];
+    prizeTable?: {
+        totalPool: number;
+        currency: string;
+        skillPrizes: number[];
+        rafflePrizes: number[];
+    };
+    // Phase 3 additions — config-driven scoring/raffle constants
+    topPercentCutoff: number;
+    allAroundMinTradeUsd: number;
+    allAroundMaxPointsPerAsset: number;
+    fisherRankPoints: number[];
+    dailyQuestPoints: number[];
+    multidayQuestPoints: number[];
+    raffleMinClosedPositions: number;
+    cpiTicketMultiplier: number;
+    questTicketMultiplier: number;
+    assetList?: Array<{ symbol: string; joinedAt: string }>;
+}
+
 export interface Tournament {
     id: number;
     name: string;
     status: 'registration' | 'active' | 'completed' | 'cancelled';
-    config: {
-        format: 'bracket' | 'rank_only';
-        bracketSize: number;
-        advanceRatio: number;
-        roundDurations: number[];
-        minPositionCollateral: number;
-        minTradeDurationSec: number;
-        leveragePenaltyThreshold: number;
-        supportedAssetCount: number;
-        useHistoricalWindow: boolean;
-        historicalWindowDays: number;
-        seededWallets?: string[];
-        prizeTable?: {
-            totalPool: number;
-            currency: string;
-            skillPrizes: number[];
-            rafflePrizes: number[];
-        };
-    };
+    config: TournamentConfig;
     createdAt: string;
     updatedAt: string;
 }

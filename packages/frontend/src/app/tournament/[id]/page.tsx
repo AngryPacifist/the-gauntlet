@@ -156,8 +156,13 @@ export default function TournamentPage({ params }: { params: Promise<{ id: strin
         return `${hours}h ${minutes}m remaining`;
     }
 
-    // Countdown to tournament start (Sunday Mar 15, 11am UTC)
-    const TOURNAMENT_START = new Date('2026-03-15T11:00:00Z').getTime();
+    // Countdown to tournament start — derived from first round's startTime.
+    // Pre-start (registration phase, no rounds yet): TOURNAMENT_START = 0 →
+    // getCountdown() returns `{started: true, 0/0/0/0}` (existing diff ≤ 0 branch)
+    // which degrades the countdown block gracefully.
+    const TOURNAMENT_START = tournament?.rounds[0]?.startTime
+        ? new Date(tournament.rounds[0].startTime).getTime()
+        : 0;
 
     function getCountdown(): { days: number; hours: number; minutes: number; seconds: number; started: boolean } {
         const diff = TOURNAMENT_START - now;

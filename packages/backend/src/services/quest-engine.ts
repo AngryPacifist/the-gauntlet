@@ -26,14 +26,16 @@ import { eq, and, desc, asc } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import { questProgress } from '../db/schema.js';
 import { saveDailyCategoryScores } from './category-engine.js';
-import type { AdrenaPosition, LeverageStep, QuestProgressDetails, CategoryScoreRow } from '../types.js';
+import type { AdrenaPosition, LeverageStep, QuestProgressDetails, CategoryScoreRow, TournamentConfig } from '../types.js';
+import { DEFAULT_TOURNAMENT_CONFIG } from '../types.js';
 
 // --------------------------------------------------------------------------
-// Constants
+// Constants: migrated to TournamentConfig (Phase 3 item 14, 2026-04-22).
+// MIN_POSITION_COLLATERAL + MIN_TRADE_DURATION_SEC are now config-driven via
+// `config.minPositionCollateral` + `config.minTradeDurationSec` (same names as
+// already-existing TournamentConfig fields). LEVERAGE_STEPS stays as a module
+// constant (D1 — game design, no admin use case).
 // --------------------------------------------------------------------------
-
-const MIN_POSITION_COLLATERAL = 25;   // USD
-const MIN_TRADE_DURATION_SEC = 120;   // seconds
 
 /**
  * Leverage step windows: ±2x tolerance per step.
@@ -66,31 +68,36 @@ function positionCompletesStep(
     position: AdrenaPosition,
     step: LeverageStep,
     side: 'long' | 'short',
+    config: TournamentConfig,
 ): boolean {
     // 1. Direction check
     if (position.side !== side) return false;
+
+    // Phase 3 item 14: read anti-gaming filters from config
+    const minCollateral = config.minPositionCollateral ?? DEFAULT_TOURNAMENT_CONFIG.minPositionCollateral;
+    const minDurationSec = config.minTradeDurationSec ?? DEFAULT_TOURNAMENT_CONFIG.minTradeDurationSec;
 
     // 2. Anti-dust: minimum collateral
     // Uses entry_collateral_amount (immutable) with fallback to collateral_amount
     // Matches pattern in adrena-client.ts:137
     const collateral = position.entry_collateral_amount ?? position.collateral_amount;
-    if (collateral < MIN_POSITION_COLLATERAL) return false;
+    if (collateral < minCollateral) return false;
 
-    // 3. Anti-wash: minimum duration (120s)
+    // 3. Anti-wash: minimum duration
     // Open positions: check elapsed time since entry
     // Closed positions: use precomputed duration or compute from timestamps
     if (position.status === 'open') {
         const elapsedSec = (Date.now() - new Date(position.entry_date).getTime()) / 1000;
-        if (elapsedSec < MIN_TRADE_DURATION_SEC) return false;
+        if (elapsedSec < minDurationSec) return false;
     } else {
         // Closed position — use precomputed duration if available
         if (position.duration != null && position.duration > 0) {
-            if (position.duration < MIN_TRADE_DURATION_SEC) return false;
+            if (position.duration < minDurationSec) return false;
         } else if (position.exit_date && position.entry_date) {
             // Fallback: compute from timestamps
             const durationMs = new Date(position.exit_date).getTime() -
                 new Date(position.entry_date).getTime();
-            if (durationMs / 1000 < MIN_TRADE_DURATION_SEC) return false;
+            if (durationMs / 1000 < minDurationSec) return false;
         }
         // If no duration info available (shouldn't happen), let it pass
     }
@@ -117,6 +124,7 @@ export async function evaluateLeverageProgress(
     weekNumber: number,
     weekStart: string,  // YYYY-MM-DD
     weekEnd: string,    // YYYY-MM-DD
+    config: TournamentConfig,
 ): Promise<QuestProgressDetails> {
     // Filter positions to those opened within this quest week
     const weekPositions = positions.filter((p) => {
@@ -154,7 +162,7 @@ export async function evaluateLeverageProgress(
         // Check each position against each step
         for (const position of weekPositions) {
             for (let i = 0; i < LEVERAGE_STEPS.length; i++) {
-                if (!currentSteps[i] && positionCompletesStep(position, LEVERAGE_STEPS[i], side)) {
+                if (!currentSteps[i] && positionCompletesStep(position, LEVERAGE_STEPS[i], side, config)) {
                     currentSteps[i] = true;
                 }
             }

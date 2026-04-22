@@ -10,6 +10,19 @@ const nextConfig: NextConfig = {
       },
     ];
   },
+  // /register page removed (Phase 3 item 24 — vestigial post nav-restructure).
+  // Gauntlet uses inline registration on /tournament/:id; Forge uses the Register
+  // button in the Forge page header. 308 permanent tells crawlers + bookmarks
+  // the move is final.
+  async redirects() {
+    return [
+      {
+        source: '/register',
+        destination: '/',
+        permanent: true,
+      },
+    ];
+  },
 };
 
 export default nextConfig;

@@ -25,10 +25,13 @@ import {
     rounds,
     dailyCategoryScores,
 } from '../db/schema.js';
+import type { TournamentConfig } from '../types.js';
+import { DEFAULT_TOURNAMENT_CONFIG } from '../types.js';
 
-// Quest point award tables (rank 1-5, 0-indexed)
-const DAILY_QUEST_POINTS = [0.2, 0.15, 0.1, 0.05, 0.01];
-const MULTIDAY_QUEST_POINTS = [0.3, 0.25, 0.2, 0.15, 0.10];
+// Quest point award tables:
+// - DAILY + MULTIDAY migrated to TournamentConfig (Phase 3 item 17, 2026-04-22).
+// - LEVERAGE stays module-constant (D1 — Phase 4 item 30 changes values to [0.5, 0.4, 0.3, 0.2, 0.1]
+//   as part of the per-token refactor; migrating now would mean Phase 4 immediately re-edits).
 const LEVERAGE_QUEST_POINTS = [1.5, 1.2, 1.0, 0.75, 0.50];
 
 // Categories grouped by scoring period
@@ -118,6 +121,7 @@ function extractTiebreakerRoi(category: string, details: Record<string, unknown>
 export async function computeQuestPoints(
     tournamentId: number,
     wallet: string,
+    config: TournamentConfig,
 ): Promise<number> {
     let totalQuestPoints = 0;
 
@@ -162,9 +166,11 @@ export async function computeQuestPoints(
             const rank = getCompetitionRank(valid, wallet);
             if (rank === -1) continue;
 
+            const dailyPoints = config.dailyQuestPoints ?? DEFAULT_TOURNAMENT_CONFIG.dailyQuestPoints;
+            const multidayPoints = config.multidayQuestPoints ?? DEFAULT_TOURNAMENT_CONFIG.multidayQuestPoints;
             const pointsTable = DAILY_CATEGORIES.includes(category)
-                ? DAILY_QUEST_POINTS
-                : MULTIDAY_QUEST_POINTS;
+                ? dailyPoints
+                : multidayPoints;
 
             if (rank < pointsTable.length) {
                 totalQuestPoints += pointsTable[rank];
@@ -239,6 +245,7 @@ export async function computeQuestPoints(
 // --------------------------------------------------------------------------
 export async function computeAllQuestPoints(
     tournamentId: number,
+    config: TournamentConfig,
 ): Promise<Map<string, number>> {
     // Single query: fetch all scores for this tournament
     const allScores = await db
@@ -276,13 +283,15 @@ export async function computeAllQuestPoints(
         });
 
         // Determine which points table to use
+        const dailyPoints = config.dailyQuestPoints ?? DEFAULT_TOURNAMENT_CONFIG.dailyQuestPoints;
+        const multidayPoints = config.multidayQuestPoints ?? DEFAULT_TOURNAMENT_CONFIG.multidayQuestPoints;
         let pointsTable: number[];
         if (DAILY_CATEGORIES.includes(category)) {
-            pointsTable = DAILY_QUEST_POINTS;
+            pointsTable = dailyPoints;
         } else if (MULTIDAY_CATEGORIES.includes(category)) {
-            pointsTable = MULTIDAY_QUEST_POINTS;
+            pointsTable = multidayPoints;
         } else if (WEEKLY_CATEGORIES.includes(category)) {
-            pointsTable = LEVERAGE_QUEST_POINTS;
+            pointsTable = LEVERAGE_QUEST_POINTS;  // unchanged per D1
         } else {
             continue;
         }
@@ -311,6 +320,7 @@ export async function computeAllQuestPoints(
 // --------------------------------------------------------------------------
 export async function computeFinalScores(
     tournamentId: number,
+    config: TournamentConfig,
 ): Promise<FinalScoreResult[]> {
     // Get all unique wallets that participated (have bracket entries)
     const tournamentRounds = await db
@@ -354,14 +364,18 @@ export async function computeFinalScores(
     }
 
     // Batch quest point computation — 1 query for all wallets
-    const questPointsMap = await computeAllQuestPoints(tournamentId);
+    const questPointsMap = await computeAllQuestPoints(tournamentId, config);
+
+    // Phase 3 item 17 + F1: read ticket multipliers from config (was hardcoded 0.5 and 20).
+    const cpiMult = config.cpiTicketMultiplier ?? DEFAULT_TOURNAMENT_CONFIG.cpiTicketMultiplier;
+    const questMult = config.questTicketMultiplier ?? DEFAULT_TOURNAMENT_CONFIG.questTicketMultiplier;
 
     const results: FinalScoreResult[] = [];
 
     for (const [wallet, scores] of walletCPIs) {
         const questPoints = questPointsMap.get(wallet) ?? 0;
         const finalScore = scores.cpiScore + questPoints;
-        const raffleTickets = Math.floor(scores.cpiScore * 0.5) + Math.floor(questPoints * 20);
+        const raffleTickets = Math.floor(scores.cpiScore * cpiMult) + Math.floor(questPoints * questMult);
 
         results.push({
             wallet,

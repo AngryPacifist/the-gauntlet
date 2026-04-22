@@ -24,6 +24,7 @@ import {
     adminAdvanceSeason,
     adminCompleteSeason,
     type Tournament,
+    type TournamentConfig,
     type Season,
     type TournamentAnalytics,
     type AdminDailyAnalytics,
@@ -56,6 +57,14 @@ import {
 } from 'lucide-react';
 import styles from './page.module.css';
 
+// Utility: today's UTC date as YYYY-MM-DD string (for initial-asset joinedAt default).
+// For CREATE-time assets, this is pragmatically equivalent to "tournament start"
+// because scheduler only runs on active tournaments (no pre-start scoring).
+// Mid-tournament Add Asset (Phase 4+) will use a next-Monday-UTC helper instead.
+function todayUtc(): string {
+    return new Date().toISOString().slice(0, 10);
+}
+
 export default function AdminPage() {
     const [tournaments, setTournaments] = useState<Tournament[]>([]);
     const [seasons, setSeasons] = useState<Season[]>([]);
@@ -68,13 +77,45 @@ export default function AdminPage() {
     const [creating, setCreating] = useState(false);
 
     // Config fields (defaults match DEFAULT_TOURNAMENT_CONFIG)
+    // Basic + round
     const [cfgFormat, setCfgFormat] = useState<'bracket' | 'rank_only'>('bracket');
     const [cfgBracketSize, setCfgBracketSize] = useState(8);
     const [cfgAdvanceRatio, setCfgAdvanceRatio] = useState(0.5);
     const [cfgRoundDurations, setCfgRoundDurations] = useState('72, 48, 48');
+
+    // Anti-gaming filters
     const [cfgMinCollateral, setCfgMinCollateral] = useState(25);
     const [cfgMinDuration, setCfgMinDuration] = useState(120);
+    const [cfgAllAroundMinTradeUsd, setCfgAllAroundMinTradeUsd] = useState(500);
+
+    // Scoring policy (item 17)
+    const [cfgAllAroundMaxPointsPerAsset, setCfgAllAroundMaxPointsPerAsset] = useState(25);
+    const [cfgFisherRankPoints, setCfgFisherRankPoints] = useState('3, 2, 1');
+    const [cfgDailyQuestPoints, setCfgDailyQuestPoints] = useState('0.2, 0.15, 0.1, 0.05, 0.01');
+    const [cfgMultidayQuestPoints, setCfgMultidayQuestPoints] = useState('0.3, 0.25, 0.2, 0.15, 0.1');
+
+    // Raffle policy (items 17 + 26)
+    const [cfgTopPercentCutoff, setCfgTopPercentCutoff] = useState(0.30);
+    const [cfgRaffleMinClosedPositions, setCfgRaffleMinClosedPositions] = useState(10);
+    const [cfgCpiTicketMultiplier, setCfgCpiTicketMultiplier] = useState(0.5);
+    const [cfgQuestTicketMultiplier, setCfgQuestTicketMultiplier] = useState(20);
+
+    // Backtest mode (F4 — existing type fields, newly wired)
+    const [cfgUseHistoricalWindow, setCfgUseHistoricalWindow] = useState(false);
+    const [cfgHistoricalWindowDays, setCfgHistoricalWindowDays] = useState(90);
+
+    // Asset count (existing — CPI variety denominator)
     const [cfgAssetCount, setCfgAssetCount] = useState(4);
+
+    // Prize distribution (item 16)
+    const [cfgPrizeEnabled, setCfgPrizeEnabled] = useState(false);
+    const [cfgPrizeTotalPool, setCfgPrizeTotalPool] = useState(1000);
+    const [cfgPrizeCurrency, setCfgPrizeCurrency] = useState<'ADX' | 'USDC'>('ADX');
+    const [cfgSkillPrizes, setCfgSkillPrizes] = useState('500, 300, 200');
+    const [cfgRafflePrizes, setCfgRafflePrizes] = useState('100, 50, 25');
+
+    // Asset list (item 29-admin) — repeater
+    const [cfgAssetList, setCfgAssetList] = useState<Array<{ symbol: string; joinedAt: string }>>([]);
 
     // Create season modal
     const [showSeasonModal, setShowSeasonModal] = useState(false);
@@ -148,13 +189,38 @@ export default function AdminPage() {
 
     function resetConfigDefaults() {
         setNewName('');
+        // Basic + round
         setCfgFormat('bracket');
         setCfgBracketSize(8);
         setCfgAdvanceRatio(0.5);
         setCfgRoundDurations('72, 48, 48');
+        // Anti-gaming
         setCfgMinCollateral(25);
         setCfgMinDuration(120);
+        setCfgAllAroundMinTradeUsd(500);
+        // Scoring policy
+        setCfgAllAroundMaxPointsPerAsset(25);
+        setCfgFisherRankPoints('3, 2, 1');
+        setCfgDailyQuestPoints('0.2, 0.15, 0.1, 0.05, 0.01');
+        setCfgMultidayQuestPoints('0.3, 0.25, 0.2, 0.15, 0.1');
+        // Raffle policy
+        setCfgTopPercentCutoff(0.30);
+        setCfgRaffleMinClosedPositions(10);
+        setCfgCpiTicketMultiplier(0.5);
+        setCfgQuestTicketMultiplier(20);
+        // Backtest
+        setCfgUseHistoricalWindow(false);
+        setCfgHistoricalWindowDays(90);
+        // Asset count
         setCfgAssetCount(4);
+        // Prizes (off by default)
+        setCfgPrizeEnabled(false);
+        setCfgPrizeTotalPool(1000);
+        setCfgPrizeCurrency('ADX');
+        setCfgSkillPrizes('500, 300, 200');
+        setCfgRafflePrizes('100, 50, 25');
+        // Assets
+        setCfgAssetList([]);
     }
 
     // ── Tournament handlers ──────────────────────────────────────────────────
@@ -163,12 +229,38 @@ export default function AdminPage() {
         e.preventDefault();
         if (!newName.trim()) return;
 
-        const durations = cfgRoundDurations
-            .split(',')
-            .map((s) => Number(s.trim()))
-            .filter((n) => !isNaN(n) && n > 0);
+        // Parse + validate array fields (D3 — reject malformed input with clear error)
+        const parseNums = (s: string) => s.split(',').map((x) => Number(x.trim())).filter((n) => !isNaN(n));
 
-        const config = {
+        const durations = parseNums(cfgRoundDurations).filter((n) => n > 0);
+        const fisherRankPoints = parseNums(cfgFisherRankPoints);
+        const dailyQuestPoints = parseNums(cfgDailyQuestPoints);
+        const multidayQuestPoints = parseNums(cfgMultidayQuestPoints);
+        const skillPrizes = parseNums(cfgSkillPrizes);
+        const rafflePrizes = parseNums(cfgRafflePrizes);
+
+        // Length validations (D3)
+        if (fisherRankPoints.length !== 3) {
+            showToast('Fisher rank points must have exactly 3 entries (1st/2nd/3rd)', 'error');
+            return;
+        }
+        if (dailyQuestPoints.length !== 5) {
+            showToast('Daily quest points must have exactly 5 entries (ranks 1-5)', 'error');
+            return;
+        }
+        if (multidayQuestPoints.length !== 5) {
+            showToast('Multi-day quest points must have exactly 5 entries (ranks 1-5)', 'error');
+            return;
+        }
+        // skillPrizes / rafflePrizes: free-length (admin choice)
+
+        // Asset list validation: non-empty symbol required if assetList is populated
+        if (cfgAssetList.some((a) => !a.symbol.trim())) {
+            showToast('Every asset must have a non-empty symbol', 'error');
+            return;
+        }
+
+        const config: Partial<TournamentConfig> = {
             format: cfgFormat,
             bracketSize: cfgBracketSize,
             advanceRatio: cfgAdvanceRatio,
@@ -176,7 +268,37 @@ export default function AdminPage() {
             minPositionCollateral: cfgMinCollateral,
             minTradeDurationSec: cfgMinDuration,
             supportedAssetCount: cfgAssetCount,
+            // Phase 3 additions
+            topPercentCutoff: cfgTopPercentCutoff,
+            allAroundMinTradeUsd: cfgAllAroundMinTradeUsd,
+            allAroundMaxPointsPerAsset: cfgAllAroundMaxPointsPerAsset,
+            fisherRankPoints,
+            dailyQuestPoints,
+            multidayQuestPoints,
+            raffleMinClosedPositions: cfgRaffleMinClosedPositions,
+            cpiTicketMultiplier: cfgCpiTicketMultiplier,
+            questTicketMultiplier: cfgQuestTicketMultiplier,
+            useHistoricalWindow: cfgUseHistoricalWindow,
+            historicalWindowDays: cfgHistoricalWindowDays,
         };
+
+        // Prize table (optional — only included if enabled)
+        if (cfgPrizeEnabled) {
+            config.prizeTable = {
+                totalPool: cfgPrizeTotalPool,
+                currency: cfgPrizeCurrency,
+                skillPrizes,
+                rafflePrizes,
+            };
+        }
+
+        // Asset list (optional — only included if populated per D5)
+        if (cfgAssetList.length > 0) {
+            config.assetList = cfgAssetList.map((a) => ({
+                symbol: a.symbol.trim(),
+                joinedAt: a.joinedAt,
+            }));
+        }
 
         try {
             setCreating(true);
@@ -1077,8 +1199,8 @@ export default function AdminPage() {
                                 </span>
                             </div>
 
-                            <h3 className={styles.formSectionTitle}>Configuration</h3>
-
+                            {/* === Round / Bracket === */}
+                            <h3 className={styles.formSectionTitle}>Round / Bracket</h3>
                             <div className={styles.formGrid}>
                                 {cfgFormat === 'bracket' && (
                                 <div className={styles.formGroup}>
@@ -1094,23 +1216,7 @@ export default function AdminPage() {
                                     <span className={styles.formHint}>Fraction that survive each round</span>
                                 </div>
                                 )}
-                                <div className={styles.formGroup}>
-                                    <label className={styles.formLabel}>Min Collateral ($)</label>
-                                    <input type="number" className="input input--mono" value={cfgMinCollateral} onChange={(e) => setCfgMinCollateral(Number(e.target.value))} min={0} />
-                                    <span className={styles.formHint}>Min collateral for a trade to count</span>
-                                </div>
-                                <div className={styles.formGroup}>
-                                    <label className={styles.formLabel}>Min Trade Duration (s)</label>
-                                    <input type="number" className="input input--mono" value={cfgMinDuration} onChange={(e) => setCfgMinDuration(Number(e.target.value))} min={0} />
-                                    <span className={styles.formHint}>Min seconds a trade must be open</span>
-                                </div>
-                                <div className={styles.formGroup}>
-                                    <label className={styles.formLabel}>Supported Assets</label>
-                                    <input type="number" className="input input--mono" value={cfgAssetCount} onChange={(e) => setCfgAssetCount(Number(e.target.value))} min={1} />
-                                    <span className={styles.formHint}>Number of tradeable assets on Adrena</span>
-                                </div>
                             </div>
-
                             <div className={styles.formGroup}>
                                 <label className={styles.formLabel}>
                                     {cfgFormat === 'rank_only' ? 'Competition Duration (hours)' : 'Round Durations (hours)'}
@@ -1122,6 +1228,169 @@ export default function AdminPage() {
                                         : 'Comma-separated hours per round (R1, R2, R3)'}
                                 </span>
                             </div>
+
+                            {/* === Anti-Gaming Filters === */}
+                            <h3 className={styles.formSectionTitle}>Anti-Gaming Filters</h3>
+                            <div className={styles.formGrid}>
+                                <div className={styles.formGroup}>
+                                    <label className={styles.formLabel}>Min Collateral ($)</label>
+                                    <input type="number" className="input input--mono" value={cfgMinCollateral} onChange={(e) => setCfgMinCollateral(Number(e.target.value))} min={0} />
+                                    <span className={styles.formHint}>Min collateral for CPI + quest trades</span>
+                                </div>
+                                <div className={styles.formGroup}>
+                                    <label className={styles.formLabel}>Min Trade Duration (s)</label>
+                                    <input type="number" className="input input--mono" value={cfgMinDuration} onChange={(e) => setCfgMinDuration(Number(e.target.value))} min={0} />
+                                    <span className={styles.formHint}>Wash-trade filter (e.g., 240 = 4 min for test)</span>
+                                </div>
+                                <div className={styles.formGroup}>
+                                    <label className={styles.formLabel}>All Around Min Trade ($)</label>
+                                    <input type="number" className="input input--mono" value={cfgAllAroundMinTradeUsd} onChange={(e) => setCfgAllAroundMinTradeUsd(Number(e.target.value))} min={0} />
+                                    <span className={styles.formHint}>Quest-specific min exit_size (test: 100 / prod: 500)</span>
+                                </div>
+                            </div>
+
+                            {/* === Scoring Policy === */}
+                            <h3 className={styles.formSectionTitle}>Scoring Policy</h3>
+                            <div className={styles.formGrid}>
+                                <div className={styles.formGroup}>
+                                    <label className={styles.formLabel}>All Around Max Points/Asset</label>
+                                    <input type="number" className="input input--mono" value={cfgAllAroundMaxPointsPerAsset} onChange={(e) => setCfgAllAroundMaxPointsPerAsset(Number(e.target.value))} min={1} />
+                                    <span className={styles.formHint}>Cap to prevent one outlier dominating</span>
+                                </div>
+                                <div className={styles.formGroup}>
+                                    <label className={styles.formLabel}>Supported Assets (count)</label>
+                                    <input type="number" className="input input--mono" value={cfgAssetCount} onChange={(e) => setCfgAssetCount(Number(e.target.value))} min={1} />
+                                    <span className={styles.formHint}>CPI variety denominator</span>
+                                </div>
+                            </div>
+                            <div className={styles.formGroup}>
+                                <label className={styles.formLabel}>Fisher Rank Points</label>
+                                <input type="text" className="input input--mono" value={cfgFisherRankPoints} onChange={(e) => setCfgFisherRankPoints(e.target.value)} placeholder="3, 2, 1" />
+                                <span className={styles.formHint}>Exactly 3 numbers for 1st / 2nd / 3rd (Bottom Fisher + Top-Tick)</span>
+                            </div>
+                            <div className={styles.formGroup}>
+                                <label className={styles.formLabel}>Daily Quest Points (ranks 1-5)</label>
+                                <input type="text" className="input input--mono" value={cfgDailyQuestPoints} onChange={(e) => setCfgDailyQuestPoints(e.target.value)} placeholder="0.2, 0.15, 0.1, 0.05, 0.01" />
+                                <span className={styles.formHint}>Exactly 5 numbers — awarded to top 5 per daily category</span>
+                            </div>
+                            <div className={styles.formGroup}>
+                                <label className={styles.formLabel}>Multi-Day Quest Points (ranks 1-5)</label>
+                                <input type="text" className="input input--mono" value={cfgMultidayQuestPoints} onChange={(e) => setCfgMultidayQuestPoints(e.target.value)} placeholder="0.3, 0.25, 0.2, 0.15, 0.1" />
+                                <span className={styles.formHint}>Exactly 5 numbers — Risk Manager + Humble One (2-day windows)</span>
+                            </div>
+
+                            {/* === Raffle Policy === */}
+                            <h3 className={styles.formSectionTitle}>Raffle Policy</h3>
+                            <div className={styles.formGrid}>
+                                <div className={styles.formGroup}>
+                                    <label className={styles.formLabel}>Top % Cutoff (skill prizes)</label>
+                                    <input type="number" className="input input--mono" value={cfgTopPercentCutoff} onChange={(e) => setCfgTopPercentCutoff(Number(e.target.value))} min={0.01} max={0.99} step={0.01} />
+                                    <span className={styles.formHint}>Fraction (e.g., 0.30 = top 30% earn skill prizes; rest raffle)</span>
+                                </div>
+                                <div className={styles.formGroup}>
+                                    <label className={styles.formLabel}>Min Closed Positions</label>
+                                    <input type="number" className="input input--mono" value={cfgRaffleMinClosedPositions} onChange={(e) => setCfgRaffleMinClosedPositions(Number(e.target.value))} min={0} />
+                                    <span className={styles.formHint}>Eligibility threshold for raffle</span>
+                                </div>
+                                <div className={styles.formGroup}>
+                                    <label className={styles.formLabel}>CPI Ticket Multiplier</label>
+                                    <input type="number" className="input input--mono" value={cfgCpiTicketMultiplier} onChange={(e) => setCfgCpiTicketMultiplier(Number(e.target.value))} min={0} step={0.1} />
+                                    <span className={styles.formHint}>tickets += floor(CPI × this)</span>
+                                </div>
+                                <div className={styles.formGroup}>
+                                    <label className={styles.formLabel}>Quest Ticket Multiplier</label>
+                                    <input type="number" className="input input--mono" value={cfgQuestTicketMultiplier} onChange={(e) => setCfgQuestTicketMultiplier(Number(e.target.value))} min={0} step={1} />
+                                    <span className={styles.formHint}>tickets += floor(questPoints × this)</span>
+                                </div>
+                            </div>
+
+                            {/* === Backtest Mode === */}
+                            <h3 className={styles.formSectionTitle}>Backtest Mode</h3>
+                            <div className={styles.formGroup} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                <input type="checkbox" id="cfg-use-hist" checked={cfgUseHistoricalWindow} onChange={(e) => setCfgUseHistoricalWindow(e.target.checked)} />
+                                <label htmlFor="cfg-use-hist" style={{ cursor: 'pointer' }}>Use historical window (instead of live round dates)</label>
+                            </div>
+                            {cfgUseHistoricalWindow && (
+                                <div className={styles.formGroup}>
+                                    <label className={styles.formLabel}>Historical Window (days)</label>
+                                    <input type="number" className="input input--mono" value={cfgHistoricalWindowDays} onChange={(e) => setCfgHistoricalWindowDays(Number(e.target.value))} min={1} />
+                                    <span className={styles.formHint}>Days back from now for scoring window</span>
+                                </div>
+                            )}
+
+                            {/* === Prize Distribution (item 16) === */}
+                            <h3 className={styles.formSectionTitle}>Prize Distribution</h3>
+                            <div className={styles.formGroup} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                <input type="checkbox" id="cfg-prize-enabled" checked={cfgPrizeEnabled} onChange={(e) => setCfgPrizeEnabled(e.target.checked)} />
+                                <label htmlFor="cfg-prize-enabled" style={{ cursor: 'pointer' }}>Enable prize table (skill + raffle prize amounts)</label>
+                            </div>
+                            {cfgPrizeEnabled && (
+                                <>
+                                    <div className={styles.formGrid}>
+                                        <div className={styles.formGroup}>
+                                            <label className={styles.formLabel}>Total Pool</label>
+                                            <input type="number" className="input input--mono" value={cfgPrizeTotalPool} onChange={(e) => setCfgPrizeTotalPool(Number(e.target.value))} min={0} />
+                                            <span className={styles.formHint}>Displayed in Forge header</span>
+                                        </div>
+                                        <div className={styles.formGroup}>
+                                            <label className={styles.formLabel}>Currency</label>
+                                            <select value={cfgPrizeCurrency} onChange={(e) => setCfgPrizeCurrency(e.target.value as 'ADX' | 'USDC')} className="input">
+                                                <option value="ADX">ADX</option>
+                                                <option value="USDC">USDC</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div className={styles.formGroup}>
+                                        <label className={styles.formLabel}>Skill Prizes (rank 1, 2, 3, ...)</label>
+                                        <input type="text" className="input input--mono" value={cfgSkillPrizes} onChange={(e) => setCfgSkillPrizes(e.target.value)} placeholder="500, 300, 200" />
+                                        <span className={styles.formHint}>Comma-separated amounts for top-% ranks (length ≥ top % count)</span>
+                                    </div>
+                                    <div className={styles.formGroup}>
+                                        <label className={styles.formLabel}>Raffle Prizes (winner 1, 2, 3, ...)</label>
+                                        <input type="text" className="input input--mono" value={cfgRafflePrizes} onChange={(e) => setCfgRafflePrizes(e.target.value)} placeholder="100, 50, 25" />
+                                        <span className={styles.formHint}>Comma-separated amounts for raffle winners</span>
+                                    </div>
+                                </>
+                            )}
+
+                            {/* === Asset List (item 29-admin) === */}
+                            <h3 className={styles.formSectionTitle}>Asset List</h3>
+                            <p className={styles.formHint} style={{ marginBottom: '0.5rem' }}>
+                                Tradable assets scored in this tournament. Leave empty for engine fallback (permissive — all symbols observed).
+                                Initial assets join scoring from tournament creation onward (effectively &quot;from start&quot;).
+                                Mid-tournament additions (future admin UI) will respect a weekly boundary.
+                            </p>
+                            {cfgAssetList.map((asset, i) => (
+                                <div key={i} style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginBottom: '0.5rem' }}>
+                                    <input
+                                        type="text"
+                                        className="input input--mono"
+                                        placeholder="SYMBOL (e.g., SOL)"
+                                        value={asset.symbol}
+                                        onChange={(e) => setCfgAssetList((prev) => prev.map((a, j) => j === i ? { ...a, symbol: e.target.value.toUpperCase() } : a))}
+                                        style={{ flex: 1 }}
+                                    />
+                                    <span className={styles.formHint} style={{ fontFamily: 'monospace', whiteSpace: 'nowrap' }}>
+                                        joinedAt: {asset.joinedAt}
+                                    </span>
+                                    <button
+                                        type="button"
+                                        className="btn btn--secondary"
+                                        onClick={() => setCfgAssetList((prev) => prev.filter((_, j) => j !== i))}
+                                        style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem' }}
+                                    >
+                                        Remove
+                                    </button>
+                                </div>
+                            ))}
+                            <button
+                                type="button"
+                                className="btn btn--secondary"
+                                onClick={() => setCfgAssetList((prev) => [...prev, { symbol: '', joinedAt: todayUtc() }])}
+                                style={{ marginTop: '0.5rem' }}
+                            >
+                                <Plus size={14} /> Add Asset
+                            </button>
 
                             <div className={styles.modalActions}>
                                 <button type="button" className="btn btn--secondary" onClick={() => { resetConfigDefaults(); setShowCreateModal(false); }}>Cancel</button>

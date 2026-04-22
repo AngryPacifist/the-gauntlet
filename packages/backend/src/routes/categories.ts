@@ -24,6 +24,7 @@ import {
     saveDailyCategoryScores,
 } from '../services/category-engine.js';
 import type { AdrenaPosition, AllAroundDetails, CategoryScoreRow } from '../types.js';
+import { resolveConfig } from '../types.js';
 
 const router = Router();
 const adrenaClient = new AdrenaClient();
@@ -66,6 +67,19 @@ router.post('/score', async (req, res) => {
             return;
         }
 
+        // Phase 3: fetch tournament + resolve config (hoisted from below — needed for engine threading)
+        const [tournament] = await db
+            .select()
+            .from(tournaments)
+            .where(eq(tournaments.id, tournamentId))
+            .limit(1);
+
+        if (!tournament) {
+            res.status(404).json({ success: false, error: 'Tournament not found' });
+            return;
+        }
+        const config = resolveConfig(tournament.config);
+
         // Fetch OHLC
         const ohlcData = await fetchDailyOHLCBatch(date);
 
@@ -88,7 +102,7 @@ router.post('/score', async (req, res) => {
         // Compute daily scores
         const allAroundRows: CategoryScoreRow[] = [];
         for (const [wallet, positions] of walletPositions) {
-            const details = computeAllAroundScore(positions, date);
+            const details = computeAllAroundScore(positions, date, config);
             allAroundRows.push({
                 wallet, category: 'all_around',
                 score: details.totalPoints, details,
@@ -96,7 +110,7 @@ router.post('/score', async (req, res) => {
         }
 
         // Fisher split
-        const fisherResults = computeFisherScores(walletPositions, date, ohlcData);
+        const fisherResults = computeFisherScores(walletPositions, date, ohlcData, config);
         const bottomFisherRows: CategoryScoreRow[] = [];
         const topTickRows: CategoryScoreRow[] = [];
 
@@ -113,14 +127,7 @@ router.post('/score', async (req, res) => {
             });
         }
 
-        // Get tournament to check for season_id
-        const [tournament] = await db
-            .select()
-            .from(tournaments)
-            .where(eq(tournaments.id, tournamentId))
-            .limit(1);
-
-        const seasonId = tournament?.seasonId ?? null;
+        const seasonId = tournament.seasonId ?? null;
 
         await saveDailyCategoryScores(
             tournamentId, seasonId, date,
@@ -262,7 +269,17 @@ router.get('/:tournamentId/wallet/:wallet', async (req, res) => {
 
         // Also compute quest points using the final-score module
         const { computeQuestPoints } = await import('../services/final-score.js');
-        const totalQuestPoints = await computeQuestPoints(tournamentId, wallet);
+        const [tournament] = await db
+            .select()
+            .from(tournaments)
+            .where(eq(tournaments.id, tournamentId))
+            .limit(1);
+        if (!tournament) {
+            res.status(404).json({ success: false, error: 'Tournament not found' });
+            return;
+        }
+        const config = resolveConfig(tournament.config);
+        const totalQuestPoints = await computeQuestPoints(tournamentId, wallet, config);
 
         res.json({
             success: true,

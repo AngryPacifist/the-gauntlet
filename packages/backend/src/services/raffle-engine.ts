@@ -16,15 +16,18 @@ import { db } from '../db/index.js';
 import { raffleResults, raffleDraws } from '../db/schema.js';
 import { computeFinalScores } from './final-score.js';
 import { AdrenaClient } from './adrena-client.js';
+import type { TournamentConfig } from '../types.js';
+import { DEFAULT_TOURNAMENT_CONFIG } from '../types.js';
 
 // --------------------------------------------------------------------------
-// Constants
+// Constants: migrated to TournamentConfig (Phase 3 items 17 + 26, 2026-04-22).
+// - raffleMinClosedPositions (default 10) — eligibility threshold
+// - topPercentCutoff (default 0.30) — top-% excluded from raffle (was duplicated
+//   at routes/tournaments.ts:373, now unified per item 26)
+// - cpiTicketMultiplier (default 0.5)
+// - questTicketMultiplier (default 20)
+// All reads happen via `config.<field> ?? DEFAULT_TOURNAMENT_CONFIG.<field>` below.
 // --------------------------------------------------------------------------
-
-const MIN_CLOSED_POSITIONS = 10;
-const TOP_PERCENT_CUTOFF = 0.30;  // top 30% excluded from raffle
-const CPI_TICKET_MULTIPLIER = 0.5;
-const QUEST_TICKET_MULTIPLIER = 20;
 
 // --------------------------------------------------------------------------
 // Mulberry32 PRNG
@@ -91,20 +94,28 @@ function weightedDraw(
 
 export async function computeAllTickets(
     tournamentId: number,
+    config: TournamentConfig,
 ): Promise<{ total: number; eligible: number; excluded: number }> {
     const adrenaClient = new AdrenaClient();
 
+    // Phase 3 items 17 + 26: read constants from config (was module-level TOP_PERCENT_CUTOFF,
+    // MIN_CLOSED_POSITIONS, CPI_TICKET_MULTIPLIER, QUEST_TICKET_MULTIPLIER).
+    const cutoff = config.topPercentCutoff ?? DEFAULT_TOURNAMENT_CONFIG.topPercentCutoff;
+    const minClosed = config.raffleMinClosedPositions ?? DEFAULT_TOURNAMENT_CONFIG.raffleMinClosedPositions;
+    const cpiMult = config.cpiTicketMultiplier ?? DEFAULT_TOURNAMENT_CONFIG.cpiTicketMultiplier;
+    const questMult = config.questTicketMultiplier ?? DEFAULT_TOURNAMENT_CONFIG.questTicketMultiplier;
+
     // Step 1: Compute final scores for all wallets
-    const finalScores = await computeFinalScores(tournamentId);
+    const finalScores = await computeFinalScores(tournamentId, config);
 
     if (finalScores.length === 0) {
         console.log(`[RaffleEngine] No final scores for tournament ${tournamentId}`);
         return { total: 0, eligible: 0, excluded: 0 };
     }
 
-    // Step 2: Determine top 30% threshold using competition ranking
+    // Step 2: Determine top-% threshold using competition ranking
     // finalScores are already sorted by finalScore DESC, wallet ASC (deterministic)
-    const topCutIndex = Math.ceil(finalScores.length * TOP_PERCENT_CUTOFF);
+    const topCutIndex = Math.ceil(finalScores.length * cutoff);
 
     // Step 3: For each wallet, compute ticket count and eligibility
     let eligibleCount = 0;
@@ -135,12 +146,12 @@ export async function computeAllTickets(
 
         // Compute tickets
         const ticketCount = isTopPercent
-            ? 0  // top 30% get skill prizes, no raffle tickets
-            : Math.floor(fs.cpiScore * CPI_TICKET_MULTIPLIER) +
-              Math.floor(fs.questPoints * QUEST_TICKET_MULTIPLIER);
+            ? 0  // top-% get skill prizes, no raffle tickets
+            : Math.floor(fs.cpiScore * cpiMult) +
+              Math.floor(fs.questPoints * questMult);
 
-        // Eligibility: ≥10 closed positions AND not top 30%
-        const isEligible = closedPositionCount >= MIN_CLOSED_POSITIONS && !isTopPercent && ticketCount > 0;
+        // Eligibility: ≥ minClosed closed positions AND not top-%
+        const isEligible = closedPositionCount >= minClosed && !isTopPercent && ticketCount > 0;
 
         if (isEligible) eligibleCount++;
         if (isTopPercent) excludedCount++;

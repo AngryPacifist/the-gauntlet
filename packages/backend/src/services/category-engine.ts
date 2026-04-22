@@ -25,20 +25,16 @@ import type {
     RiskManagerDetails,
     HumbleOneDetails,
     SLTPTradeDetail,
+    TournamentConfig,
 } from '../types.js';
+import { DEFAULT_TOURNAMENT_CONFIG } from '../types.js';
 
 // --------------------------------------------------------------------------
-// Constants
+// Constants: migrated to TournamentConfig (Phase 3 item 13 + item 17, 2026-04-22).
+// Scoring parameters are now config-driven via the `config: TournamentConfig`
+// parameter on each engine function. Defaults mirror the old hardcoded values
+// (see `DEFAULT_TOURNAMENT_CONFIG` in types.ts).
 // --------------------------------------------------------------------------
-
-// All Around Trader: minimum trade size in USD (exit_size, already USD)
-const ALL_AROUND_MIN_TRADE_USD = 500;
-
-// All Around Trader: max points per asset (cap to prevent one outlier dominating)
-const ALL_AROUND_MAX_POINTS_PER_ASSET = 25;
-
-// Fisher: rank points awarded to top 3 in each direction
-const FISHER_RANK_POINTS = [3, 2, 1]; // 1st, 2nd, 3rd
 
 // --------------------------------------------------------------------------
 // Helpers
@@ -122,15 +118,20 @@ function computePositionROI(position: AdrenaPosition): number {
 export function computeAllAroundScore(
     positions: AdrenaPosition[],
     dateStr: string,
+    config: TournamentConfig,
 ): AllAroundDetails {
     const dayPositions = filterPositionsForDay(positions, dateStr);
+
+    // Phase 3 item 13 + 17: read from config (was hardcoded ALL_AROUND_MIN_TRADE_USD + ALL_AROUND_MAX_POINTS_PER_ASSET)
+    const minTradeUsd = config.allAroundMinTradeUsd ?? DEFAULT_TOURNAMENT_CONFIG.allAroundMinTradeUsd;
+    const maxPointsPerAsset = config.allAroundMaxPointsPerAsset ?? DEFAULT_TOURNAMENT_CONFIG.allAroundMaxPointsPerAsset;
 
     // Filter: closed only + minimum trade size
     const qualifying = dayPositions.filter((p) => {
         if (p.status === 'open') return false;
         // exit_size/entry_size are already in USD -- do NOT multiply by entry_price
         const exposure = p.exit_size ?? p.entry_size;
-        return exposure >= ALL_AROUND_MIN_TRADE_USD;
+        return exposure >= minTradeUsd;
     });
 
     // Group by symbol
@@ -157,7 +158,7 @@ export function computeAllAroundScore(
 
         // Negative ROI = 0 points
         const points = bestROI > 0
-            ? Math.min(bestROI * 25, ALL_AROUND_MAX_POINTS_PER_ASSET)
+            ? Math.min(bestROI * maxPointsPerAsset, maxPointsPerAsset)
             : 0;
 
         assetScores.push({
@@ -212,8 +213,12 @@ export function computeFisherScores(
     walletPositions: Map<string, AdrenaPosition[]>,
     dateStr: string,
     ohlcData: Map<string, OHLCBar>,
+    config: TournamentConfig,
 ): Map<string, FisherDetails> {
     const results = new Map<string, FisherDetails>();
+
+    // Phase 3 item 17: read Fisher rank points from config (was hardcoded FISHER_RANK_POINTS = [3, 2, 1])
+    const fisherPoints = config.fisherRankPoints ?? DEFAULT_TOURNAMENT_CONFIG.fisherRankPoints;
 
     // Phase 1: Find each wallet's best long and best short for the day
     const allLongs: FisherCandidate[] = [];
@@ -309,7 +314,7 @@ export function computeFisherScores(
     for (let i = 0; i < allLongs.length; i++) {
         const candidate = allLongs[i];
         const rank = i + 1; // All entries get a rank (1-indexed)
-        const rankPoints = i < FISHER_RANK_POINTS.length ? FISHER_RANK_POINTS[i] : 0;
+        const rankPoints = i < fisherPoints.length ? fisherPoints[i] : 0;
         const pointsFromLong = rankPoints * candidate.roi * 100;
 
         const existing = results.get(candidate.wallet)!;
@@ -334,7 +339,7 @@ export function computeFisherScores(
     for (let i = 0; i < allShorts.length; i++) {
         const candidate = allShorts[i];
         const rank = i + 1; // All entries get a rank (1-indexed)
-        const rankPoints = i < FISHER_RANK_POINTS.length ? FISHER_RANK_POINTS[i] : 0;
+        const rankPoints = i < fisherPoints.length ? fisherPoints[i] : 0;
         const pointsFromShort = rankPoints * candidate.roi * 100;
 
         const existing = results.get(candidate.wallet)!;

@@ -16,19 +16,59 @@ export interface TournamentConfig {
     bracketSize: number;              // Traders per bracket in Round 1 (default: 8)
     advanceRatio: number;             // Fraction that advance per round (default: 0.5)
     roundDurations: number[];         // Duration of each round in hours [R1, R2, R3] (default: [72, 48, 48])
+
+    // Anti-gaming filters (shared between CPI + quest engines)
     minPositionCollateral: number;    // Minimum collateral to count a trade (USD, default: 25)
     minTradeDurationSec: number;      // Minimum trade duration to count (seconds, default: 120)
-    leveragePenaltyThreshold: number; // Leverage above this is penalized (default: 30)
+
+    // Scoring engine inputs
     supportedAssetCount: number;      // Number of tradeable assets on Adrena (default: 4)
+
+    // Backtest mode
     useHistoricalWindow: boolean;     // If true, scoring uses historical window instead of round dates (default: false)
     historicalWindowDays: number;     // Number of days for historical window (default: 90)
+
+    // Seeded brackets (programmatic — set by Season Final logic, not admin UI)
     seededWallets?: string[];         // For Final tournaments: wallets ordered by season standing
-    prizeTable?: {                    // Prize distribution (optional — set when prizes are defined)
+
+    // Prize distribution (optional — wired in admin UI per Phase 3 item 16)
+    prizeTable?: {
         totalPool: number;            // Total prize pool amount
         currency: string;             // Prize currency (e.g. 'ADX', 'USDC')
         skillPrizes: number[];        // Amounts for rank 1, 2, 3... (top 30% skill prizes)
         rafflePrizes: number[];       // Amounts for raffle winner 1, 2, 3...
     };
+
+    // --- Phase 3 additions (2026-04-22) — config-driven scoring/raffle constants ---
+
+    // Top % cutoff for skill prizes vs raffle eligibility (item 26 — unifies
+    // routes/tournaments.ts forge endpoint + raffle-engine cutoff)
+    topPercentCutoff: number;         // Fraction, default 0.30 (top 30% earn skill prizes)
+
+    // All Around quest — per-asset best-ROI scoring (item 13)
+    allAroundMinTradeUsd: number;     // Minimum trade exit_size for quest eligibility (USD, default 500)
+    allAroundMaxPointsPerAsset: number; // Cap on points per asset (default 25 — prevents one outlier dominating)
+
+    // Bottom Fisher / Top-Tick Traveler quest — rank points (item 17)
+    fisherRankPoints: number[];       // Default [3, 2, 1] — points for 1st/2nd/3rd
+
+    // Quest point award tables (item 17 — used by final-score.ts + raffle-engine)
+    dailyQuestPoints: number[];       // Default [0.2, 0.15, 0.1, 0.05, 0.01]
+    multidayQuestPoints: number[];    // Default [0.3, 0.25, 0.2, 0.15, 0.1]
+
+    // Raffle eligibility + ticket math (item 17)
+    raffleMinClosedPositions: number; // Default 10 — min closed positions for raffle eligibility
+    cpiTicketMultiplier: number;      // Default 0.5 — tickets = floor(CPI × this)
+    questTicketMultiplier: number;    // Default 20 — tickets += floor(questPoints × this)
+
+    // Dynamic asset list (item 29-admin — per-asset scoring starts from joinedAt week)
+    // Optional: undefined OR empty = engine fallback to permissive (all observed symbols).
+    // Populated = strict filter (scoring engines include only listed symbols, from joinedAt).
+    // CREATE-time Add Asset defaults joinedAt to today (equivalent to "from tournament start").
+    assetList?: Array<{
+        symbol: string;               // e.g. 'SOL', 'BTC', 'BONK'
+        joinedAt: string;             // ISO date (YYYY-MM-DD) — first scoring day
+    }>;
 }
 
 export const DEFAULT_TOURNAMENT_CONFIG: TournamentConfig = {
@@ -38,11 +78,43 @@ export const DEFAULT_TOURNAMENT_CONFIG: TournamentConfig = {
     roundDurations: [72, 48, 48],
     minPositionCollateral: 25,
     minTradeDurationSec: 120,
-    leveragePenaltyThreshold: 30,
     supportedAssetCount: 4,
     useHistoricalWindow: false,
     historicalWindowDays: 90,
+
+    // Phase 3 config-driven defaults (match current hardcoded values for zero-drift migration)
+    topPercentCutoff: 0.30,
+    allAroundMinTradeUsd: 500,
+    allAroundMaxPointsPerAsset: 25,
+    fisherRankPoints: [3, 2, 1],
+    dailyQuestPoints: [0.2, 0.15, 0.1, 0.05, 0.01],
+    multidayQuestPoints: [0.3, 0.25, 0.2, 0.15, 0.1],
+    raffleMinClosedPositions: 10,
+    cpiTicketMultiplier: 0.5,
+    questTicketMultiplier: 20,
+    // assetList intentionally omitted — undefined = engine fallback; admin opts in via UI (D5)
 };
+
+/**
+ * Resolve a stored tournament config against defaults.
+ *
+ * Merges `stored` (from DB JSONB) onto DEFAULT_TOURNAMENT_CONFIG so missing
+ * fields — including ALL Phase 3 additions for pre-existing tournaments —
+ * get sensible defaults. Required at every boundary that loads a tournament
+ * and passes its config to scoring/quest/raffle engines.
+ *
+ * Pattern: `const config = resolveConfig(tournament.config);`
+ *
+ * Callers (as of 2026-04-22):
+ *   - tournament-manager.ts — computeRoundScores, advanceRound, startTournament, registerWallet
+ *   - scheduler.ts — refreshScores, scoreDailyCategories, scoreHourlyCategories
+ *   - routes/categories.ts — admin-triggered POST /api/categories/score
+ *   - routes/tournaments.ts — forge endpoint (item 26 consumer)
+ *   - routes/admin.ts — raffle compute endpoint
+ */
+export function resolveConfig(stored: unknown): TournamentConfig {
+    return { ...DEFAULT_TOURNAMENT_CONFIG, ...(stored as Partial<TournamentConfig>) };
+}
 
 // --- Scoring ---
 

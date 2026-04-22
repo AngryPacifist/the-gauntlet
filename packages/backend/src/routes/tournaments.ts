@@ -366,11 +366,13 @@ router.get('/:id/forge', async (req, res) => {
             return;
         }
 
+        const { resolveConfig } = await import('../types.js');
         const { computeFinalScores } = await import('../services/final-score.js');
-        const results = await computeFinalScores(tournamentId);
+        const config = resolveConfig(tournament.config);
+        const results = await computeFinalScores(tournamentId, config);
 
-        // Compute top 30% threshold
-        const top30Index = Math.ceil(results.length * 0.3);
+        // Compute top-% threshold (item 26 — was inline `* 0.3`; now config-driven)
+        const top30Index = Math.ceil(results.length * config.topPercentCutoff);
 
         // Tie-aware competition ranking: tied wallets share the same rank
         let currentRank = 1;

@@ -12,27 +12,29 @@ export default function ForgeIndexPage() {
     useEffect(() => {
         async function redirect() {
             try {
-                const tournaments = await listTournaments();
-                if (tournaments.length === 0) {
-                    setError('No tournaments found.');
+                const all = await listTournaments();
+                // Only consider Forge (rank_only) tournaments — /forge must never resolve to a Gauntlet
+                const forgeOnly = all.filter((t) => t.config?.format === 'rank_only');
+                if (forgeOnly.length === 0) {
+                    setError('No Forge tournaments found.');
                     return;
                 }
 
                 // Prefer active, then completed, then most recent by id
-                const active = tournaments.find((t) => t.status === 'active');
+                const active = forgeOnly.find((t) => t.status === 'active');
                 if (active) {
                     router.replace(`/leaderboard/${active.id}`);
                     return;
                 }
 
-                const completed = tournaments.find((t) => t.status === 'completed');
+                const completed = forgeOnly.find((t) => t.status === 'completed');
                 if (completed) {
                     router.replace(`/leaderboard/${completed.id}`);
                     return;
                 }
 
-                // Fallback: highest id
-                const sorted = [...tournaments].sort((a, b) => b.id - a.id);
+                // Fallback: highest id among Forge tournaments
+                const sorted = [...forgeOnly].sort((a, b) => b.id - a.id);
                 router.replace(`/leaderboard/${sorted[0].id}`);
             } catch {
                 setError('Failed to load tournaments.');

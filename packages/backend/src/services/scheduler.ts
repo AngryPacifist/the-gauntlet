@@ -26,6 +26,7 @@ import { eq, and, asc } from 'drizzle-orm';
 import { computeRoundScores, advanceRound } from './tournament-manager.js';
 import { awardDailyFisherPoints, awardDailyAllAroundPoints, awardDaily2DayCategoryPoints } from './season-manager.js';
 import { AdrenaClient } from './adrena-client.js';
+import { resolveConfig } from '../types.js';
 import { fetchDailyOHLCBatch, fetchIntradayOHLCBatch } from './pyth-client.js';
 import {
     computeAllAroundScore,
@@ -193,6 +194,9 @@ async function scoreDailyCategories(): Promise<void> {
                 `on ${dateStr}`,
             );
 
+            // Phase 3: resolve config once per tournament for engine threading
+            const config = resolveConfig(tournament.config);
+
             // Get all registered wallets
             const regs = await db
                 .select()
@@ -219,14 +223,14 @@ async function scoreDailyCategories(): Promise<void> {
 
             const allAroundRows: CategoryScoreRow[] = [];
             for (const [wallet, positions] of walletPositions) {
-                const details = computeAllAroundScore(positions, dateStr);
+                const details = computeAllAroundScore(positions, dateStr, config);
                 allAroundRows.push({
                     wallet, category: 'all_around',
                     score: details.totalPoints, details,
                 });
             }
 
-            const fisherResults = computeFisherScores(walletPositions, dateStr, ohlcData);
+            const fisherResults = computeFisherScores(walletPositions, dateStr, ohlcData, config);
             const bottomFisherRows: CategoryScoreRow[] = [];
             const topTickRows: CategoryScoreRow[] = [];
 
@@ -318,6 +322,7 @@ async function scoreDailyCategories(): Promise<void> {
                         await evaluateLeverageProgress(
                             tournament.id, wallet, positions,
                             weekInfo.weekNumber, weekInfo.weekStart, weekInfo.weekEnd,
+                            config,
                         );
                     }
 
@@ -392,6 +397,9 @@ async function scoreHourlyCategories(): Promise<void> {
                 `on ${dateStr}`,
             );
 
+            // Phase 3: resolve config once per tournament for engine threading
+            const config = resolveConfig(tournament.config);
+
             // Get all registered wallets
             const regs = await db
                 .select()
@@ -418,14 +426,14 @@ async function scoreHourlyCategories(): Promise<void> {
 
             const allAroundRows: CategoryScoreRow[] = [];
             for (const [wallet, positions] of walletPositions) {
-                const details = computeAllAroundScore(positions, dateStr);
+                const details = computeAllAroundScore(positions, dateStr, config);
                 allAroundRows.push({
                     wallet, category: 'all_around',
                     score: details.totalPoints, details,
                 });
             }
 
-            const fisherResults = computeFisherScores(walletPositions, dateStr, intradayOhlc);
+            const fisherResults = computeFisherScores(walletPositions, dateStr, intradayOhlc, config);
             const bottomFisherRows: CategoryScoreRow[] = [];
             const topTickRows: CategoryScoreRow[] = [];
 
@@ -519,6 +527,7 @@ async function scoreHourlyCategories(): Promise<void> {
                         await evaluateLeverageProgress(
                             tournament.id, wallet, positions,
                             weekInfo.weekNumber, weekInfo.weekStart, weekInfo.weekEnd,
+                            config,
                         );
                     }
                 }
