@@ -82,7 +82,8 @@ export interface TournamentConfig {
     raffleMinClosedPositions: number;
     cpiTicketMultiplier: number;
     questTicketMultiplier: number;
-    assetList?: Array<{ symbol: string; joinedAt: string }>;
+    riskManagerMinSize: number;
+    assetList?: Array<{ symbol: string; mint?: string; joinedAt: string }>;
 }
 
 export interface Tournament {
@@ -415,6 +416,10 @@ export interface DailyCategoryScore {
     computedAt: string;
 }
 
+// Phase 4 item 30: LM slugs become per-asset (leverage_master_${symbol}_${side}).
+// Template literal captures the per-asset shape; legacy literals preserved for
+// pre-Phase-4 tournaments (engines emit `leverage_master_long` / `_short` when
+// assetList is empty per D5 fallback).
 export type CategorySlug =
     | 'all_around'
     | 'top_tick_traveler'
@@ -422,7 +427,8 @@ export type CategorySlug =
     | 'risk_manager'
     | 'humble_one'
     | 'leverage_master_long'
-    | 'leverage_master_short';
+    | 'leverage_master_short'
+    | `leverage_master_${string}_${'long' | 'short'}`;
 
 // --- Season API Functions ---
 
@@ -499,11 +505,14 @@ export async function getDailyScores(
 
 // --- Quest API Functions ---
 
+// Phase 4 item 30: per-asset LM ladders. Keys = asset symbols from config.assetList.
 export interface QuestProgressDetails {
-    long: boolean[];
-    short: boolean[];
-    longCount: number;
-    shortCount: number;
+    byAsset: Record<string, {
+        long: boolean[];
+        short: boolean[];
+        longCount: number;
+        shortCount: number;
+    }>;
     weekNumber: number;
 }
 
@@ -660,6 +669,17 @@ export async function adminGetAnomalies(
     adminSecret: string,
 ): Promise<AdminAnomalyAnalytics> {
     return apiFetch(`/api/admin/analytics/${tournamentId}/anomalies`, {
+        headers: { 'X-Admin-Secret': adminSecret },
+    });
+}
+
+// Phase 4: Adrena /liquidity-info proxy for admin asset list dropdown.
+// Returns minimal {symbol, mint} pairs — other /liquidity-info fields
+// (currentRatio, utilization, aumUsd, liquidityUsd) are not used by the dropdown.
+export async function adminGetTradableAssets(
+    adminSecret: string,
+): Promise<Array<{ symbol: string; mint: string }>> {
+    return apiFetch('/api/admin/tradable-assets', {
         headers: { 'X-Admin-Secret': adminSecret },
     });
 }

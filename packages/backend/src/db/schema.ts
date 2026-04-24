@@ -137,7 +137,7 @@ export const dailyCategoryScores = pgTable('daily_category_scores', {
     tournamentId: integer('tournament_id').notNull().references(() => tournaments.id),
     seasonId: integer('season_id').references(() => seasons.id),
     wallet: varchar('wallet', { length: 44 }).notNull(),
-    category: varchar('category', { length: 30 }).notNull(),
+    category: varchar('category', { length: 50 }).notNull(),
     scoreDate: date('score_date').notNull(),
     score: real('score').notNull().default(0),
     details: jsonb('details').notNull(),
@@ -174,13 +174,17 @@ export const questProgress = pgTable('quest_progress', {
     wallet: varchar('wallet', { length: 44 }).notNull(),
     questType: varchar('quest_type', { length: 30 }).notNull(), // 'leverage_master'
     side: varchar('side', { length: 10 }).notNull(),  // 'long' | 'short'
+    // Phase 4 item 30: per-asset LM ladders. Each (tournament, wallet, side, asset, week) tracks
+    // its own 10-step progression independently. Length 30 matches questType / symbol conventions.
+    asset: varchar('asset', { length: 30 }).notNull(),
     stepsCompleted: jsonb('steps_completed').notNull(), // boolean[10]
     stepCount: integer('step_count').notNull().default(0), // denormalized for ORDER BY
     weekNumber: integer('week_number').notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 }, (table) => ({
+    // Phase 4 item 30: unique index now includes `asset` (6 cols instead of 5)
     uniqueQuestWallet: uniqueIndex('idx_quest_progress_unique').on(
-        table.tournamentId, table.wallet, table.questType, table.side, table.weekNumber,
+        table.tournamentId, table.wallet, table.questType, table.side, table.asset, table.weekNumber,
     ),
 }));
 

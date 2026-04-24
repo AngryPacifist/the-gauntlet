@@ -1,35 +1,38 @@
 'use client';
 
-import { useEffect, useState, use } from 'react';
+import { useEffect, useState, use, useMemo } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import {
     getCategoryLeaderboard,
     getDailyScores,
     getQuestProgress,
+    getTournament,
     type CategoryLeaderboardEntry,
     type DailyCategoryScore,
     type CategorySlug,
     type QuestProgressDetails,
+    type TournamentState,
 } from '@/lib/api';
 import { Compass, Target, TrendingUp, Shield, Trophy, Calendar, Zap } from 'lucide-react';
 import Link from 'next/link';
 
-// Category configuration — single source of truth for tab rendering
-const CATEGORY_TABS: Array<{
+// Phase 4: base tabs (non-LM). LM tabs are per-asset, appended dynamically below.
+interface CategoryTab {
     slug: CategorySlug;
     label: string;
     icon: typeof Compass;
     color: string;
     colorBg: string;
     description: string;
-}> = [
+}
+const BASE_CATEGORY_TABS: CategoryTab[] = [
     {
         slug: 'all_around',
         label: 'All Around',
         icon: Compass,
         color: 'var(--status-success)',
         colorBg: 'var(--status-success-bg)',
-        description: 'Best ROI per unique asset traded each day. Trade across more assets to maximize your score. Minimum $500 trade size, 25 points cap per asset.',
+        description: 'Best ROI per unique asset traded each day. Trade across more assets to maximize your score.',
     },
     {
         slug: 'top_tick_traveler',
@@ -37,7 +40,7 @@ const CATEGORY_TABS: Array<{
         icon: TrendingUp,
         color: 'var(--accent-primary)',
         colorBg: 'rgba(108, 92, 231, 0.1)',
-        description: 'Catch the best short entry relative to the day\'s high. Top 3 earn rank points (3, 2, 1) multiplied by ROI.',
+        description: 'Catch the best short entry relative to the day\'s high — sharpest shorts score highest.',
     },
     {
         slug: 'bottom_fisher',
@@ -45,7 +48,7 @@ const CATEGORY_TABS: Array<{
         icon: Target,
         color: '#e17055',
         colorBg: 'rgba(225, 112, 85, 0.1)',
-        description: 'Catch the best long entry relative to the day\'s low. Top 3 earn rank points (3, 2, 1) multiplied by ROI.',
+        description: 'Catch the best long entry relative to the day\'s low — sharpest longs score highest.',
     },
     {
         slug: 'risk_manager',
@@ -53,7 +56,7 @@ const CATEGORY_TABS: Array<{
         icon: Shield,
         color: '#00b894',
         colorBg: 'rgba(0, 184, 148, 0.1)',
-        description: 'Best stop-loss trade by ROI in a 2-day window. The tightest loss wins. Requires SL/TP to be set.',
+        description: 'Best stop-loss trade in a 2-day window. The tightest loss wins. Requires SL/TP to be set.',
     },
     {
         slug: 'humble_one',
@@ -61,23 +64,7 @@ const CATEGORY_TABS: Array<{
         icon: Trophy,
         color: '#fdcb6e',
         colorBg: 'rgba(253, 203, 110, 0.1)',
-        description: 'Best take-profit trade by ROI in a 2-day window. Disciplined profit-taking rewarded. Requires SL/TP to be set.',
-    },
-    {
-        slug: 'leverage_master_long',
-        label: 'Leverage (Long)',
-        icon: Zap,
-        color: '#e84393',
-        colorBg: 'rgba(232, 67, 147, 0.1)',
-        description: 'Complete all 10 leverage tiers (10x\u2013100x) with long positions in a single week. Higher step counts rank higher.',
-    },
-    {
-        slug: 'leverage_master_short',
-        label: 'Leverage (Short)',
-        icon: Zap,
-        color: '#0984e3',
-        colorBg: 'rgba(9, 132, 227, 0.1)',
-        description: 'Complete all 10 leverage tiers (10x\u2013100x) with short positions in a single week. Higher step counts rank higher.',
+        description: 'Best take-profit trade in a 2-day window. Disciplined profit-taking rewarded. Requires SL/TP to be set.',
     },
 ];
 
@@ -86,10 +73,31 @@ export default function CategoriesPage({ params }: { params: Promise<{ tournamen
     const searchParams = useSearchParams();
     const tournamentId = parseInt(rawId, 10);
 
+    const [tournament, setTournament] = useState<TournamentState | null>(null);
+
+    // Phase 4: compute tabs dynamically from tournament config.
+    const categoryTabs = useMemo<CategoryTab[]>(() => {
+        const tabs: CategoryTab[] = [...BASE_CATEGORY_TABS];
+        const assetList = tournament?.config?.assetList;
+        if (assetList?.length) {
+            for (const asset of assetList) {
+                tabs.push(
+                    { slug: `leverage_master_${asset.symbol}_long` as CategorySlug, label: `LM ${asset.symbol} (Long)`, icon: Zap, color: '#e84393', colorBg: 'rgba(232, 67, 147, 0.1)', description: `Leverage ladders for ${asset.symbol} long positions.` },
+                    { slug: `leverage_master_${asset.symbol}_short` as CategorySlug, label: `LM ${asset.symbol} (Short)`, icon: Zap, color: '#0984e3', colorBg: 'rgba(9, 132, 227, 0.1)', description: `Leverage ladders for ${asset.symbol} short positions.` },
+                );
+            }
+        } else {
+            // Legacy fallback: 2-tab static layout for pre-Phase-4 tournaments
+            tabs.push(
+                { slug: 'leverage_master_long' as CategorySlug, label: 'Leverage (Long)', icon: Zap, color: '#e84393', colorBg: 'rgba(232, 67, 147, 0.1)', description: 'Leverage ladders for long positions.' },
+                { slug: 'leverage_master_short' as CategorySlug, label: 'Leverage (Short)', icon: Zap, color: '#0984e3', colorBg: 'rgba(9, 132, 227, 0.1)', description: 'Leverage ladders for short positions.' },
+            );
+        }
+        return tabs;
+    }, [tournament?.config?.assetList]);
+
     const initialTab = (searchParams.get('tab') as CategorySlug) || 'all_around';
-    const [tab, setTab] = useState<CategorySlug>(
-        CATEGORY_TABS.some(t => t.slug === initialTab) ? initialTab : 'all_around',
-    );
+    const [tab, setTab] = useState<CategorySlug>(initialTab);
     const [leaderboard, setLeaderboard] = useState<CategoryLeaderboardEntry[]>([]);
     const [dailyDate, setDailyDate] = useState<string>('');
     const [dailyScores, setDailyScores] = useState<DailyCategoryScore[]>([]);
@@ -102,14 +110,31 @@ export default function CategoriesPage({ params }: { params: Promise<{ tournamen
     const [walletInput, setWalletInput] = useState(walletParam);
     const [questData, setQuestData] = useState<QuestProgressDetails | null>(null);
 
-    const activeTab = CATEGORY_TABS.find(t => t.slug === tab)!;
-    const isLeverageTab = tab === 'leverage_master_long' || tab === 'leverage_master_short';
+    const activeTab = categoryTabs.find(t => t.slug === tab) ?? categoryTabs[0];
+    // Phase 4 item 30: leverage tabs now include per-asset slugs (leverage_master_SYMBOL_long/_short)
+    const isLeverageTab = tab.startsWith('leverage_master_');
+    // Extract asset from tab slug: leverage_master_SOL_long → 'SOL'
+    // Legacy slugs (leverage_master_long / _short) have no asset → undefined
+    const leverageTabAsset = isLeverageTab
+        ? (() => {
+            const match = tab.match(/^leverage_master_(.+)_(long|short)$/);
+            return match?.[1] && match[1] !== 'long' && match[1] !== 'short' ? match[1] : undefined;
+        })()
+        : undefined;
+    const leverageTabSide: 'long' | 'short' = tab.endsWith('_long') ? 'long' : 'short';
 
     useEffect(() => {
         if (!isNaN(tournamentId)) {
             loadLeaderboard();
         }
     }, [tournamentId, tab]);
+
+    // Phase 4: fetch tournament config for dynamic tabs
+    useEffect(() => {
+        if (!isNaN(tournamentId)) {
+            getTournament(tournamentId).then(setTournament).catch(() => setTournament(null));
+        }
+    }, [tournamentId]);
 
     useEffect(() => {
         if (dailyDate && !isNaN(tournamentId)) {
@@ -179,7 +204,7 @@ export default function CategoriesPage({ params }: { params: Promise<{ tournamen
 
             {/* Dynamic Tabs */}
             <div style={{ display: 'flex', gap: 'var(--space-sm)', marginBottom: 'var(--space-lg)', flexWrap: 'wrap' }}>
-                {CATEGORY_TABS.map((catTab) => {
+                {categoryTabs.map((catTab) => {
                     const Icon = catTab.icon;
                     const isActive = tab === catTab.slug;
                     return (
@@ -310,9 +335,14 @@ export default function CategoriesPage({ params }: { params: Promise<{ tournamen
                         )}
 
                         <LeverageBadgeGrid
-                            steps={questData
-                                ? (tab === 'leverage_master_long' ? questData.long : questData.short)
-                                : Array(10).fill(false)}
+                            steps={(() => {
+                                // Phase 4 item 30: read per-asset ladder from byAsset map.
+                                // Legacy slugs (no asset) use '__legacy__' key.
+                                const assetKey = leverageTabAsset ?? '__legacy__';
+                                const asset = questData?.byAsset?.[assetKey];
+                                if (!asset) return Array(10).fill(false);
+                                return leverageTabSide === 'long' ? asset.long : asset.short;
+                            })()}
                             color={activeTab.color}
                         />
                     </div>

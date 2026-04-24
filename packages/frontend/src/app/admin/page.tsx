@@ -18,6 +18,7 @@ import {
     getTournamentAnalytics,
     adminGetDailyAnalytics,
     adminGetAnomalies,
+    adminGetTradableAssets,
     listSeasons,
     adminCreateSeason,
     adminStartSeason,
@@ -87,6 +88,8 @@ export default function AdminPage() {
     const [cfgMinCollateral, setCfgMinCollateral] = useState(25);
     const [cfgMinDuration, setCfgMinDuration] = useState(120);
     const [cfgAllAroundMinTradeUsd, setCfgAllAroundMinTradeUsd] = useState(500);
+    // Phase 4 item 11: Risk Manager minimum trade size (anti-exploit filter)
+    const [cfgRiskManagerMinSize, setCfgRiskManagerMinSize] = useState(1000);
 
     // Scoring policy (item 17)
     const [cfgAllAroundMaxPointsPerAsset, setCfgAllAroundMaxPointsPerAsset] = useState(25);
@@ -115,7 +118,18 @@ export default function AdminPage() {
     const [cfgRafflePrizes, setCfgRafflePrizes] = useState('100, 50, 25');
 
     // Asset list (item 29-admin) — repeater
-    const [cfgAssetList, setCfgAssetList] = useState<Array<{ symbol: string; joinedAt: string }>>([]);
+    // Phase 4: asset list items now include optional mint (from dropdown selection).
+    // Free-text entries leave mint undefined (engines fall back to symbol match per D16).
+    const [cfgAssetList, setCfgAssetList] = useState<Array<{
+        symbol: string;
+        mint?: string;
+        joinedAt: string;
+    }>>([]);
+
+    // Phase 4: tradable assets fetched from Adrena /liquidity-info (via /api/admin/tradable-assets).
+    // Lazy-fetched on first modal open. Empty array triggers free-text fallback in the repeater.
+    const [cfgTradableAssets, setCfgTradableAssets] = useState<Array<{ symbol: string; mint: string }>>([]);
+    const [cfgTradableAssetsError, setCfgTradableAssetsError] = useState<string | null>(null);
 
     // Create season modal
     const [showSeasonModal, setShowSeasonModal] = useState(false);
@@ -198,6 +212,7 @@ export default function AdminPage() {
         setCfgMinCollateral(25);
         setCfgMinDuration(120);
         setCfgAllAroundMinTradeUsd(500);
+        setCfgRiskManagerMinSize(1000);
         // Scoring policy
         setCfgAllAroundMaxPointsPerAsset(25);
         setCfgFisherRankPoints('3, 2, 1');
@@ -278,6 +293,8 @@ export default function AdminPage() {
             raffleMinClosedPositions: cfgRaffleMinClosedPositions,
             cpiTicketMultiplier: cfgCpiTicketMultiplier,
             questTicketMultiplier: cfgQuestTicketMultiplier,
+            // Phase 4 item 11
+            riskManagerMinSize: cfgRiskManagerMinSize,
             useHistoricalWindow: cfgUseHistoricalWindow,
             historicalWindowDays: cfgHistoricalWindowDays,
         };
@@ -294,10 +311,16 @@ export default function AdminPage() {
 
         // Asset list (optional — only included if populated per D5)
         if (cfgAssetList.length > 0) {
-            config.assetList = cfgAssetList.map((a) => ({
-                symbol: a.symbol.trim(),
-                joinedAt: a.joinedAt,
-            }));
+            config.assetList = cfgAssetList.map((a) => {
+                const item: { symbol: string; mint?: string; joinedAt: string } = {
+                    symbol: a.symbol.trim(),
+                    joinedAt: a.joinedAt,
+                };
+                if (a.mint && a.mint.trim()) {
+                    item.mint = a.mint.trim();
+                }
+                return item;
+            });
         }
 
         try {
@@ -732,7 +755,20 @@ export default function AdminPage() {
                         <Trophy size={16} style={{ marginRight: 6, verticalAlign: 'middle' }} />
                         Tournament Controls
                     </h2>
-                    <button className="btn btn--primary" onClick={() => setShowCreateModal(true)}>
+                    <button className="btn btn--primary" onClick={async () => {
+                        setShowCreateModal(true);
+                        // Phase 4: lazy-fetch tradable assets on first modal open
+                        if (cfgTradableAssets.length === 0 && !cfgTradableAssetsError && adminSecret) {
+                            try {
+                                const assets = await adminGetTradableAssets(adminSecret);
+                                setCfgTradableAssets(assets);
+                            } catch (err) {
+                                const msg = err instanceof Error ? err.message : 'Failed to load tradable assets';
+                                setCfgTradableAssetsError(msg);
+                                addLog(`Warning: ${msg} — asset list dropdown falling back to free-text`);
+                            }
+                        }
+                    }}>
                         <Plus size={14} /> New Tournament
                     </button>
                 </div>
@@ -1247,6 +1283,11 @@ export default function AdminPage() {
                                     <input type="number" className="input input--mono" value={cfgAllAroundMinTradeUsd} onChange={(e) => setCfgAllAroundMinTradeUsd(Number(e.target.value))} min={0} />
                                     <span className={styles.formHint}>Quest-specific min exit_size (test: 100 / prod: 500)</span>
                                 </div>
+                                <div className={styles.formGroup}>
+                                    <label className={styles.formLabel}>Risk Manager Min Size ($)</label>
+                                    <input type="number" className="input input--mono" value={cfgRiskManagerMinSize} onChange={(e) => setCfgRiskManagerMinSize(Number(e.target.value))} min={0} />
+                                    <span className={styles.formHint}>Minimum trade exit_size for RM eligibility (test: 500 / prod: 1000)</span>
+                                </div>
                             </div>
 
                             {/* === Scoring Policy === */}
@@ -1360,16 +1401,45 @@ export default function AdminPage() {
                                 Initial assets join scoring from tournament creation onward (effectively &quot;from start&quot;).
                                 Mid-tournament additions (future admin UI) will respect a weekly boundary.
                             </p>
+                            {cfgTradableAssetsError && (
+                                <p style={{ color: 'var(--status-warning)', fontSize: '0.75rem', marginBottom: '0.5rem' }}>
+                                    Asset list fetch failed — falling back to free-text (mint will be missing; engines use symbol-only match).
+                                </p>
+                            )}
                             {cfgAssetList.map((asset, i) => (
                                 <div key={i} style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginBottom: '0.5rem' }}>
-                                    <input
-                                        type="text"
-                                        className="input input--mono"
-                                        placeholder="SYMBOL (e.g., SOL)"
-                                        value={asset.symbol}
-                                        onChange={(e) => setCfgAssetList((prev) => prev.map((a, j) => j === i ? { ...a, symbol: e.target.value.toUpperCase() } : a))}
-                                        style={{ flex: 1 }}
-                                    />
+                                    {cfgTradableAssets.length > 0 ? (
+                                        /* Dropdown mode — primary path */
+                                        <select
+                                            className="input input--mono"
+                                            value={asset.symbol}
+                                            onChange={(e) => {
+                                                const selected = cfgTradableAssets.find((t) => t.symbol === e.target.value);
+                                                setCfgAssetList((prev) => prev.map((a, j) => j === i
+                                                    ? { ...a, symbol: e.target.value, mint: selected?.mint }
+                                                    : a,
+                                                ));
+                                            }}
+                                            style={{ flex: 1 }}
+                                        >
+                                            <option value="">— select asset —</option>
+                                            {cfgTradableAssets.map((t) => (
+                                                <option key={t.mint} value={t.symbol}>
+                                                    {t.symbol} ({t.mint.slice(0, 4)}…{t.mint.slice(-4)})
+                                                </option>
+                                            ))}
+                                        </select>
+                                    ) : (
+                                        /* Free-text fallback — when Adrena API is unreachable */
+                                        <input
+                                            type="text"
+                                            className="input input--mono"
+                                            placeholder="SYMBOL (e.g., SOL)"
+                                            value={asset.symbol}
+                                            onChange={(e) => setCfgAssetList((prev) => prev.map((a, j) => j === i ? { ...a, symbol: e.target.value.toUpperCase() } : a))}
+                                            style={{ flex: 1 }}
+                                        />
+                                    )}
                                     <span className={styles.formHint} style={{ fontFamily: 'monospace', whiteSpace: 'nowrap' }}>
                                         joinedAt: {asset.joinedAt}
                                     </span>
@@ -1386,7 +1456,7 @@ export default function AdminPage() {
                             <button
                                 type="button"
                                 className="btn btn--secondary"
-                                onClick={() => setCfgAssetList((prev) => [...prev, { symbol: '', joinedAt: todayUtc() }])}
+                                onClick={() => setCfgAssetList((prev) => [...prev, { symbol: '', mint: '', joinedAt: todayUtc() }])}
                                 style={{ marginTop: '0.5rem' }}
                             >
                                 <Plus size={14} /> Add Asset

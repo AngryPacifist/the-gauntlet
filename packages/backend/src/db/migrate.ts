@@ -220,6 +220,38 @@ DO $$ BEGIN
       FOREIGN KEY (season_id) REFERENCES seasons(id);
   END IF;
 END $$;
+
+-- Phase 4 item 30: add asset column to quest_progress + recreate unique index
+-- Migration strategy (D18 — Option A): TRUNCATE existing rows (no meaningful per-asset
+-- info in old single-ladder rows), ADD COLUMN NOT NULL (safe on empty table),
+-- DROP old unique index, CREATE new 6-col unique index. Backfill repopulates.
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'quest_progress' AND column_name = 'asset' AND table_schema = 'public'
+  ) THEN
+    DELETE FROM quest_progress;
+    ALTER TABLE quest_progress ADD COLUMN asset VARCHAR(30) NOT NULL;
+    DROP INDEX IF EXISTS idx_quest_progress_unique;
+    CREATE UNIQUE INDEX idx_quest_progress_unique
+      ON quest_progress (tournament_id, wallet, quest_type, side, asset, week_number);
+  END IF;
+END $$;
+
+-- Phase 4 item 30: bump daily_category_scores.category length to accommodate
+-- per-asset LM slugs (leverage_master_SYMBOL_long|short). Idempotent: only alters
+-- if current length is 30.
+DO $$ BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'daily_category_scores'
+      AND column_name = 'category'
+      AND character_maximum_length = 30
+      AND table_schema = 'public'
+  ) THEN
+    ALTER TABLE daily_category_scores ALTER COLUMN category TYPE VARCHAR(50);
+  END IF;
+END $$;
 `;
 
 const INDEXES_SQL = `

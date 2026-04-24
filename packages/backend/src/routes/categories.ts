@@ -32,10 +32,22 @@ const adrenaClient = new AdrenaClient();
 // --------------------------------------------------------------------------
 // Category validation
 // --------------------------------------------------------------------------
-const VALID_CATEGORIES = [
+// Phase 4 item 30: LM slugs are runtime-computed per-asset (leverage_master_${symbol}_${side}).
+// VALID_NON_LM_CATEGORIES covers the 5 static slugs; LM is validated via prefix match.
+const VALID_NON_LM_CATEGORIES = [
     'all_around', 'top_tick_traveler', 'bottom_fisher',
-    'risk_manager', 'humble_one', 'leverage_master_long', 'leverage_master_short',
+    'risk_manager', 'humble_one',
 ] as const;
+
+// Legacy LM slugs (backward compat with pre-Phase-4 data) + new per-asset slugs both match.
+const LM_SLUG_RE = /^leverage_master_([A-Z0-9_]+_)?(long|short)$/;
+
+function isValidCategory(category: string): boolean {
+    return (
+        (VALID_NON_LM_CATEGORIES as readonly string[]).includes(category)
+        || LM_SLUG_RE.test(category)
+    );
+}
 
 // Categories that use SUM aggregation (daily additive scores)
 const SUM_CATEGORIES = new Set(['all_around', 'top_tick_traveler', 'bottom_fisher']);
@@ -159,17 +171,20 @@ router.post('/score', async (req, res) => {
                 const windowStartStr = windowStartDate.toISOString().slice(0, 10);
 
                 const riskManagerResults = computeRiskManagerScores(
-                    walletPositions, windowStartStr, date,
+                    walletPositions, windowStartStr, date, config,
                 );
                 const humbleOneResults = computeHumbleOneScores(
-                    walletPositions, windowStartStr, date,
+                    walletPositions, windowStartStr, date, config,
                 );
 
                 const engagementRows: CategoryScoreRow[] = [];
                 for (const [wallet, details] of riskManagerResults) {
+                    // Phase 4 item 11: inversion fix. Score = (1 - |roi|) × 100 (tightest controlled loss wins).
                     engagementRows.push({
                         wallet, category: 'risk_manager',
-                        score: details.bestTrade ? Math.abs(details.bestTrade.roi) * 100 : 0,
+                        score: details.bestTrade
+                            ? (1 - Math.abs(details.bestTrade.roi)) * 100
+                            : 0,
                         details,
                     });
                 }
@@ -235,10 +250,29 @@ router.get('/:tournamentId/wallet/:wallet', async (req, res) => {
             return;
         }
 
-        const categories = [
-            'all_around', 'top_tick_traveler', 'bottom_fisher',
-            'risk_manager', 'humble_one', 'leverage_master_long', 'leverage_master_short',
-        ] as const;
+        // Phase 4 item 30: LM slugs computed per-asset from config.assetList.
+        // Hoist tournament fetch + config resolution — needed by both the categories array and computeQuestPoints below.
+        const [tournament] = await db
+            .select()
+            .from(tournaments)
+            .where(eq(tournaments.id, tournamentId))
+            .limit(1);
+        if (!tournament) {
+            res.status(404).json({ success: false, error: 'Tournament not found' });
+            return;
+        }
+        const config = resolveConfig(tournament.config);
+
+        const categories: string[] = ['all_around', 'top_tick_traveler', 'bottom_fisher', 'risk_manager', 'humble_one'];
+        if (config.assetList?.length) {
+            for (const a of config.assetList) {
+                categories.push(`leverage_master_${a.symbol}_long`);
+                categories.push(`leverage_master_${a.symbol}_short`);
+            }
+        } else {
+            // Legacy fallback: pre-Phase-4 tournaments use the static 2-slug shape
+            categories.push('leverage_master_long', 'leverage_master_short');
+        }
 
         const breakdown: Record<string, { totalScore: number; daysScored: number }> = {};
 
@@ -267,18 +301,8 @@ router.get('/:tournamentId/wallet/:wallet', async (req, res) => {
             };
         }
 
-        // Also compute quest points using the final-score module
+        // Phase 4: tournament + config already fetched above — reuse locals.
         const { computeQuestPoints } = await import('../services/final-score.js');
-        const [tournament] = await db
-            .select()
-            .from(tournaments)
-            .where(eq(tournaments.id, tournamentId))
-            .limit(1);
-        if (!tournament) {
-            res.status(404).json({ success: false, error: 'Tournament not found' });
-            return;
-        }
-        const config = resolveConfig(tournament.config);
         const totalQuestPoints = await computeQuestPoints(tournamentId, wallet, config);
 
         res.json({
@@ -317,7 +341,7 @@ router.get('/:tournamentId/:category', async (req, res) => {
             return;
         }
 
-        if (!VALID_CATEGORIES.includes(category as typeof VALID_CATEGORIES[number])) {
+        if (!isValidCategory(category)) {
             res.status(400).json({ success: false, error: `Invalid category: ${category}` });
             return;
         }
@@ -368,7 +392,7 @@ router.get('/:tournamentId/:category/:date', async (req, res) => {
             return;
         }
 
-        if (!VALID_CATEGORIES.includes(category as typeof VALID_CATEGORIES[number])) {
+        if (!isValidCategory(category)) {
             res.status(400).json({ success: false, error: `Invalid category: ${category}` });
             return;
         }

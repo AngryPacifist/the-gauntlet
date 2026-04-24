@@ -92,7 +92,53 @@ export class AdrenaClient {
         return positions;
     }
 
+    // --------------------------------------------------------------------------
+    // GET /liquidity-info — Fetch tradable custody list (Phase 4 item 29-engine)
+    //
+    // Returns symbol + mint for each custody in the Adrena pool. Consumed by
+    // the admin tournament-creation modal to populate the asset dropdown,
+    // and by the backend to validate symbol → mint resolution.
+    //
+    // No client-side cache (D17): the endpoint is already 60s server-side
+    // cached per Adrena API reference §4.1, and admin dropdown load frequency
+    // is low enough that stacking caches adds surface area without benefit.
+    //
+    // API response shape (verified 2026-04-23 via adrena-api-reference.md §4.1):
+    // {
+    //   "success": true,
+    //   "data": {
+    //     "totalPoolValueUsd": 12500000.00,
+    //     "custodies": [
+    //       {
+    //         "symbol": "SOL",
+    //         "mint": "So11111111111111111111111111111111111111112",
+    //         "currentRatio": 0.42, "targetRatio": 0.40,
+    //         "utilization": 0.61, "aumUsd": 5250000.00, "liquidityUsd": 3200000.00
+    //       }
+    //     ]
+    //   }
+    // }
+    //
+    // We project to the minimal {symbol, mint} shape — other fields are not
+    // relevant to the admin dropdown or engine asset matching.
+    // --------------------------------------------------------------------------
+    async getCustodies(): Promise<Array<{ symbol: string; mint: string }>> {
+        const url = `${this.baseUrl}/liquidity-info`;
+        const response = await this.fetchWithRetry(url);
 
+        if (!response.success) {
+            throw new Error(
+                `Adrena API error (GET /liquidity-info): ${response.error ?? 'Unknown error'}`,
+            );
+        }
+
+        const data = response.data as
+            | { custodies?: Array<{ symbol: string; mint: string }> }
+            | undefined;
+        const custodies = data?.custodies ?? [];
+
+        return custodies.map((c) => ({ symbol: c.symbol, mint: c.mint }));
+    }
 
     // --------------------------------------------------------------------------
     // Helper: Filter positions to only those within a specific time window.

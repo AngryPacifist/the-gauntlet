@@ -334,7 +334,11 @@ export default function TournamentPage({ params }: { params: Promise<{ id: strin
                                     </div>
                                 </div>
                             )}
-                            <p className={styles.countdownDate}>Sunday, March 15 · 11:00 AM UTC</p>
+                            <p className={styles.countdownDate}>
+                                {tournament.rounds[0]?.startTime
+                                    ? new Date(tournament.rounds[0].startTime).toUTCString()
+                                    : 'Start date TBD'}
+                            </p>
                         </section>
 
                         {/* Competition Rules */}
@@ -346,8 +350,8 @@ export default function TournamentPage({ params }: { params: Promise<{ id: strin
                                     <h3 className={styles.ruleTitle}>Battle Royale Format</h3>
                                     <p className={styles.ruleText}>
                                         Traders are placed into brackets of {tournament.config.bracketSize}.
-                                        After each 24-hour round, the bottom 50% is eliminated.
-                                        3 rounds — last ones standing win.
+                                        After each round, the bottom {Math.round((1 - tournament.config.advanceRatio) * 100)}% is eliminated.
+                                        {' '}{tournament.config.roundDurations.length} round{tournament.config.roundDurations.length !== 1 ? 's' : ''} — last ones standing win.
                                     </p>
                                 </div>
                                 <div className={`card ${styles.ruleCard}`}>
@@ -372,8 +376,8 @@ export default function TournamentPage({ params }: { params: Promise<{ id: strin
                                     <div className={styles.ruleIcon}><Layers size={20} /></div>
                                     <h3 className={styles.ruleTitle}>Requirements</h3>
                                     <ul className={styles.ruleList}>
-                                        <li>Min ${tournament.config.minPositionCollateral} collateral per position</li>
-                                        <li>Trades must be open for at least {Math.round(tournament.config.minTradeDurationSec / 60)} minutes</li>
+                                        <li>Minimum collateral threshold per position</li>
+                                        <li>Trades must meet a minimum open-duration requirement</li>
                                         <li>Risk score based on equity curve drawdown</li>
                                         <li>No entry fee — free to compete</li>
                                     </ul>

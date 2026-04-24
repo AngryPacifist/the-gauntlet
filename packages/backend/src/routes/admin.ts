@@ -521,4 +521,28 @@ router.get('/analytics/:tournamentId/anomalies', async (req, res) => {
     }
 });
 
+// --------------------------------------------------------------------------
+// GET /api/admin/tradable-assets — Proxy to Adrena /liquidity-info
+//
+// Phase 4 asset list validation sub-scope. Admin tournament-creation modal
+// calls this to populate the asset dropdown with canonical (symbol, mint)
+// pairs sourced from the Adrena pool.
+//
+// Admin-protected by the router.use() middleware at top of file.
+// --------------------------------------------------------------------------
+router.get('/tradable-assets', async (_req, res) => {
+    try {
+        const { AdrenaClient } = await import('../services/adrena-client.js');
+        const adrena = new AdrenaClient();
+        const custodies = await adrena.getCustodies();
+        res.json({ success: true, data: custodies });
+    } catch (error) {
+        console.error('[Admin] Error fetching tradable assets:', error);
+        res.status(500).json({
+            success: false,
+            error: error instanceof Error ? error.message : 'Internal server error',
+        });
+    }
+});
+
 export default router;

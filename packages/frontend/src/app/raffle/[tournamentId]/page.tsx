@@ -3,7 +3,9 @@
 import { useEffect, useState, use } from 'react';
 import {
     getRaffleResults,
+    getTournament,
     type RaffleResult,
+    type TournamentState,
 } from '@/lib/api';
 import { Ticket, Trophy, Users, Hash, ArrowLeft, Search } from 'lucide-react';
 import Link from 'next/link';
@@ -17,10 +19,13 @@ export default function RafflePage({ params }: { params: Promise<{ tournamentId:
     const [error, setError] = useState<string | null>(null);
     const [walletSearch, setWalletSearch] = useState('');
     const [highlightedWallet, setHighlightedWallet] = useState<string | null>(null);
+    // Phase 4 D21: fetch tournament config for dynamic formula + threshold rendering.
+    const [tournament, setTournament] = useState<TournamentState | null>(null);
 
     useEffect(() => {
         if (!isNaN(tournamentId)) {
             loadResults();
+            getTournament(tournamentId).then(setTournament).catch(() => setTournament(null));
         }
     }, [tournamentId]);
 
@@ -69,7 +74,7 @@ export default function RafflePage({ params }: { params: Promise<{ tournamentId:
     // Computed stats
     const totalParticipants = results.length;
     const totalTickets = results.reduce((sum, r) => sum + r.ticketCount, 0);
-    const eligibleCount = results.filter(r => !r.isTopPercent && r.ticketCount > 0 && r.closedPositionCount >= 10).length;
+    const eligibleCount = results.filter(r => !r.isTopPercent && r.ticketCount > 0 && r.closedPositionCount >= (tournament?.config.raffleMinClosedPositions ?? 10)).length;
     const winnerCount = results.filter(r => r.isWinner).length;
     const hasDrawn = winnerCount > 0;
 
@@ -148,12 +153,12 @@ export default function RafflePage({ params }: { params: Promise<{ tournamentId:
             }}>
                 <strong style={{ color: 'var(--accent-primary)' }}>Ticket Formula</strong> &mdash;{' '}
                 <code style={{ fontSize: '13px', background: 'var(--bg-elevated)', padding: '2px 6px', borderRadius: '4px' }}>
-                    floor(CPI &times; 0.5) + floor(Quest Points &times; 20)
+                    floor(CPI &times; {tournament?.config.cpiTicketMultiplier ?? 0.5}) + floor(Quest Points &times; {tournament?.config.questTicketMultiplier ?? 20})
                 </code>
                 <br />
                 <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-                    Eligibility: 10+ closed positions, not in top 30% by final score, tickets &gt; 0.
-                    Top 30% are excluded from the raffle but compete for main prizes.
+                    Eligibility: {tournament?.config.raffleMinClosedPositions ?? 10}+ closed positions, not in top {Math.round((tournament?.config.topPercentCutoff ?? 0.30) * 100)}% by final score, tickets &gt; 0.
+                    Top {Math.round((tournament?.config.topPercentCutoff ?? 0.30) * 100)}% are excluded from the raffle but compete for main prizes.
                 </span>
             </div>
 
@@ -256,11 +261,11 @@ export default function RafflePage({ params }: { params: Promise<{ tournamentId:
                                                 </span>
                                             ) : entry.isTopPercent ? (
                                                 <span style={badgeStyle('#fdcb6e', 'rgba(253, 203, 110, 0.1)')}>
-                                                    TOP 30%
+                                                    TOP {Math.round((tournament?.config.topPercentCutoff ?? 0.30) * 100)}%
                                                 </span>
-                                            ) : entry.closedPositionCount < 10 ? (
+                                            ) : entry.closedPositionCount < (tournament?.config.raffleMinClosedPositions ?? 10) ? (
                                                 <span style={badgeStyle('var(--text-muted)', 'var(--bg-elevated)')}>
-                                                    &lt;10 TRADES
+                                                    &lt;{tournament?.config.raffleMinClosedPositions ?? 10} TRADES
                                                 </span>
                                             ) : entry.ticketCount > 0 ? (
                                                 <span style={badgeStyle('#00b894', 'rgba(0, 184, 148, 0.1)')}>

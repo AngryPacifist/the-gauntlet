@@ -534,16 +534,20 @@ export async function awardDailyFisherPoints(
     for (const row of fisherRows) {
         const details = row.details as FisherDetails;
 
-        // Check long entry rank
-        if (details.longEntry?.rank && details.longEntry.rank <= 3) {
-            const pts = SEASON_POINTS[details.longEntry.rank - 1];
+        // Phase 4 D19: read top-level rank fields (longRank/shortRank).
+        // Fallback to nested longEntry.rank/shortEntry.rank for pre-Phase-4 JSONB
+        // rows that lack the top-level fields (backward compat during rollout).
+        const longRank = details.longRank ?? details.longEntry?.rank ?? null;
+        const shortRank = details.shortRank ?? details.shortEntry?.rank ?? null;
+
+        if (longRank !== null && longRank <= 3) {
+            const pts = SEASON_POINTS[longRank - 1];
             const current = pointsToAward.get(row.wallet) ?? 0;
             pointsToAward.set(row.wallet, current + pts);
         }
 
-        // Check short entry rank
-        if (details.shortEntry?.rank && details.shortEntry.rank <= 3) {
-            const pts = SEASON_POINTS[details.shortEntry.rank - 1];
+        if (shortRank !== null && shortRank <= 3) {
+            const pts = SEASON_POINTS[shortRank - 1];
             const current = pointsToAward.get(row.wallet) ?? 0;
             pointsToAward.set(row.wallet, current + pts);
         }

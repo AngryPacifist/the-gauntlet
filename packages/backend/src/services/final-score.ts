@@ -4,14 +4,17 @@
 // Combines a trader's bracket CPI score with their accumulated quest points
 // from daily categories. Used for:
 //   1. Overall tournament ranking (CPI + quests)
-//   2. Raffle ticket computation (CPI×0.5 + questPoints×20)
-//   3. Top 30% / bottom 70% split for prize distribution
+//   2. Raffle ticket computation (floor(CPI × cpiTicketMultiplier) + floor(questPoints × questTicketMultiplier))
+//   3. Top-% / remainder split for prize distribution (config.topPercentCutoff)
 //
 // CRITICAL: Quest points are awarded PER-DAY, not by cumulative rank.
-// Each day, the top 5 wallets in each category earn quest points:
-//   Daily categories (All Around, Bottom Fisher, Top-Tick): 0.2/0.15/0.1/0.05/0.01
-//   Multi-day (Risk Manager, Humble One): 0.3/0.25/0.2/0.15/0.10
-//   Weekly (Leverage Master): 1.5/1.2/1.0/0.75/0.50
+// Each day, the top N wallets in each category earn quest points:
+//   Daily categories (All Around, Bottom Fisher, Top-Tick): config.dailyQuestPoints
+//     (default [0.2, 0.15, 0.1, 0.05, 0.01])
+//   Multi-day (Risk Manager, Humble One): config.multidayQuestPoints
+//     (default [0.3, 0.25, 0.2, 0.15, 0.1])
+//   Weekly (Leverage Master): LEVERAGE_QUEST_POINTS module constant
+//     Phase 4 item 30: [0.5, 0.4, 0.3, 0.2, 0.1] per (asset, side) ladder.
 //
 // The computation replays each day's scores from daily_category_scores,
 // ranks within that day (tie-aware), assigns quest points, and sums.
@@ -30,14 +33,32 @@ import { DEFAULT_TOURNAMENT_CONFIG } from '../types.js';
 
 // Quest point award tables:
 // - DAILY + MULTIDAY migrated to TournamentConfig (Phase 3 item 17, 2026-04-22).
-// - LEVERAGE stays module-constant (D1 — Phase 4 item 30 changes values to [0.5, 0.4, 0.3, 0.2, 0.1]
-//   as part of the per-token refactor; migrating now would mean Phase 4 immediately re-edits).
-const LEVERAGE_QUEST_POINTS = [1.5, 1.2, 1.0, 0.75, 0.50];
+// - LEVERAGE stays module-constant (D1 — values changed in Phase 4 per Q3 resolution).
+// Phase 4 item 30 (Q3 resolution): per-asset LM scaling.
+// Old [1.5, 1.2, 1.0, 0.75, 0.50] (per-side ceiling 3.0 with 2 ladders).
+// New [0.5, 0.4, 0.3, 0.2, 0.1] — per-(asset, side) ladder with 2N ladders total;
+// ceiling math holds at 3.0 for N=3 assets (2N × 0.5 peak = 3.0).
+const LEVERAGE_QUEST_POINTS = [0.5, 0.4, 0.3, 0.2, 0.1];
 
 // Categories grouped by scoring period
 const DAILY_CATEGORIES = ['all_around', 'top_tick_traveler', 'bottom_fisher'];
 const MULTIDAY_CATEGORIES = ['risk_manager', 'humble_one'];
-const WEEKLY_CATEGORIES = ['leverage_master_long', 'leverage_master_short'];
+
+// Phase 4 item 30: WEEKLY_CATEGORIES now runtime-computed from config.assetList.
+// Per-asset slugs: leverage_master_${symbol}_${side}.
+// Legacy fallback when assetList is undefined/empty: the static 2-slug list
+// matches pre-Phase-4 data in `dailyCategoryScores`.
+function computeWeeklyCategories(config: TournamentConfig): string[] {
+    if (!config.assetList?.length) {
+        return ['leverage_master_long', 'leverage_master_short'];
+    }
+    const slugs: string[] = [];
+    for (const asset of config.assetList) {
+        slugs.push(`leverage_master_${asset.symbol}_long`);
+        slugs.push(`leverage_master_${asset.symbol}_short`);
+    }
+    return slugs;
+}
 
 export interface FinalScoreResult {
     wallet: string;
@@ -182,7 +203,9 @@ export async function computeQuestPoints(
     // Leverage Master stores one score per wallet per week (scoreDate = week boundary).
     // Each stored entry represents that week's step count.
     // We rank ALL Leverage Master entries for this tournament by score, grouped by scoreDate.
-    for (const category of WEEKLY_CATEGORIES) {
+    // Phase 4 item 30: WEEKLY_CATEGORIES now config-driven
+    const weeklyCategories = computeWeeklyCategories(config);
+    for (const category of weeklyCategories) {
         const weekDates = await db
             .selectDistinct({ scoreDate: dailyCategoryScores.scoreDate })
             .from(dailyCategoryScores)
@@ -290,8 +313,9 @@ export async function computeAllQuestPoints(
             pointsTable = dailyPoints;
         } else if (MULTIDAY_CATEGORIES.includes(category)) {
             pointsTable = multidayPoints;
-        } else if (WEEKLY_CATEGORIES.includes(category)) {
-            pointsTable = LEVERAGE_QUEST_POINTS;  // unchanged per D1
+        } else if (category.startsWith('leverage_master_')) {
+            // Phase 4 item 30: any per-asset LM slug uses LEVERAGE_QUEST_POINTS table
+            pointsTable = LEVERAGE_QUEST_POINTS;
         } else {
             continue;
         }

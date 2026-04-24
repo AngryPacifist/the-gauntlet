@@ -286,18 +286,23 @@ async function scoreDailyCategories(): Promise<void> {
                     );
 
                     const riskManagerResults = computeRiskManagerScores(
-                        walletPositions, windowStartStr, dateStr,
+                        walletPositions, windowStartStr, dateStr, config,
                     );
                     const humbleOneResults = computeHumbleOneScores(
-                        walletPositions, windowStartStr, dateStr,
+                        walletPositions, windowStartStr, dateStr, config,
                     );
 
                     const engagementRows: CategoryScoreRow[] = [];
 
                     for (const [wallet, details] of riskManagerResults) {
+                        // Phase 4 item 11: inversion fix. Score = (1 - |roi|) × 100 —
+                        // "tightest controlled loss wins" (smaller |roi| → higher score).
+                        // Old Math.abs(roi) × 100 had the opposite semantic (bigger loss = higher score).
                         engagementRows.push({
                             wallet, category: 'risk_manager',
-                            score: details.bestTrade ? Math.abs(details.bestTrade.roi) * 100 : 0,
+                            score: details.bestTrade
+                                ? (1 - Math.abs(details.bestTrade.roi)) * 100
+                                : 0,
                             details,
                         });
                     }
@@ -330,7 +335,7 @@ async function scoreDailyCategories(): Promise<void> {
                     if (weekInfo.isLastDay) {
                         const seasonId = tournament.seasonId ?? null;
                         await computeLeverageMasterLeaderboard(
-                            tournament.id, weekInfo.weekNumber, dateStr, seasonId,
+                            tournament.id, weekInfo.weekNumber, dateStr, config, seasonId,
                         );
                     }
                 }
@@ -491,18 +496,21 @@ async function scoreHourlyCategories(): Promise<void> {
                     );
 
                     const riskManagerResults = computeRiskManagerScores(
-                        walletPositions, windowStartStr, dateStr,
+                        walletPositions, windowStartStr, dateStr, config,
                     );
                     const humbleOneResults = computeHumbleOneScores(
-                        walletPositions, windowStartStr, dateStr,
+                        walletPositions, windowStartStr, dateStr, config,
                     );
 
                     const engagementRows: CategoryScoreRow[] = [];
 
                     for (const [wallet, details] of riskManagerResults) {
+                        // Phase 4 item 11: inversion fix (see midnight job for full reasoning).
                         engagementRows.push({
                             wallet, category: 'risk_manager',
-                            score: details.bestTrade ? Math.abs(details.bestTrade.roi) * 100 : 0,
+                            score: details.bestTrade
+                                ? (1 - Math.abs(details.bestTrade.roi)) * 100
+                                : 0,
                             details,
                         });
                     }

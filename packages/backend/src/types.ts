@@ -61,12 +61,19 @@ export interface TournamentConfig {
     cpiTicketMultiplier: number;      // Default 0.5 — tickets = floor(CPI × this)
     questTicketMultiplier: number;    // Default 20 — tickets += floor(questPoints × this)
 
+    // Risk Manager minimum trade size (item 11 — prevents micro-trade SL exploit)
+    riskManagerMinSize: number;       // Default 1000 USD (test 500)
+
     // Dynamic asset list (item 29-admin — per-asset scoring starts from joinedAt week)
     // Optional: undefined OR empty = engine fallback to permissive (all observed symbols).
     // Populated = strict filter (scoring engines include only listed symbols, from joinedAt).
     // CREATE-time Add Asset defaults joinedAt to today (equivalent to "from tournament start").
     assetList?: Array<{
         symbol: string;               // e.g. 'SOL', 'BTC', 'BONK'
+        // Phase 4: mint from /liquidity-info for identity-robust matching.
+        // Optional for backward compat with Phase-3-created tournaments (no mint).
+        // Engines prefer mint when present, fall back to symbol (D16).
+        mint?: string;
         joinedAt: string;             // ISO date (YYYY-MM-DD) — first scoring day
     }>;
 }
@@ -92,6 +99,7 @@ export const DEFAULT_TOURNAMENT_CONFIG: TournamentConfig = {
     raffleMinClosedPositions: 10,
     cpiTicketMultiplier: 0.5,
     questTicketMultiplier: 20,
+    riskManagerMinSize: 1000,
     // assetList intentionally omitted — undefined = engine fallback; admin opts in via UI (D5)
 };
 
@@ -356,11 +364,23 @@ export interface FisherEntryDetail {
 }
 
 export interface FisherDetails {
+    // Phase 4 item 10 + D19: per-asset refactor.
+    // Top-level rank fields: wallet's rank in the category leaderboard (1-indexed,
+    // null if wallet not ranked). Consumed by season-manager.ts for season points.
+    longRank: number | null;          // rank in bottom_fisher leaderboard
+    shortRank: number | null;         // rank in top_tick_traveler leaderboard
+    // Top-level aggregates (backward compat + fast display — "best" single entry across assets)
     longEntry: FisherEntryDetail | null;
     shortEntry: FisherEntryDetail | null;
     longPoints: number;
     shortPoints: number;
     totalPoints: number;
+    // Per-asset breakdown (item 10): best long/short entry per asset.
+    // Optional because pre-Phase-4 details JSONB lacks this field.
+    byAsset?: Record<string, {
+        longEntry: FisherEntryDetail | null;
+        shortEntry: FisherEntryDetail | null;
+    }>;
 }
 
 export interface SLTPTradeDetail {
@@ -374,13 +394,27 @@ export interface SLTPTradeDetail {
 }
 
 export interface RiskManagerDetails {
+    // Top-level: best SL trade across all assets (backward compat)
     bestTrade: SLTPTradeDetail | null;
     candidateCount: number;
+    // Phase 4 item 10: per-asset breakdown.
+    // Aggregate score at row level = avg (1 - |roi|) × 100 across per-asset best SLs.
+    byAsset?: Record<string, {
+        bestTrade: SLTPTradeDetail | null;
+        candidateCount: number;
+    }>;
 }
 
 export interface HumbleOneDetails {
     bestTrade: SLTPTradeDetail | null;
     candidateCount: number;
+    // Phase 4 item 10b: per-asset breakdown.
+    // Aggregate score at row level = avg (roi × 100) across per-asset best TPs
+    // (matches ZeDef's mockup: SCORE = avg ROI × 100).
+    byAsset?: Record<string, {
+        bestTrade: SLTPTradeDetail | null;
+        candidateCount: number;
+    }>;
 }
 
 export interface CategoryScoreRow {
@@ -399,10 +433,15 @@ export interface LeverageStep {
 }
 
 export interface QuestProgressDetails {
-    long: boolean[];   // boolean[10] — index 0 = 10x step, index 9 = 100x step
-    short: boolean[];  // boolean[10]
-    longCount: number;
-    shortCount: number;
+    // Phase 4 item 30: per-asset LM ladders. `byAsset` keys are asset symbols
+    // from config.assetList (e.g. 'SOL', 'BTC', 'BONK'). Each asset has
+    // independent long + short ladders.
+    byAsset: Record<string, {
+        long: boolean[];       // boolean[10] — index 0 = 10x, index 9 = 100x
+        short: boolean[];      // boolean[10]
+        longCount: number;     // denormalized count for fast rendering
+        shortCount: number;
+    }>;
     weekNumber: number;
 }
 

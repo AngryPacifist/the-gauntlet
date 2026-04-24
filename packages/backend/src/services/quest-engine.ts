@@ -1,14 +1,16 @@
 // ============================================================================
 // Quest Engine — Leverage Master Quest System
 //
-// Tracks progressive completion of leverage tiers (10x–100x) for each wallet.
-// Two independent quests per wallet: long side and short side.
-// Each quest resets weekly (7-day windows aligned to tournament start).
+// Tracks progressive completion of leverage tiers (10x–100x) per (asset, side).
+// Phase 4 item 30: ladders are per-asset. Each (wallet, asset, side) has its
+// own independent 10-step progression per week.
 //
 // Integration:
 //   scheduler.ts calls evaluateLeverageProgress() daily for each wallet.
 //   At week boundaries, computeLeverageMasterLeaderboard() writes scores
-//   to daily_category_scores as 'leverage_master_long' / 'leverage_master_short'.
+//   to daily_category_scores as 'leverage_master_${symbol}_long' / '_short'
+//   when config.assetList is populated, falling back to the legacy 2-slug
+//   shape ('leverage_master_long' / '_short') for pre-Phase-4 tournaments.
 //   final-score.ts then picks these up in the weekly category loop.
 //
 // Determinism guarantees:
@@ -16,9 +18,9 @@
 //   - Leaderboard: ORDER BY step_count DESC, wallet ASC (fully deterministic)
 //   - Steps are permanent per week: once earned, never removed
 //
-// Anti-gaming filters:
-//   - Minimum collateral: $25 (entry_collateral_amount ?? collateral_amount)
-//   - Minimum duration: 120 seconds (open positions check time since entry)
+// Anti-gaming filters (config-driven per Phase 3 item 14):
+//   - config.minPositionCollateral (entry_collateral_amount ?? collateral_amount)
+//   - config.minTradeDurationSec (open positions check time since entry)
 //   - entry_leverage is immutable (set at open) — opening is the accomplishment
 // ============================================================================
 
@@ -132,84 +134,97 @@ export async function evaluateLeverageProgress(
         return entryDate >= weekStart && entryDate <= weekEnd;
     });
 
-    const result: QuestProgressDetails = {
-        long: Array(10).fill(false) as boolean[],
-        short: Array(10).fill(false) as boolean[],
-        longCount: 0,
-        shortCount: 0,
-        weekNumber,
-    };
+    // Phase 4 item 30: iterate per (asset, side). Falls back to symbol-only when
+    // config.assetList is undefined/empty (D5 — pre-Phase-4 tournaments).
+    const assetList = config.assetList?.length
+        ? config.assetList
+        : [{ symbol: '__legacy__', mint: undefined, joinedAt: weekStart }];
 
-    for (const side of SIDES) {
-        // Read existing progress for this (tournament, wallet, side, week)
-        const [existing] = await db
-            .select()
-            .from(questProgress)
-            .where(and(
-                eq(questProgress.tournamentId, tournamentId),
-                eq(questProgress.wallet, wallet),
-                eq(questProgress.questType, 'leverage_master'),
-                eq(questProgress.side, side),
-                eq(questProgress.weekNumber, weekNumber),
-            ))
-            .limit(1);
+    // Build per-asset result map (item 30 new shape)
+    const byAsset: Record<string, {
+        long: boolean[];
+        short: boolean[];
+        longCount: number;
+        shortCount: number;
+    }> = {};
 
-        // Start with existing steps (permanent — never remove completed steps)
-        const currentSteps: boolean[] = existing
-            ? (existing.stepsCompleted as boolean[])
-            : Array(10).fill(false);
+    for (const assetEntry of assetList) {
+        // Filter weekPositions to this asset only (D16 match-by-mint-when-present)
+        const assetPositions = weekPositions.filter((p) =>
+            assetEntry.symbol === '__legacy__'
+                ? true
+                : (assetEntry.mint ? p.token_account_mint === assetEntry.mint : p.symbol === assetEntry.symbol),
+        );
 
-        // Check each position against each step
-        for (const position of weekPositions) {
-            for (let i = 0; i < LEVERAGE_STEPS.length; i++) {
-                if (!currentSteps[i] && positionCompletesStep(position, LEVERAGE_STEPS[i], side, config)) {
-                    currentSteps[i] = true;
+        const assetKey = assetEntry.symbol === '__legacy__' ? '__legacy__' : assetEntry.symbol;
+        byAsset[assetKey] = {
+            long: Array(10).fill(false),
+            short: Array(10).fill(false),
+            longCount: 0,
+            shortCount: 0,
+        };
+
+        for (const side of SIDES) {
+            // Read existing progress for (tournament, wallet, side, asset, week)
+            const [existing] = await db
+                .select()
+                .from(questProgress)
+                .where(and(
+                    eq(questProgress.tournamentId, tournamentId),
+                    eq(questProgress.wallet, wallet),
+                    eq(questProgress.questType, 'leverage_master'),
+                    eq(questProgress.side, side),
+                    eq(questProgress.asset, assetKey),
+                    eq(questProgress.weekNumber, weekNumber),
+                ))
+                .limit(1);
+
+            const currentSteps: boolean[] = existing
+                ? (existing.stepsCompleted as boolean[])
+                : Array(10).fill(false);
+
+            for (const position of assetPositions) {
+                for (let i = 0; i < LEVERAGE_STEPS.length; i++) {
+                    if (!currentSteps[i] && positionCompletesStep(position, LEVERAGE_STEPS[i], side, config)) {
+                        currentSteps[i] = true;
+                    }
                 }
             }
-        }
 
-        const stepCount = currentSteps.filter(Boolean).length;
+            const stepCount = currentSteps.filter(Boolean).length;
 
-        // Persist: update if exists, insert if new
-        if (existing) {
-            await db.update(questProgress)
-                .set({
-                    stepsCompleted: currentSteps,
-                    stepCount,
-                    updatedAt: new Date(),
-                })
-                .where(eq(questProgress.id, existing.id));
-        } else {
-            await db.insert(questProgress)
-                .values({
-                    tournamentId,
-                    wallet,
-                    questType: 'leverage_master',
-                    side,
-                    stepsCompleted: currentSteps,
-                    stepCount,
-                    weekNumber,
+            if (existing) {
+                await db.update(questProgress)
+                    .set({ stepsCompleted: currentSteps, stepCount, updatedAt: new Date() })
+                    .where(eq(questProgress.id, existing.id));
+            } else {
+                await db.insert(questProgress).values({
+                    tournamentId, wallet, questType: 'leverage_master',
+                    side, asset: assetKey, stepsCompleted: currentSteps, stepCount, weekNumber,
                 });
-        }
+            }
 
-        // Populate result
-        result[side] = currentSteps;
-        if (side === 'long') {
-            result.longCount = stepCount;
-        } else {
-            result.shortCount = stepCount;
+            if (side === 'long') {
+                byAsset[assetKey].long = currentSteps;
+                byAsset[assetKey].longCount = stepCount;
+            } else {
+                byAsset[assetKey].short = currentSteps;
+                byAsset[assetKey].shortCount = stepCount;
+            }
         }
     }
 
-    return result;
+    return { byAsset, weekNumber };
 }
 
 // --------------------------------------------------------------------------
 // Compute Leverage Master Leaderboard
 //
 // Runs at week boundary (last day of quest week). Reads all quest_progress
-// for the given week, ranks by stepCount, and saves to daily_category_scores
-// as separate categories: 'leverage_master_long' and 'leverage_master_short'.
+// for the given week, ranks by stepCount per (asset, side) combination, and
+// saves to daily_category_scores. Phase 4 item 30: emits per-asset categories
+// 'leverage_master_${symbol}_long' / '_short' when config.assetList is populated;
+// falls back to legacy 'leverage_master_long' / '_short' for empty assetList.
 //
 // Deterministic ordering: stepCount DESC, wallet ASC.
 // --------------------------------------------------------------------------
@@ -218,42 +233,54 @@ export async function computeLeverageMasterLeaderboard(
     tournamentId: number,
     weekNumber: number,
     scoreDate: string,  // YYYY-MM-DD — the week boundary date
+    config: TournamentConfig,
     seasonId: number | null = null,
 ): Promise<void> {
-    for (const side of SIDES) {
-        const category = `leverage_master_${side}`;
+    const assetList = config.assetList?.length
+        ? config.assetList
+        : [{ symbol: '__legacy__', mint: undefined, joinedAt: scoreDate }];
 
-        // Get all progress rows for this (tournament, side, week)
-        const progressRows = await db
-            .select({
-                wallet: questProgress.wallet,
-                stepCount: questProgress.stepCount,
-            })
-            .from(questProgress)
-            .where(and(
-                eq(questProgress.tournamentId, tournamentId),
-                eq(questProgress.questType, 'leverage_master'),
-                eq(questProgress.side, side),
-                eq(questProgress.weekNumber, weekNumber),
-            ))
-            .orderBy(desc(questProgress.stepCount), asc(questProgress.wallet));
+    for (const assetEntry of assetList) {
+        const assetKey = assetEntry.symbol === '__legacy__' ? '__legacy__' : assetEntry.symbol;
 
-        // Build score rows for saveDailyCategoryScores
-        const rows: CategoryScoreRow[] = progressRows
-            .filter((r) => r.stepCount > 0)
-            .map((r) => ({
-                wallet: r.wallet,
-                category,
-                score: r.stepCount,
-                details: { weekNumber, side, stepCount: r.stepCount },
-            }));
+        for (const side of SIDES) {
+            // Phase 4 item 30: per-asset category slug
+            // (legacy key renders as 'leverage_master_long' / '_short' for pre-Phase-4 backfills)
+            const category = assetKey === '__legacy__'
+                ? `leverage_master_${side}`
+                : `leverage_master_${assetKey}_${side}`;
 
-        if (rows.length > 0) {
-            await saveDailyCategoryScores(tournamentId, seasonId, scoreDate, rows);
-            console.log(
-                `[QuestEngine] Saved ${rows.length} ${category} leaderboard entries ` +
-                `for tournament ${tournamentId}, week ${weekNumber}`,
-            );
+            const progressRows = await db
+                .select({
+                    wallet: questProgress.wallet,
+                    stepCount: questProgress.stepCount,
+                })
+                .from(questProgress)
+                .where(and(
+                    eq(questProgress.tournamentId, tournamentId),
+                    eq(questProgress.questType, 'leverage_master'),
+                    eq(questProgress.side, side),
+                    eq(questProgress.asset, assetKey),
+                    eq(questProgress.weekNumber, weekNumber),
+                ))
+                .orderBy(desc(questProgress.stepCount), asc(questProgress.wallet));
+
+            const rows: CategoryScoreRow[] = progressRows
+                .filter((r) => r.stepCount > 0)
+                .map((r) => ({
+                    wallet: r.wallet,
+                    category,
+                    score: r.stepCount,
+                    details: { weekNumber, side, asset: assetKey, stepCount: r.stepCount },
+                }));
+
+            if (rows.length > 0) {
+                await saveDailyCategoryScores(tournamentId, seasonId, scoreDate, rows);
+                console.log(
+                    `[QuestEngine] Saved ${rows.length} ${category} leaderboard entries ` +
+                    `for tournament ${tournamentId}, week ${weekNumber}`,
+                );
+            }
         }
     }
 }
@@ -270,47 +297,51 @@ export async function getQuestProgress(
     wallet: string,
     weekNumber?: number,
 ): Promise<QuestProgressDetails | null> {
-    const result: QuestProgressDetails = {
-        long: Array(10).fill(false) as boolean[],
-        short: Array(10).fill(false) as boolean[],
-        longCount: 0,
-        shortCount: 0,
-        weekNumber: weekNumber ?? 0,
-    };
+    // Phase 4 item 30: new shape with byAsset map. Queries all rows for the
+    // (tournament, wallet, week) combo and groups by asset.
+    const conditions = [
+        eq(questProgress.tournamentId, tournamentId),
+        eq(questProgress.wallet, wallet),
+        eq(questProgress.questType, 'leverage_master'),
+    ];
+    if (weekNumber !== undefined) {
+        conditions.push(eq(questProgress.weekNumber, weekNumber));
+    }
 
-    let found = false;
+    const rows = await db
+        .select()
+        .from(questProgress)
+        .where(and(...conditions))
+        .orderBy(desc(questProgress.weekNumber));
 
-    for (const side of SIDES) {
-        const conditions = [
-            eq(questProgress.tournamentId, tournamentId),
-            eq(questProgress.wallet, wallet),
-            eq(questProgress.questType, 'leverage_master'),
-            eq(questProgress.side, side),
-        ];
+    if (rows.length === 0) return null;
 
-        if (weekNumber !== undefined) {
-            conditions.push(eq(questProgress.weekNumber, weekNumber));
+    // Use the most recent week (or the specific week requested)
+    const targetWeek = weekNumber ?? rows[0].weekNumber;
+    const weekRows = rows.filter((r) => r.weekNumber === targetWeek);
+
+    const byAsset: Record<string, {
+        long: boolean[]; short: boolean[];
+        longCount: number; shortCount: number;
+    }> = {};
+
+    for (const r of weekRows) {
+        if (!byAsset[r.asset]) {
+            byAsset[r.asset] = {
+                long: Array(10).fill(false),
+                short: Array(10).fill(false),
+                longCount: 0,
+                shortCount: 0,
+            };
         }
-
-        const rows = await db
-            .select()
-            .from(questProgress)
-            .where(and(...conditions))
-            .orderBy(desc(questProgress.weekNumber))
-            .limit(1);
-
-        if (rows.length > 0) {
-            found = true;
-            const row = rows[0];
-            result[side] = row.stepsCompleted as boolean[];
-            result.weekNumber = row.weekNumber;
-            if (side === 'long') {
-                result.longCount = row.stepCount;
-            } else {
-                result.shortCount = row.stepCount;
-            }
+        if (r.side === 'long') {
+            byAsset[r.asset].long = r.stepsCompleted as boolean[];
+            byAsset[r.asset].longCount = r.stepCount;
+        } else if (r.side === 'short') {
+            byAsset[r.asset].short = r.stepsCompleted as boolean[];
+            byAsset[r.asset].shortCount = r.stepCount;
         }
     }
 
-    return found ? result : null;
+    return { byAsset, weekNumber: targetWeek };
 }

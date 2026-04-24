@@ -43,8 +43,22 @@ export function computeCPI(
     weights: CPIWeights = DEFAULT_CPI_WEIGHTS,
     config?: Partial<TournamentConfig>,
 ): CPIScores {
-    // If trader has zero valid positions, all scores are 0
-    if (positions.length === 0) {
+    // Phase 4 item 29-engine: filter by assetList when populated.
+    // D5 fallback — undefined/empty = permissive (all symbols observed).
+    // D16 matching — prefer mint when present, fall back to symbol.
+    const filtered = config?.assetList?.length
+        ? positions.filter((p) => {
+            const match = config.assetList!.find((a) =>
+                a.mint ? p.token_account_mint === a.mint : p.symbol === a.symbol,
+            );
+            if (!match) return false;
+            const entryDate = p.entry_date.slice(0, 10); // YYYY-MM-DD
+            return entryDate >= match.joinedAt;
+        })
+        : positions;
+
+    // If trader has zero valid positions (post-filter), all scores are 0
+    if (filtered.length === 0) {
         return {
             pnlScore: 0,
             riskScore: 0,
@@ -54,12 +68,17 @@ export function computeCPI(
         };
     }
 
-    const assetCount = Math.max(config?.supportedAssetCount ?? 4, 1);
+    // D22: variety denominator prefers assetList length when populated,
+    // falls back to supportedAssetCount for backward compat.
+    const assetCount = Math.max(
+        config?.assetList?.length ?? config?.supportedAssetCount ?? 4,
+        1,
+    );
 
-    const pnlScore = computePnlScore(positions);
-    const riskScore = computeRiskScore(positions);
-    const consistencyScore = computeConsistencyScore(positions);
-    const activityScore = computeActivityScore(positions, assetCount);
+    const pnlScore = computePnlScore(filtered);
+    const riskScore = computeRiskScore(filtered);
+    const consistencyScore = computeConsistencyScore(filtered);
+    const activityScore = computeActivityScore(filtered, assetCount);
 
     const cpiScore =
         weights.pnl * pnlScore +

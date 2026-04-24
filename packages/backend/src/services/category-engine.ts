@@ -76,6 +76,29 @@ function filterPositionsForWindow(
 }
 
 /**
+ * Phase 4 item 29-engine: filter positions by config.assetList.
+ * D5 — undefined/empty assetList = permissive (unchanged behavior).
+ * D16 — prefer mint match when present, fall back to symbol.
+ *
+ * Also applies per-asset joinedAt filter: a position is kept only if it was
+ * opened on or after the asset's joinedAt date.
+ */
+function filterByAssetList(
+    positions: AdrenaPosition[],
+    config: TournamentConfig,
+): AdrenaPosition[] {
+    if (!config.assetList?.length) return positions;
+    return positions.filter((p) => {
+        const match = config.assetList!.find((a) =>
+            a.mint ? p.token_account_mint === a.mint : p.symbol === a.symbol,
+        );
+        if (!match) return false;
+        const entryDate = p.entry_date.slice(0, 10); // YYYY-MM-DD
+        return entryDate >= match.joinedAt;
+    });
+}
+
+/**
  * Compute ROI for a position.
  * ROI = pnl / exit_size (already USD). Falls back to entry_size.
  * Returns 0 if position has no realized PnL (still open) or denominator is 0.
@@ -120,7 +143,9 @@ export function computeAllAroundScore(
     dateStr: string,
     config: TournamentConfig,
 ): AllAroundDetails {
-    const dayPositions = filterPositionsForDay(positions, dateStr);
+    // Phase 4 item 29-engine: filter by assetList first (if configured)
+    const assetFiltered = filterByAssetList(positions, config);
+    const dayPositions = filterPositionsForDay(assetFiltered, dateStr);
 
     // Phase 3 item 13 + 17: read from config (was hardcoded ALL_AROUND_MIN_TRADE_USD + ALL_AROUND_MAX_POINTS_PER_ASSET)
     const minTradeUsd = config.allAroundMinTradeUsd ?? DEFAULT_TOURNAMENT_CONFIG.allAroundMinTradeUsd;
@@ -225,7 +250,9 @@ export function computeFisherScores(
     const allShorts: FisherCandidate[] = [];
 
     for (const [wallet, positions] of walletPositions) {
-        const dayPositions = filterPositionsForDay(positions, dateStr);
+        // Phase 4 item 29-engine: assetList filter before per-day filter
+        const assetFiltered = filterByAssetList(positions, config);
+        const dayPositions = filterPositionsForDay(assetFiltered, dateStr);
 
         let bestLong: FisherCandidate | null = null;
         let bestShort: FisherCandidate | null = null;
@@ -298,14 +325,73 @@ export function computeFisherScores(
         if (bestLong) allLongs.push(bestLong);
         if (bestShort) allShorts.push(bestShort);
 
-        // Initialize all wallets with empty details (will be populated after ranking)
+        // Initialize all wallets with empty details (populated after ranking).
+        // Phase 4 item 10 + D19: added longRank, shortRank, byAsset top-level fields.
         results.set(wallet, {
+            longRank: null,
+            shortRank: null,
             longEntry: null,
             shortEntry: null,
             longPoints: 0,
             shortPoints: 0,
             totalPoints: 0,
+            byAsset: {},
         });
+    }
+
+    // Phase 4 item 10: populate byAsset per-wallet breakdown.
+    // For each wallet × asset, find best long + best short entry (using same
+    // deterministic tiebreaker as cross-wallet: proximity → ROI → position_id).
+    for (const [wallet, positions] of walletPositions) {
+        const assetFiltered = filterByAssetList(positions, config);
+        const dayPositions = filterPositionsForDay(assetFiltered, dateStr);
+        const byAsset: Record<string, {
+            longEntry: FisherEntryDetail | null;
+            shortEntry: FisherEntryDetail | null;
+        }> = {};
+
+        for (const p of dayPositions) {
+            const ohlc = ohlcData.get(p.symbol);
+            if (!ohlc) continue;
+            const range = ohlc.high - ohlc.low;
+            if (range <= 0 || (ohlc.low > 0 && range / ohlc.low < 0.001)) continue;
+            const roi = computePositionROI(p);
+
+            if (!byAsset[p.symbol]) {
+                byAsset[p.symbol] = { longEntry: null, shortEntry: null };
+            }
+
+            if (p.side === 'long') {
+                const proximity = Math.max(0, Math.min(1, 1 - ((p.entry_price - ohlc.low) / range)));
+                const current = byAsset[p.symbol].longEntry;
+                if (!current || proximity > current.proximity ||
+                    (proximity === current.proximity && roi > current.roi) ||
+                    (proximity === current.proximity && roi === current.roi && p.position_id < current.positionId)) {
+                    byAsset[p.symbol].longEntry = {
+                        symbol: p.symbol, entryPrice: p.entry_price,
+                        dayLow: ohlc.low, dayHigh: ohlc.high,
+                        proximity, roi, rank: null, rankPoints: 0,
+                        positionId: p.position_id,
+                    };
+                }
+            } else if (p.side === 'short') {
+                const proximity = Math.max(0, Math.min(1, (p.entry_price - ohlc.low) / range));
+                const current = byAsset[p.symbol].shortEntry;
+                if (!current || proximity > current.proximity ||
+                    (proximity === current.proximity && roi > current.roi) ||
+                    (proximity === current.proximity && roi === current.roi && p.position_id < current.positionId)) {
+                    byAsset[p.symbol].shortEntry = {
+                        symbol: p.symbol, entryPrice: p.entry_price,
+                        dayLow: ohlc.low, dayHigh: ohlc.high,
+                        proximity, roi, rank: null, rankPoints: 0,
+                        positionId: p.position_id,
+                    };
+                }
+            }
+        }
+
+        const existing = results.get(wallet);
+        if (existing) existing.byAsset = byAsset;
     }
 
     // Phase 2: Rank longs by proximity (descending)
@@ -330,6 +416,7 @@ export function computeFisherScores(
             positionId: candidate.positionId,
         };
         existing.longPoints = pointsFromLong;
+        existing.longRank = rank;  // D19: top-level rank field for season-manager
         existing.totalPoints += pointsFromLong;
     }
 
@@ -355,6 +442,7 @@ export function computeFisherScores(
             positionId: candidate.positionId,
         };
         existing.shortPoints = pointsFromShort;
+        existing.shortRank = rank;  // D19
         existing.totalPoints += pointsFromShort;
     }
 
@@ -364,9 +452,11 @@ export function computeFisherScores(
 // ============================================================================
 // RISK MANAGER (2-day engagement category)
 //
-// Best stop-loss trade by ROI within a 2-day window.
+// Best stop-loss trade by ROI within a 2-day window. Tightest controlled loss wins.
 // SL detection: closed_by_sl_tp === true && pnl < 0
-// Score = Math.abs(roi) * 100 (absolute value for positive leaderboard sorting)
+// Minimum trade size: config.riskManagerMinSize USD (default 1000, test 500)
+// Score formula = (1 - |roi|) × 100  — applied at the scheduler row-emission layer,
+// not inside this engine (engine returns raw trade data; scheduler converts to score).
 // Raw negative ROI preserved in details for transparency.
 //
 // Determinism:
@@ -377,19 +467,34 @@ export function computeRiskManagerScores(
     walletPositions: Map<string, AdrenaPosition[]>,
     startDate: string,
     endDate: string,
+    config: TournamentConfig,
 ): Map<string, RiskManagerDetails> {
+    // Phase 4 item 11: RM minimum trade size filter + inversion fix.
+    // Config field default 1000 USD per D-value (test 500).
+    const minSize = config.riskManagerMinSize ?? DEFAULT_TOURNAMENT_CONFIG.riskManagerMinSize;
+
     const results = new Map<string, RiskManagerDetails>();
 
     for (const [wallet, positions] of walletPositions) {
-        const windowPositions = filterPositionsForWindow(positions, startDate, endDate);
+        // Phase 4 item 29-engine: assetList filter
+        const assetFiltered = filterByAssetList(positions, config);
+        const windowPositions = filterPositionsForWindow(assetFiltered, startDate, endDate);
 
-        // Filter to SL-triggered closes with negative PnL
+        // Phase 4 item 11: minSize filter applied here
         const slTrades = windowPositions.filter((p) =>
             p.status !== 'open' &&
             p.closed_by_sl_tp === true &&
-            (p.pnl ?? 0) < 0,
+            (p.pnl ?? 0) < 0 &&
+            (p.exit_size ?? p.entry_size) >= minSize,
         );
 
+        // Phase 4 item 10c: per-asset best SL trade
+        const byAsset: Record<string, {
+            bestTrade: SLTPTradeDetail | null;
+            candidateCount: number;
+        }> = {};
+
+        // Top-level aggregate (best SL across all assets, preserved for backward-compat display)
         let bestTrade: SLTPTradeDetail | null = null;
         let bestROI = -Infinity;
 
@@ -397,28 +502,34 @@ export function computeRiskManagerScores(
             const exposure = p.exit_size ?? p.entry_size;
             if (exposure <= 0) continue;
             const roi = (p.pnl ?? 0) / exposure;
+            const trade: SLTPTradeDetail = {
+                positionId: p.position_id, symbol: p.symbol, side: p.side,
+                roi, pnl: p.pnl ?? 0, exitSize: exposure, leverage: p.entry_leverage,
+            };
 
-            // Deterministic selection: highest ROI (least negative) -> lowest position_id
-            if (
-                roi > bestROI ||
-                (roi === bestROI && bestTrade !== null && p.position_id < bestTrade.positionId)
-            ) {
+            // Per-asset best (deterministic: highest ROI → lowest position_id)
+            if (!byAsset[p.symbol]) {
+                byAsset[p.symbol] = { bestTrade: null, candidateCount: 0 };
+            }
+            byAsset[p.symbol].candidateCount++;
+            const current = byAsset[p.symbol].bestTrade;
+            if (!current || roi > current.roi ||
+                (roi === current.roi && p.position_id < current.positionId)) {
+                byAsset[p.symbol].bestTrade = trade;
+            }
+
+            // Top-level aggregate best (same determinism)
+            if (roi > bestROI ||
+                (roi === bestROI && bestTrade !== null && p.position_id < bestTrade.positionId)) {
                 bestROI = roi;
-                bestTrade = {
-                    positionId: p.position_id,
-                    symbol: p.symbol,
-                    side: p.side,
-                    roi,
-                    pnl: p.pnl ?? 0,
-                    exitSize: exposure,
-                    leverage: p.entry_leverage,
-                };
+                bestTrade = trade;
             }
         }
 
         results.set(wallet, {
             bestTrade,
             candidateCount: slTrades.length,
+            byAsset,
         });
     }
 
@@ -440,18 +551,27 @@ export function computeHumbleOneScores(
     walletPositions: Map<string, AdrenaPosition[]>,
     startDate: string,
     endDate: string,
+    config: TournamentConfig,
 ): Map<string, HumbleOneDetails> {
     const results = new Map<string, HumbleOneDetails>();
 
     for (const [wallet, positions] of walletPositions) {
-        const windowPositions = filterPositionsForWindow(positions, startDate, endDate);
+        // Phase 4 item 29-engine: assetList filter
+        const assetFiltered = filterByAssetList(positions, config);
+        const windowPositions = filterPositionsForWindow(assetFiltered, startDate, endDate);
 
-        // Filter to TP-triggered closes with positive PnL
+        // TP-triggered closes with positive PnL (no minSize filter — HumbleOne keeps all)
         const tpTrades = windowPositions.filter((p) =>
             p.status !== 'open' &&
             p.closed_by_sl_tp === true &&
             (p.pnl ?? 0) > 0,
         );
+
+        // Phase 4 item 10b: per-asset best TP trade
+        const byAsset: Record<string, {
+            bestTrade: SLTPTradeDetail | null;
+            candidateCount: number;
+        }> = {};
 
         let bestTrade: SLTPTradeDetail | null = null;
         let bestROI = -Infinity;
@@ -460,28 +580,34 @@ export function computeHumbleOneScores(
             const exposure = p.exit_size ?? p.entry_size;
             if (exposure <= 0) continue;
             const roi = (p.pnl ?? 0) / exposure;
+            const trade: SLTPTradeDetail = {
+                positionId: p.position_id, symbol: p.symbol, side: p.side,
+                roi, pnl: p.pnl ?? 0, exitSize: exposure, leverage: p.entry_leverage,
+            };
 
-            // Deterministic selection: highest ROI -> lowest position_id
-            if (
-                roi > bestROI ||
-                (roi === bestROI && bestTrade !== null && p.position_id < bestTrade.positionId)
-            ) {
+            // Per-asset best (deterministic: highest ROI → lowest position_id)
+            if (!byAsset[p.symbol]) {
+                byAsset[p.symbol] = { bestTrade: null, candidateCount: 0 };
+            }
+            byAsset[p.symbol].candidateCount++;
+            const current = byAsset[p.symbol].bestTrade;
+            if (!current || roi > current.roi ||
+                (roi === current.roi && p.position_id < current.positionId)) {
+                byAsset[p.symbol].bestTrade = trade;
+            }
+
+            // Top-level aggregate best (same determinism)
+            if (roi > bestROI ||
+                (roi === bestROI && bestTrade !== null && p.position_id < bestTrade.positionId)) {
                 bestROI = roi;
-                bestTrade = {
-                    positionId: p.position_id,
-                    symbol: p.symbol,
-                    side: p.side,
-                    roi,
-                    pnl: p.pnl ?? 0,
-                    exitSize: exposure,
-                    leverage: p.entry_leverage,
-                };
+                bestTrade = trade;
             }
         }
 
         results.set(wallet, {
             bestTrade,
             candidateCount: tpTrades.length,
+            byAsset,
         });
     }
 

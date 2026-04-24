@@ -12,7 +12,7 @@ import {
     type DailyCategoryScore,
     type CategorySlug,
 } from '@/lib/api';
-import { QUEST_DESCRIPTIONS, FF_DESCRIPTION, type QuestDescription } from '@/lib/quest-descriptions';
+import { QUEST_DESCRIPTIONS, FF_DESCRIPTION, getLeverageMasterDescription, type QuestDescription } from '@/lib/quest-descriptions';
 import { CPI_DESCRIPTION } from '@/lib/cpi-description';
 import {
     ArrowLeft,
@@ -45,6 +45,19 @@ const QUEST_LABELS: Record<string, string> = {
     leverage_master_short: 'Leverage Master (Short)',
 };
 
+// Phase 4 item 30: returns human label for a category slug.
+// Handles the 5 non-LM + 2 legacy LM slugs from QUEST_LABELS above,
+// plus per-asset LM slugs (leverage_master_SYMBOL_long/_short) via regex parse.
+function getQuestLabel(category: string): string {
+    if (QUEST_LABELS[category]) return QUEST_LABELS[category];
+    const match = category.match(/^leverage_master_(.+)_(long|short)$/);
+    if (match) {
+        const [, symbol, side] = match;
+        return `Leverage Master ${symbol} (${side === 'long' ? 'Long' : 'Short'})`;
+    }
+    return category;
+}
+
 const CPI_COMPONENTS = [
     { key: 'pnlScore', label: 'PnL', color: '#22c55e' },
     { key: 'riskScore', label: 'Risk', color: '#3b82f6' },
@@ -55,11 +68,30 @@ const CPI_COMPONENTS = [
 type PageTab = 'general' | 'quests';
 type QuestPeriod = 'daily' | '2day' | 'weekly';
 
-const PERIOD_CATEGORIES: Record<QuestPeriod, CategorySlug[]> = {
-    daily: ['all_around', 'bottom_fisher', 'top_tick_traveler'],
-    '2day': ['risk_manager', 'humble_one'],
-    weekly: ['leverage_master_long', 'leverage_master_short'],
-};
+// Phase 4 item 30: PERIOD_CATEGORIES.weekly is now per-asset when assetList is populated.
+// Legacy fallback (undefined/empty assetList) → static 2-slug list for pre-Phase-4 data.
+function getPeriodCategories(
+    period: QuestPeriod,
+    assetList?: Array<{ symbol: string }>,
+): CategorySlug[] {
+    switch (period) {
+        case 'daily':
+            return ['all_around', 'bottom_fisher', 'top_tick_traveler'];
+        case '2day':
+            return ['risk_manager', 'humble_one'];
+        case 'weekly': {
+            if (assetList?.length) {
+                const slugs: CategorySlug[] = [];
+                for (const asset of assetList) {
+                    slugs.push(`leverage_master_${asset.symbol}_long` as CategorySlug);
+                    slugs.push(`leverage_master_${asset.symbol}_short` as CategorySlug);
+                }
+                return slugs;
+            }
+            return ['leverage_master_long', 'leverage_master_short'];
+        }
+    }
+}
 
 const PERIOD_LABELS: Record<QuestPeriod, string> = {
     daily: 'Daily',
@@ -100,6 +132,7 @@ function shortWallet(wallet: string): string {
 function extractQuestColumns(
     category: string,
     details: unknown,
+    assetListLength?: number,
 ): { label: string; value: string }[] {
     if (!details || typeof details !== 'object') return [];
     const d = details as Record<string, unknown>;
@@ -111,8 +144,10 @@ function extractQuestColumns(
             const avgRoi = scores && scores.length > 0
                 ? scores.reduce((s, a) => s + a.bestROI, 0) / scores.length
                 : 0;
+            // Phase 4 V8: denominator from assetList when populated, fallback 4 for legacy tournaments
+            const denom = assetListLength ?? 4;
             return [
-                { label: 'Eligible Trades', value: `${count}/4` },
+                { label: 'Eligible Trades', value: `${count}/${denom}` },
                 { label: 'ROI', value: `${(avgRoi * 100).toFixed(2)}%` },
             ];
         }
@@ -140,22 +175,18 @@ function extractQuestColumns(
                 { label: 'ROI', value: `${(trade.roi * 100).toFixed(2)}%` },
             ];
         }
-        case 'leverage_master_long': {
-            const count = (d.longCount as number) ?? 0;
-            const total = (d.long as boolean[])?.length ?? 10;
-            return [
-                { label: 'Steps', value: `${count}/${total}` },
-            ];
-        }
-        case 'leverage_master_short': {
-            const count = (d.shortCount as number) ?? 0;
-            const total = (d.short as boolean[])?.length ?? 10;
-            return [
-                { label: 'Steps', value: `${count}/${total}` },
-            ];
-        }
-        default:
+        default: {
+            // Phase 4 item 30: LM slugs are per-asset (leverage_master_${symbol}_${side}).
+            // Legacy slugs (leverage_master_long/_short) also match — backend emits
+            // stepCount in details for both cases.
+            if (category.startsWith('leverage_master_')) {
+                const count = (d.stepCount as number) ?? 0;
+                return [
+                    { label: 'Steps', value: `${count}/10` },
+                ];
+            }
             return [];
+        }
     }
 }
 
@@ -207,7 +238,8 @@ export default function LeaderboardPage({ params }: { params: Promise<{ id: stri
 
     const loadQuestScores = useCallback(async (period: QuestPeriod, date: string) => {
         setQuestLoading(true);
-        const categories = PERIOD_CATEGORIES[period];
+        // Phase 4 item 30: categories for weekly tab are per-asset from tournament.config.assetList
+        const categories = getPeriodCategories(period, data?.tournament?.config?.assetList);
         const newScores = new Map<string, DailyCategoryScore[]>();
         try {
             const results = await Promise.allSettled(
@@ -372,7 +404,7 @@ export default function LeaderboardPage({ params }: { params: Promise<{ id: stri
                     {isForge && <RegisterButton status={data.tournament.status} onClick={() => setShowRegModal(true)} />}
                 </div>
                 {isForge && data.tournament.config.prizeTable && (
-                    <PrizeInfo prizeTable={data.tournament.config.prizeTable} />
+                    <PrizeInfo prizeTable={data.tournament.config.prizeTable} topPercentCutoff={data.tournament.config.topPercentCutoff} />
                 )}
             </div>
 
@@ -426,6 +458,7 @@ export default function LeaderboardPage({ params }: { params: Promise<{ id: stri
                     onToggle={toggleExpand}
                     isForge={isForge}
                     prizeTable={data.tournament.config.prizeTable}
+                    topPercentCutoff={data.tournament.config.topPercentCutoff}
                 />
             ) : (
                 <QuestLeaderboards
@@ -434,6 +467,7 @@ export default function LeaderboardPage({ params }: { params: Promise<{ id: stri
                     questScores={questScores}
                     questLoading={questLoading}
                     expandedRules={expandedRules}
+                    assetList={data?.tournament?.config?.assetList}
                     onPeriodChange={setQuestPeriod}
                     onNavigateDate={navigateDate}
                     onToggleRules={toggleRules}
@@ -482,11 +516,12 @@ interface GeneralLeaderboardProps {
         skillPrizes: number[];
         rafflePrizes: number[];
     };
+    topPercentCutoff?: number;  // Phase 4 V9: dynamic TOP N% rendering
 }
 
 function GeneralLeaderboard({
     entries, expandedWallet, breakdown, breakdownLoading,
-    searchQuery, onSearch, onToggle, isForge, prizeTable,
+    searchQuery, onSearch, onToggle, isForge, prizeTable, topPercentCutoff,
 }: GeneralLeaderboardProps) {
     // Split-aware prize per rank (accounts for ties).
     // Tied wallets at rank N share (sum of skillPrizes[N-1..N+K-2]) / K.
@@ -556,6 +591,7 @@ function GeneralLeaderboard({
                                 isForge={isForge}
                                 prizeTable={prizeTable}
                                 prizesByRank={prizesByRank}
+                                topPercentCutoff={topPercentCutoff}
                             />
                         ))}
                         {entries.length === 0 && (
@@ -590,9 +626,10 @@ interface ForgeRowProps {
         rafflePrizes: number[];
     };
     prizesByRank: Map<number, number>;
+    topPercentCutoff?: number;  // Phase 4 V9
 }
 
-function ForgeRow({ entry, isExpanded, onToggle, breakdown, breakdownLoading, isForge, prizeTable, prizesByRank }: ForgeRowProps) {
+function ForgeRow({ entry, isExpanded, onToggle, breakdown, breakdownLoading, isForge, prizeTable, prizesByRank, topPercentCutoff }: ForgeRowProps) {
     const medalColors = ['#fbbf24', '#94a3b8', '#cd7f32'];
 
     return (
@@ -666,7 +703,9 @@ function ForgeRow({ entry, isExpanded, onToggle, breakdown, breakdownLoading, is
                         background: entry.isTopPercent ? 'rgba(34, 197, 94, 0.15)' : 'rgba(251, 191, 36, 0.15)',
                         color: entry.isTopPercent ? '#22c55e' : '#fbbf24',
                     }}>
-                        {entry.isTopPercent ? 'TOP 30%' : 'RAFFLE'}
+                        {entry.isTopPercent
+                            ? `TOP ${Math.round((topPercentCutoff ?? 0.30) * 100)}%`
+                            : 'RAFFLE'}
                     </span>
                 </td>
             </tr>
@@ -743,10 +782,12 @@ function HorizontalBar({ label, value, max, color }: HorizontalBarProps) {
 // --------------------------------------------------------------------------
 
 function QuestBreakdownBars({ breakdown }: { breakdown: WalletBreakdown }) {
-    const entries = Object.entries(QUEST_LABELS).map(([key, label]) => ({
+    // Phase 4 item 30: iterate actual breakdown keys (can include per-asset LM slugs),
+    // using getQuestLabel for human-readable display names.
+    const entries = Object.entries(breakdown.breakdown).map(([key, data]) => ({
         key,
-        label,
-        score: breakdown.breakdown[key]?.totalScore ?? 0,
+        label: getQuestLabel(key),
+        score: data?.totalScore ?? 0,
     }));
 
     const maxScore = Math.max(...entries.map((e) => Math.abs(e.score)), 1);
@@ -770,6 +811,7 @@ interface QuestLeaderboardsProps {
     questScores: Map<string, DailyCategoryScore[]>;
     questLoading: boolean;
     expandedRules: Set<string>;
+    assetList?: Array<{ symbol: string }>;  // Phase 4: for per-asset LM slug generation
     onPeriodChange: (p: QuestPeriod) => void;
     onNavigateDate: (dir: number) => void;
     onToggleRules: (cat: string) => void;
@@ -782,7 +824,7 @@ interface QuestLeaderboardsProps {
 
 function QuestLeaderboards({
     questPeriod, questDate, questScores, questLoading,
-    expandedRules, onPeriodChange, onNavigateDate, onToggleRules, onJumpToToday,
+    expandedRules, assetList, onPeriodChange, onNavigateDate, onToggleRules, onJumpToToday,
     searchQuery, onSearch, searchedWallet, isForge,
 }: QuestLeaderboardsProps) {
     const periodLabel = questPeriod === 'daily' ? `Day: ${questDate}`
@@ -870,7 +912,7 @@ function QuestLeaderboards({
                     Loading quest data...
                 </div>
             ) : (
-                PERIOD_CATEGORIES[questPeriod].map((cat) => (
+                getPeriodCategories(questPeriod, assetList).map((cat) => (
                     <CategoryLeaderboard
                         key={cat}
                         category={cat}
@@ -879,6 +921,7 @@ function QuestLeaderboards({
                         onToggleRules={() => onToggleRules(cat)}
                         isForge={isForge}
                         searchedWallet={searchedWallet}
+                        assetListLength={assetList?.length}
                     />
                 ))
             )}
@@ -897,11 +940,23 @@ interface CategoryLeaderboardProps {
     onToggleRules: () => void;
     isForge: boolean;
     searchedWallet: string | null;
+    assetListLength?: number;  // Phase 4 V8: for extractQuestColumns denominator
 }
 
-function CategoryLeaderboard({ category, scores, isRulesExpanded, onToggleRules, isForge, searchedWallet }: CategoryLeaderboardProps) {
-    const questInfo: QuestDescription | undefined = QUEST_DESCRIPTIONS[category];
-    const label = QUEST_LABELS[category] ?? category;
+function CategoryLeaderboard({ category, scores, isRulesExpanded, onToggleRules, isForge, searchedWallet, assetListLength }: CategoryLeaderboardProps) {
+    // Phase 4 item 30: LM descriptions are per-asset, rendered via helper.
+    // Static non-LM entries still come from QUEST_DESCRIPTIONS record.
+    const lmMatch = category.match(/^leverage_master_(.+)?_?(long|short)$/);
+    const lmSide: 'long' | 'short' | null = category.startsWith('leverage_master_')
+        ? (category.endsWith('_long') ? 'long' : 'short')
+        : null;
+    const lmAsset = lmMatch?.[1] && lmMatch[1] !== 'long' && lmMatch[1] !== 'short'
+        ? lmMatch[1]
+        : undefined;
+    const questInfo: QuestDescription | undefined = lmSide
+        ? getLeverageMasterDescription(lmSide, lmAsset)
+        : QUEST_DESCRIPTIONS[category];
+    const label = getQuestLabel(category);
 
     // Full sorted list (not sliced) — needed to compute the searched wallet's rank.
     const fullSorted = [...scores]
@@ -920,7 +975,7 @@ function CategoryLeaderboard({ category, scores, isRulesExpanded, onToggleRules,
     const showRow6 = searchedWallet !== null && !searchedInTop5;
 
     const sampleColumns = sorted.length > 0
-        ? extractQuestColumns(category, sorted[0].details)
+        ? extractQuestColumns(category, sorted[0].details, assetListLength)
         : [];
 
     const medalColors = ['#fbbf24', '#94a3b8', '#cd7f32'];
@@ -984,7 +1039,7 @@ function CategoryLeaderboard({ category, scores, isRulesExpanded, onToggleRules,
                     </thead>
                     <tbody>
                         {sorted.map((score, idx) => {
-                            const cols = extractQuestColumns(category, score.details);
+                            const cols = extractQuestColumns(category, score.details, assetListLength);
                             return (
                                 <tr
                                     key={score.wallet}
@@ -1059,7 +1114,7 @@ function CategoryLeaderboard({ category, scores, isRulesExpanded, onToggleRules,
                                                 {shortWallet(searchedWallet!)}
                                             </span>
                                         </td>
-                                        {extractQuestColumns(category, searchedEntry.details).map((col) => (
+                                        {extractQuestColumns(category, searchedEntry.details, assetListLength).map((col) => (
                                             <td key={col.label} style={tdStyle}>{col.value}</td>
                                         ))}
                                         <td style={{ ...tdStyle, fontWeight: 600, color: '#f1f5f9' }}>
@@ -1269,13 +1324,14 @@ function RegisterModal({
 // Prize Info — totals displayed in the Forge header
 // --------------------------------------------------------------------------
 
-function PrizeInfo({ prizeTable }: {
+function PrizeInfo({ prizeTable, topPercentCutoff }: {
     prizeTable: {
         totalPool: number;
         currency: string;
         skillPrizes: number[];
         rafflePrizes: number[];
     };
+    topPercentCutoff?: number;  // Phase 4 V9
 }) {
     const skillTotal = prizeTable.skillPrizes.reduce((sum, v) => sum + v, 0);
     const raffleTotal = prizeTable.rafflePrizes.reduce((sum, v) => sum + v, 0);
@@ -1316,7 +1372,7 @@ function PrizeInfo({ prizeTable }: {
             <div style={{ display: 'flex', gap: '2rem' }}>
                 <div>
                     <div style={{ fontSize: '0.6875rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.25rem' }}>
-                        Top 30% Skill
+                        Top {Math.round((topPercentCutoff ?? 0.30) * 100)}% Skill
                     </div>
                     <div style={{ fontSize: '1rem', fontWeight: 600, color: '#22c55e', fontFamily: 'monospace' }}>
                         {formatAmount(skillTotal)} {prizeTable.currency}

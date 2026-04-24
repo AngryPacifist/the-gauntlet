@@ -43,13 +43,12 @@ router.get('/:tournamentId/:wallet', async (req, res) => {
         const progress = await getQuestProgress(tournamentId, wallet, weekNumber);
 
         if (!progress) {
+            // Phase 4 item 30: new shape is {byAsset: Record<symbol, {...}>, weekNumber}.
+            // Empty byAsset = no progress yet (frontend handles empty state).
             res.json({
                 success: true,
                 data: {
-                    long: Array(10).fill(false),
-                    short: Array(10).fill(false),
-                    longCount: 0,
-                    shortCount: 0,
+                    byAsset: {},
                     weekNumber: weekNumber ?? 0,
                 },
             });
