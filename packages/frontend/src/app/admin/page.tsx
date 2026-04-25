@@ -76,6 +76,8 @@ export default function AdminPage() {
     const [showCreateModal, setShowCreateModal] = useState(false);
     const [newName, setNewName] = useState('');
     const [creating, setCreating] = useState(false);
+    // Phase 4: modal-internal admin secret draft (committed to global adminSecret on Apply or form submit)
+    const [modalSecretDraft, setModalSecretDraft] = useState('');
 
     // Config fields (defaults match DEFAULT_TOURNAMENT_CONFIG)
     // Basic + round
@@ -137,6 +139,8 @@ export default function AdminPage() {
     const [seasonWeeks, setSeasonWeeks] = useState(3);
     const [seasonQualSlots, setSeasonQualSlots] = useState(4);
     const [creatingSeason, setCreatingSeason] = useState(false);
+    // Phase 4: same draft pattern for season modal
+    const [seasonSecretDraft, setSeasonSecretDraft] = useState('');
 
     // Raffle draw modal
     const [showDrawModal, setShowDrawModal] = useState(false);
@@ -182,6 +186,32 @@ export default function AdminPage() {
     useEffect(() => {
         loadAll();
     }, []);
+
+    // Phase 4: reset modal-internal admin secret drafts when modals close.
+    // Prevents typed-but-not-applied secrets from persisting across reopen.
+    useEffect(() => {
+        if (!showCreateModal) setModalSecretDraft('');
+    }, [showCreateModal]);
+    useEffect(() => {
+        if (!showSeasonModal) setSeasonSecretDraft('');
+    }, [showSeasonModal]);
+
+    // Phase 4: idempotent fetch of tradable assets. Called from the New Tournament
+    // button onClick (dashboard-first auth flow) and from the modal Apply button
+    // (modal-first auth flow). Takes secret as explicit arg to avoid stale-closure
+    // issues with React state updates. Clears any prior error on success.
+    const loadTradableAssetsIfReady = async (secret: string) => {
+        if (!secret || cfgTradableAssets.length > 0) return;
+        try {
+            const assets = await adminGetTradableAssets(secret);
+            setCfgTradableAssets(assets);
+            setCfgTradableAssetsError(null);
+        } catch (err) {
+            const msg = err instanceof Error ? err.message : 'Failed to load tradable assets';
+            setCfgTradableAssetsError(msg);
+            addLog(`Warning: ${msg} — asset list dropdown falling back to free-text`);
+        }
+    };
 
     async function loadAll() {
         try {
@@ -243,6 +273,13 @@ export default function AdminPage() {
     async function handleCreate(e: React.FormEvent) {
         e.preventDefault();
         if (!newName.trim()) return;
+
+        // Phase 4: effective secret = global adminSecret OR modal draft (form submit without Apply)
+        const effectiveSecret = adminSecret || modalSecretDraft;
+        if (!effectiveSecret) {
+            showToast('Admin secret required', 'error');
+            return;
+        }
 
         // Parse + validate array fields (D3 — reject malformed input with clear error)
         const parseNums = (s: string) => s.split(',').map((x) => Number(x.trim())).filter((n) => !isNaN(n));
@@ -325,7 +362,12 @@ export default function AdminPage() {
 
         try {
             setCreating(true);
-            const result = await createTournament(newName.trim(), config, adminSecret);
+            const result = await createTournament(newName.trim(), config, effectiveSecret);
+            // Phase 4: commit draft to global if user submitted without clicking Apply
+            if (!adminSecret && modalSecretDraft) {
+                setAdminSecret(modalSecretDraft);
+                setModalSecretDraft('');
+            }
             addLog(`Created tournament "${newName}" (id: ${result.id})`);
             showToast(`Tournament "${newName}" created`, 'success');
             resetConfigDefaults();
@@ -627,14 +669,21 @@ export default function AdminPage() {
 
     async function handleCreateSeason(e: React.FormEvent) {
         e.preventDefault();
-        if (!adminSecret) { showToast('Enter admin secret first', 'error'); return; }
+        // Phase 4: effective secret = global adminSecret OR modal draft (form submit without Apply)
+        const effectiveSecret = adminSecret || seasonSecretDraft;
+        if (!effectiveSecret) { showToast('Admin secret required', 'error'); return; }
         if (!seasonName.trim()) return;
         try {
             setCreatingSeason(true);
             const result = await adminCreateSeason(seasonName.trim(), {
                 weekCount: seasonWeeks,
                 qualificationSlots: seasonQualSlots,
-            }, adminSecret);
+            }, effectiveSecret);
+            // Phase 4: commit draft to global if user submitted without clicking Apply
+            if (!adminSecret && seasonSecretDraft) {
+                setAdminSecret(seasonSecretDraft);
+                setSeasonSecretDraft('');
+            }
             addLog(`Created season "${seasonName}" (id: ${result.id}) — ${seasonWeeks} weeks, ${seasonQualSlots} qual slots`);
             showToast(`Season "${seasonName}" created`, 'success');
             setSeasonName('');
@@ -755,19 +804,10 @@ export default function AdminPage() {
                         <Trophy size={16} style={{ marginRight: 6, verticalAlign: 'middle' }} />
                         Tournament Controls
                     </h2>
-                    <button className="btn btn--primary" onClick={async () => {
+                    <button className="btn btn--primary" onClick={() => {
                         setShowCreateModal(true);
-                        // Phase 4: lazy-fetch tradable assets on first modal open
-                        if (cfgTradableAssets.length === 0 && !cfgTradableAssetsError && adminSecret) {
-                            try {
-                                const assets = await adminGetTradableAssets(adminSecret);
-                                setCfgTradableAssets(assets);
-                            } catch (err) {
-                                const msg = err instanceof Error ? err.message : 'Failed to load tradable assets';
-                                setCfgTradableAssetsError(msg);
-                                addLog(`Warning: ${msg} — asset list dropdown falling back to free-text`);
-                            }
-                        }
+                        // Phase 4: dashboard-first auth flow — fetch fires immediately if secret already set
+                        loadTradableAssetsIfReady(adminSecret);
                     }}>
                         <Plus size={14} /> New Tournament
                     </button>
@@ -1193,6 +1233,45 @@ export default function AdminPage() {
                         </div>
 
                         <form onSubmit={handleCreate} className={styles.modalForm}>
+                            {/* Phase 4: in-modal admin secret entry. Local draft state during typing
+                                (NOT bound to global adminSecret — avoids unmount-mid-type from the
+                                conditional render) + explicit Apply button to commit. handleCreate
+                                also accepts the draft as fallback if user submits without applying. */}
+                            {!adminSecret && (
+                                <div className={styles.formGroup}>
+                                    <label className={styles.formLabel}>
+                                        <Lock size={12} style={{ marginRight: 4, verticalAlign: 'middle' }} />
+                                        Admin Secret
+                                    </label>
+                                    <div style={{ display: 'flex', gap: 'var(--space-sm)' }}>
+                                        <input
+                                            type="password"
+                                            className="input input--mono"
+                                            placeholder="Required to create — paste your secret + click Apply"
+                                            value={modalSecretDraft}
+                                            onChange={(e) => setModalSecretDraft(e.target.value)}
+                                            style={{ flex: 1 }}
+                                        />
+                                        <button
+                                            type="button"
+                                            className="btn btn--secondary"
+                                            disabled={!modalSecretDraft.trim()}
+                                            onClick={() => {
+                                                const draft = modalSecretDraft;
+                                                setAdminSecret(draft);
+                                                setModalSecretDraft('');
+                                                loadTradableAssetsIfReady(draft);
+                                            }}
+                                        >
+                                            Apply
+                                        </button>
+                                    </div>
+                                    <span className={styles.formHint}>
+                                        Click Apply to authenticate and load the asset dropdown. Auto-hides once set.
+                                    </span>
+                                </div>
+                            )}
+
                             <div className={styles.formGroup}>
                                 <label className={styles.formLabel}>Tournament Name</label>
                                 <input
@@ -1401,6 +1480,11 @@ export default function AdminPage() {
                                 Initial assets join scoring from tournament creation onward (effectively &quot;from start&quot;).
                                 Mid-tournament additions (future admin UI) will respect a weekly boundary.
                             </p>
+                            {!adminSecret && cfgTradableAssets.length === 0 && !cfgTradableAssetsError && (
+                                <p style={{ color: 'var(--text-muted)', fontSize: '0.75rem', marginBottom: '0.5rem', fontStyle: 'italic' }}>
+                                    Enter admin secret in the field at the top of this modal to load the asset dropdown. Free-text input shown as fallback.
+                                </p>
+                            )}
                             {cfgTradableAssetsError && (
                                 <p style={{ color: 'var(--status-warning)', fontSize: '0.75rem', marginBottom: '0.5rem' }}>
                                     Asset list fetch failed — falling back to free-text (mint will be missing; engines use symbol-only match).
@@ -1483,6 +1567,42 @@ export default function AdminPage() {
                         </div>
 
                         <form onSubmit={handleCreateSeason} className={styles.modalForm}>
+                            {/* Phase 4: in-modal admin secret entry (parallel to tournament modal).
+                                Local draft + Apply commit pattern. handleCreateSeason also accepts
+                                the draft as fallback if user submits without applying. */}
+                            {!adminSecret && (
+                                <div className={styles.formGroup}>
+                                    <label className={styles.formLabel}>
+                                        <Lock size={12} style={{ marginRight: 4, verticalAlign: 'middle' }} />
+                                        Admin Secret
+                                    </label>
+                                    <div style={{ display: 'flex', gap: 'var(--space-sm)' }}>
+                                        <input
+                                            type="password"
+                                            className="input input--mono"
+                                            placeholder="Required to create — paste your secret + click Apply"
+                                            value={seasonSecretDraft}
+                                            onChange={(e) => setSeasonSecretDraft(e.target.value)}
+                                            style={{ flex: 1 }}
+                                        />
+                                        <button
+                                            type="button"
+                                            className="btn btn--secondary"
+                                            disabled={!seasonSecretDraft.trim()}
+                                            onClick={() => {
+                                                setAdminSecret(seasonSecretDraft);
+                                                setSeasonSecretDraft('');
+                                            }}
+                                        >
+                                            Apply
+                                        </button>
+                                    </div>
+                                    <span className={styles.formHint}>
+                                        Click Apply to authenticate. Auto-hides once set.
+                                    </span>
+                                </div>
+                            )}
+
                             <div className={styles.formGroup}>
                                 <label className={styles.formLabel}>Season Name</label>
                                 <input type="text" className="input" placeholder="e.g., Season 1" value={seasonName} onChange={(e) => setSeasonName(e.target.value)} autoFocus />
