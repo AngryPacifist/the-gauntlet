@@ -732,3 +732,52 @@ export async function getWalletBreakdown(
 ): Promise<WalletBreakdown> {
     return apiFetch<WalletBreakdown>(`/api/categories/${tournamentId}/wallet/${wallet}`);
 }
+
+// --------------------------------------------------------------------------
+// Cumulative Leaderboard (Phase 5 item 20)
+//
+// Bundled payload for the /leaderboard page — current tournament (slim, top 10)
+// + current season standings + all-time cross-tournament aggregation.
+// --------------------------------------------------------------------------
+
+export interface CumulativeTournamentEntry {
+    rank: number;
+    wallet: string;
+    finalScore: number;
+    cpiScore: number;
+    questPoints: number;
+}
+
+export interface CumulativeSeasonEntry {
+    rank: number;
+    wallet: string;
+    totalPoints: number;
+    weeksParticipated: number;
+    bestPlacement: number | null;
+}
+
+export interface CumulativeAllTimeEntry {
+    rank: number;
+    wallet: string;
+    totalFinalScore: number;
+    tournamentsPlayed: number;
+}
+
+export interface CumulativeLeaderboardData {
+    current: {
+        tournament: { id: number; name: string; status: string; format: string } | null;
+        topEntries: CumulativeTournamentEntry[];
+    };
+    season: {
+        season: { id: number; name: string; currentWeek: number; status: string } | null;
+        standings: CumulativeSeasonEntry[];
+    };
+    allTime: {
+        standings: CumulativeAllTimeEntry[];
+        totalTournaments: number;
+    };
+}
+
+export async function getCumulativeLeaderboard(): Promise<CumulativeLeaderboardData> {
+    return apiFetch<CumulativeLeaderboardData>('/api/leaderboard');
+}

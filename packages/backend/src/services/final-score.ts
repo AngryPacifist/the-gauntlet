@@ -69,8 +69,8 @@ export interface FinalScoreResult {
     activityScore: number;
     questPoints: number;
     finalScore: number;        // CPI + questPoints
-    raffleTickets: number;     // floor(CPI × 0.5) + floor(questPoints × 20)
-    closedPositionCount: number; // for ≥10 threshold check
+    raffleTickets: number;     // floor(CPI × cpiTicketMultiplier) + floor(questPoints × questTicketMultiplier)
+    closedPositionCount: number; // gates raffle eligibility per config.raffleMinClosedPositions
 }
 
 // --------------------------------------------------------------------------

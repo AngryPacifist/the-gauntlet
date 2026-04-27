@@ -22,7 +22,7 @@
 //     but no longer consumed (replaced by drawdown metric April 2026).
 // ============================================================================
 
-import { eq, and } from 'drizzle-orm';
+import { eq, and, ne } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import {
     tournaments,
@@ -205,6 +205,38 @@ export async function startTournament(
     if (!tournament) throw new Error('Tournament not found');
     if (tournament.status !== 'registration') {
         throw new Error(`Cannot start tournament in "${tournament.status}" status`);
+    }
+
+    // Phase 5 item 21: enforce singleton — only one tournament can be `active` at a time.
+    // This is the funnel for ALL `active` transitions in this function:
+    //   - rank_only branch (Forge — "The Forge" round): flips status to active before returning
+    //   - bracket branch (Gauntlet — Round 1 "First Blood"): flips status to active before returning
+    // season-manager paths (startSeason / advanceWeek / qualifyForFinal) only CREATE tournaments
+    // in registration status; they don't activate. So this single guard covers every path.
+    //
+    // Race-safety (D-21.1): app-level check only. Single-operator admin makes the race window
+    // microseconds; if two starts collide, the second sees status='active' on the first and
+    // 409s out cleanly via the thrown error.
+    //
+    // `ne(tournaments.id, tournamentId)` excludes the subject tournament — defensive, since the
+    // status check above already guarantees it's in registration (not active), but explicit
+    // self-exclusion is robust against future status-flow changes.
+    const [activeOther] = await db
+        .select({ id: tournaments.id, name: tournaments.name })
+        .from(tournaments)
+        .where(
+            and(
+                eq(tournaments.status, 'active'),
+                ne(tournaments.id, tournamentId),
+            ),
+        )
+        .limit(1);
+
+    if (activeOther) {
+        throw new Error(
+            `Cannot start tournament ${tournamentId}: tournament ${activeOther.id} ("${activeOther.name}") is already active. ` +
+            `Only one tournament can be active at a time. Cancel or complete the active tournament first.`,
+        );
     }
 
     const config = resolveConfig(tournament.config);

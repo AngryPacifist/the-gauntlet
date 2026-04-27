@@ -13,6 +13,7 @@ import seasonsRoutes from './routes/seasons.js';
 import categoriesRoutes from './routes/categories.js';
 import questRoutes from './routes/quests.js';
 import raffleRoutes from './routes/raffle.js';
+import leaderboardRoutes from './routes/leaderboard.js';
 import { startScheduler, stopScheduler } from './services/scheduler.js';
 
 const app = express();
@@ -49,6 +50,7 @@ app.use('/api/seasons', seasonsRoutes);
 app.use('/api/categories', categoriesRoutes);
 app.use('/api/quests', questRoutes);
 app.use('/api/raffle', raffleRoutes);
+app.use('/api/leaderboard', leaderboardRoutes);
 
 // 404 handler
 app.use((_req, res) => {
