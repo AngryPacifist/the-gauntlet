@@ -25,9 +25,21 @@ import {
 } from '../services/category-engine.js';
 import type { AdrenaPosition, AllAroundDetails, CategoryScoreRow } from '../types.js';
 import { resolveConfig } from '../types.js';
+import { createCache } from '../services/cache.js';
 
 const router = Router();
 const adrenaClient = new AdrenaClient();
+
+// Phase 6 — TTL cache for wallet breakdown endpoint.
+// Cache key = `${tournamentId}:${wallet}`. Backing data updates at 15-min scheduler
+// cadence; 5-min TTL stays just under that.
+interface WalletBreakdownData {
+    wallet: string;
+    tournamentId: number;
+    totalQuestPoints: number;
+    breakdown: Record<string, { totalScore: number; daysScored: number }>;
+}
+const walletBreakdownCache = createCache<WalletBreakdownData>();
 
 // --------------------------------------------------------------------------
 // Category validation
@@ -250,6 +262,16 @@ router.get('/:tournamentId/wallet/:wallet', async (req, res) => {
             return;
         }
 
+        // Phase 6: TTL cache check — 5-min default. Cold path is ~111 sequential DB
+        // queries (11 aggregations + ~100 in computeQuestPoints), so cache hit is
+        // the difference between 8-15s and ~0ms.
+        const cacheKey = `${tournamentId}:${wallet}`;
+        const cached = walletBreakdownCache.get(cacheKey);
+        if (cached) {
+            res.json({ success: true, data: cached });
+            return;
+        }
+
         // Phase 4 item 30: LM slugs computed per-asset from config.assetList.
         // Hoist tournament fetch + config resolution — needed by both the categories array and computeQuestPoints below.
         const [tournament] = await db
@@ -305,15 +327,17 @@ router.get('/:tournamentId/wallet/:wallet', async (req, res) => {
         const { computeQuestPoints } = await import('../services/final-score.js');
         const totalQuestPoints = await computeQuestPoints(tournamentId, wallet, config);
 
-        res.json({
-            success: true,
-            data: {
-                wallet,
-                tournamentId,
-                totalQuestPoints,
-                breakdown,
-            },
-        });
+        const data: WalletBreakdownData = {
+            wallet,
+            tournamentId,
+            totalQuestPoints,
+            breakdown,
+        };
+
+        // Phase 6: write-through cache.
+        walletBreakdownCache.set(cacheKey, data);
+
+        res.json({ success: true, data });
     } catch (error) {
         console.error('[Categories] Error getting wallet breakdown:', error);
         res.status(500).json({
