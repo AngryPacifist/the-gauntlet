@@ -271,6 +271,9 @@ CREATE INDEX IF NOT EXISTS idx_daily_category_leaderboard ON daily_category_scor
 CREATE INDEX IF NOT EXISTS idx_pyth_ohlc_lookup ON pyth_ohlc_cache(symbol, bar_date);
 CREATE INDEX IF NOT EXISTS idx_quest_progress_tournament ON quest_progress(tournament_id, week_number);
 CREATE INDEX IF NOT EXISTS idx_raffle_results_tournament ON raffle_results(tournament_id);
+CREATE INDEX IF NOT EXISTS idx_tournaments_status ON tournaments(status);
+CREATE INDEX IF NOT EXISTS idx_rounds_tournament_status ON rounds(tournament_id, status);
+CREATE INDEX IF NOT EXISTS idx_bracket_entries_bracket_cpi_desc ON bracket_entries(bracket_id, cpi_score DESC);
 `;
 
 async function migrate() {

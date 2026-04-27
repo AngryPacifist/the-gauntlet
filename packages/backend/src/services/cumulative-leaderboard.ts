@@ -17,6 +17,7 @@ import { db } from '../db/index.js';
 import { tournaments, seasons, seasonStandings } from '../db/schema.js';
 import { computeFinalScores } from './final-score.js';
 import { resolveConfig } from '../types.js';
+import { createCache } from './cache.js';
 
 // Slim shape for Tournament tab (D-20.8 — top N + link to full /leaderboard/:id)
 export interface CumulativeTournamentEntry {
@@ -60,7 +61,16 @@ export interface CumulativeLeaderboardData {
 const TOURNAMENT_TAB_TOP_N = 10;
 const ALL_TIME_TOP_N = 100; // cap rendering payload
 
+// Phase 6 — TTL cache for the bundled cumulative payload.
+// Single global key: payload reflects DB-wide state; per-tournament filtering happens inside.
+const cumulativeCache = createCache<CumulativeLeaderboardData>();
+const CUMULATIVE_CACHE_KEY = 'cumulative-leaderboard:global';
+
 export async function computeCumulativeLeaderboard(): Promise<CumulativeLeaderboardData> {
+    // Phase 6: TTL cache check.
+    const cached = cumulativeCache.get(CUMULATIVE_CACHE_KEY);
+    if (cached) return cached;
+
     // --- Tournament tab — current active (singleton per item 21) ---
     // Fallback chain matches /forge redirector + layout.tsx Tournament-link logic:
     // active → most-recent completed → most-recent overall.
@@ -206,7 +216,7 @@ export async function computeCumulativeLeaderboard(): Promise<CumulativeLeaderbo
         };
     }).slice(0, ALL_TIME_TOP_N);
 
-    return {
+    const result: CumulativeLeaderboardData = {
         current: currentTab,
         season: seasonTab,
         allTime: {
@@ -214,4 +224,8 @@ export async function computeCumulativeLeaderboard(): Promise<CumulativeLeaderbo
             totalTournaments: allTournaments.length,
         },
     };
+
+    // Phase 6: write-through cache.
+    cumulativeCache.set(CUMULATIVE_CACHE_KEY, result);
+    return result;
 }

@@ -30,6 +30,7 @@ import {
 } from '../db/schema.js';
 import type { TournamentConfig } from '../types.js';
 import { DEFAULT_TOURNAMENT_CONFIG } from '../types.js';
+import { createCache } from './cache.js';
 
 // Quest point award tables:
 // - DAILY + MULTIDAY migrated to TournamentConfig (Phase 3 item 17, 2026-04-22).
@@ -39,6 +40,12 @@ import { DEFAULT_TOURNAMENT_CONFIG } from '../types.js';
 // New [0.5, 0.4, 0.3, 0.2, 0.1] — per-(asset, side) ladder with 2N ladders total;
 // ceiling math holds at 3.0 for N=3 assets (2N × 0.5 peak = 3.0).
 const LEVERAGE_QUEST_POINTS = [0.5, 0.4, 0.3, 0.2, 0.1];
+
+// Phase 6 — TTL cache for the heaviest computation in the system.
+// Cache key = tournamentId. Config is frozen post-registration (PUT /:id rejects per
+// `routes/tournaments.ts:130-136`), so per-tournament keying is correct without
+// including config hash in the key.
+const finalScoreCache = createCache<FinalScoreResult[]>();
 
 // Categories grouped by scoring period
 const DAILY_CATEGORIES = ['all_around', 'top_tick_traveler', 'bottom_fisher'];
@@ -346,6 +353,11 @@ export async function computeFinalScores(
     tournamentId: number,
     config: TournamentConfig,
 ): Promise<FinalScoreResult[]> {
+    // Phase 6: TTL cache check — 5-min default. Returns cached payload if fresh.
+    const cacheKey = `final-score:${tournamentId}`;
+    const cached = finalScoreCache.get(cacheKey);
+    if (cached) return cached;
+
     // Get all unique wallets that participated (have bracket entries)
     const tournamentRounds = await db
         .select({ id: rounds.id })
@@ -418,5 +430,7 @@ export async function computeFinalScores(
     // Sort by final score descending, wallet ascending (deterministic)
     results.sort((a, b) => b.finalScore - a.finalScore || a.wallet.localeCompare(b.wallet));
 
+    // Phase 6: write-through cache.
+    finalScoreCache.set(cacheKey, results);
     return results;
 }

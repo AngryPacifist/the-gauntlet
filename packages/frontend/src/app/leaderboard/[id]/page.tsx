@@ -204,8 +204,10 @@ export default function LeaderboardPage({ params }: { params: Promise<{ id: stri
     const [activeTab, setActiveTab] = useState<PageTab>('general');
 
     // General tab state
+    // Phase 6: cache breakdowns by wallet so re-expanding the same wallet is instant.
+    // The single `breakdown` value flowing to JSX is derived below from this map.
     const [expandedWallet, setExpandedWallet] = useState<string | null>(null);
-    const [breakdown, setBreakdown] = useState<WalletBreakdown | null>(null);
+    const [breakdownCache, setBreakdownCache] = useState<Map<string, WalletBreakdown>>(new Map());
     const [breakdownLoading, setBreakdownLoading] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
 
@@ -267,16 +269,23 @@ export default function LeaderboardPage({ params }: { params: Promise<{ id: stri
     async function toggleExpand(wallet: string) {
         if (expandedWallet === wallet) {
             setExpandedWallet(null);
-            setBreakdown(null);
             return;
         }
         setExpandedWallet(wallet);
+
+        // Phase 6: cache hit → no fetch, no loading flicker.
+        if (breakdownCache.has(wallet)) return;
+
         setBreakdownLoading(true);
         try {
             const result = await getWalletBreakdown(tournamentId, wallet);
-            setBreakdown(result);
+            setBreakdownCache((prev) => {
+                const next = new Map(prev);
+                next.set(wallet, result);
+                return next;
+            });
         } catch {
-            setBreakdown(null);
+            // Failure: don't cache; user can retry by collapse + re-expand.
         } finally {
             setBreakdownLoading(false);
         }
@@ -345,6 +354,12 @@ export default function LeaderboardPage({ params }: { params: Promise<{ id: stri
         );
         return match?.wallet ?? null;
     }, [searchQuery, data]);
+
+    // Phase 6: derive `breakdown` from cache + currently-expanded wallet so all
+    // downstream JSX (GeneralLeaderboard prop, ForgeRow prop, QuestBreakdownBars consumer)
+    // continue receiving the same `WalletBreakdown | null` shape — zero JSX/interface
+    // changes required.
+    const breakdown = expandedWallet ? breakdownCache.get(expandedWallet) ?? null : null;
 
     if (loading) {
         return (
