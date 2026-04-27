@@ -296,36 +296,47 @@ router.get('/:tournamentId/wallet/:wallet', async (req, res) => {
             categories.push('leverage_master_long', 'leverage_master_short');
         }
 
+        // Phase 6.g: collapse 11 per-category aggregations into one GROUP BY query.
+        // Postgres computes SUM and MAX in the same row; we pick the right one in JS
+        // via SUM_CATEGORIES.has(). Categories with no data don't appear in `aggRows`
+        // → fall through to the default {0, 0}.
+        const aggRows = await db
+            .select({
+                category: dailyCategoryScores.category,
+                sumScore: sql<number>`SUM(${dailyCategoryScores.score})`.as('sum_score'),
+                maxScore: sql<number>`MAX(${dailyCategoryScores.score})`.as('max_score'),
+                daysScored: sql<number>`COUNT(*)`.as('days_scored'),
+            })
+            .from(dailyCategoryScores)
+            .where(
+                and(
+                    eq(dailyCategoryScores.tournamentId, tournamentId),
+                    eq(dailyCategoryScores.wallet, wallet),
+                ),
+            )
+            .groupBy(dailyCategoryScores.category);
+
         const breakdown: Record<string, { totalScore: number; daysScored: number }> = {};
-
         for (const category of categories) {
-            const agg = SUM_CATEGORIES.has(category)
-                ? sql<number>`SUM(${dailyCategoryScores.score})`
-                : sql<number>`MAX(${dailyCategoryScores.score})`;
-
-            const [result] = await db
-                .select({
-                    totalScore: agg.as('total_score'),
-                    daysScored: sql<number>`COUNT(*)`.as('days_scored'),
-                })
-                .from(dailyCategoryScores)
-                .where(
-                    and(
-                        eq(dailyCategoryScores.tournamentId, tournamentId),
-                        eq(dailyCategoryScores.category, category),
-                        eq(dailyCategoryScores.wallet, wallet),
-                    ),
-                );
-
-            breakdown[category] = {
-                totalScore: result?.totalScore ?? 0,
-                daysScored: result?.daysScored ?? 0,
-            };
+            const row = aggRows.find((r) => r.category === category);
+            if (row) {
+                const totalScore = SUM_CATEGORIES.has(category) ? row.sumScore : row.maxScore;
+                breakdown[category] = {
+                    totalScore: totalScore ?? 0,
+                    daysScored: row.daysScored ?? 0,
+                };
+            } else {
+                breakdown[category] = { totalScore: 0, daysScored: 0 };
+            }
         }
 
         // Phase 4: tournament + config already fetched above — reuse locals.
-        const { computeQuestPoints } = await import('../services/final-score.js');
-        const totalQuestPoints = await computeQuestPoints(tournamentId, wallet, config);
+        // Phase 6.g: switch to batched computeAllQuestPoints (1 SQL query) instead
+        // of per-wallet computeQuestPoints (~89 queries). Same scoring semantics —
+        // computeFinalScores already uses this batched path (final-score.ts:391).
+        const { computeAllQuestPoints } = await import('../services/final-score.js');
+        const allPoints = await computeAllQuestPoints(tournamentId, config);
+        const totalQuestPoints = allPoints.get(wallet) ?? 0;
 
         const data: WalletBreakdownData = {
             wallet,
