@@ -66,6 +66,7 @@ Returns all tournaments, ordered by creation date (newest first).
       "name": "Season 1",
       "status": "registration",
       "config": {
+        "format": "bracket",  // 'bracket' = Gauntlet (elimination) | 'rank_only' = Forge (flat leaderboard, no brackets)
         "bracketSize": 8,
         "advanceRatio": 0.5,
         "roundDurations": [72, 48, 48],
@@ -494,6 +495,52 @@ Returns the merged competition leaderboard combining CPI scores, quest points, a
 
 ---
 
+### Cumulative Leaderboard
+
+```
+GET /api/leaderboard
+```
+
+Bundled cumulative leaderboard payload powering the standalone `/leaderboard` page (Phase 5 item 20). Public, no auth. On-demand compute (no caching yet — Phase 6 will add it). Aggregates three views:
+
+- **Tournament tab** — Top 10 of the current active tournament (or most-recent completed if none active). Format-agnostic — works for both Forge (rank_only) and Gauntlet (bracket).
+- **Season tab** — Current active season's full standings (or most-recent completed/final season).
+- **All-time tab** — Cross-tournament `finalScore` aggregation per wallet, capped at top 100. Spans all formats (Forge + Gauntlet) and includes Fallen Fighters participants.
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "current": {
+      "tournament": { "id": 1, "name": "Forge Week 1", "status": "active", "format": "rank_only" },
+      "topEntries": [
+        { "rank": 1, "wallet": "AbcXyz...", "finalScore": 84.5, "cpiScore": 72.5, "questPoints": 12 }
+      ]
+    },
+    "season": {
+      "season": { "id": 1, "name": "Season 1", "currentWeek": 3, "status": "active" },
+      "standings": [
+        { "rank": 1, "wallet": "AbcXyz...", "totalPoints": 75, "weeksParticipated": 3, "bestPlacement": 1 }
+      ]
+    },
+    "allTime": {
+      "standings": [
+        { "rank": 1, "wallet": "AbcXyz...", "totalFinalScore": 312.7, "tournamentsPlayed": 4 }
+      ],
+      "totalTournaments": 7
+    }
+  }
+}
+```
+
+**Notes:**
+- All three rankings use tie-aware competition ranking (1, 1, 3, 4...).
+- Empty fields return as `null` (e.g. `current.tournament: null` if no tournaments exist).
+- The Tournament tab is intentionally slim (top 10) — full per-tournament leaderboard is at `/leaderboard/:id`.
+
+---
+
 ## Admin Endpoints
 
 All admin endpoints require the `X-Admin-Secret` header matching the `ADMIN_SECRET` environment variable. Returns `401 Unauthorized` if the secret is missing or incorrect.
@@ -514,6 +561,7 @@ X-Admin-Secret: <your-admin-secret>
 {
   "name": "Season 1",
   "config": {
+    "format": "bracket",  // 'bracket' (Gauntlet, default) | 'rank_only' (Forge — skips bracket creation)
     "bracketSize": 16,
     "roundDurations": [48, 48, 48],
     "leveragePenaltyThreshold": 30,  // legacy — no longer used by Risk score
@@ -563,6 +611,7 @@ Closes registration, creates Round 1 brackets, and sets the tournament status to
 **Errors:**
 - Tournament must be in `registration` status.
 - At least 2 registered traders are required.
+- **Singleton enforcement (Phase 5 item 21):** Another tournament with `active` status already exists. The error message includes the conflicting tournament's id and name. Cancel or complete it first.
 
 ---
 

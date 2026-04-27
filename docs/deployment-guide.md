@@ -62,7 +62,7 @@ Or start them individually:
 # Backend (port 3001)
 npm run dev -w packages/backend
 
-# Frontend (port 3000)
+# Frontend (port 3002)
 npm run dev -w packages/frontend
 ```
 
@@ -71,7 +71,7 @@ The frontend dev server proxies `/api/*` requests to the backend via Next.js rew
 ### 4. Verify
 
 - Backend health: `http://localhost:3001/api/health`
-- Frontend: `http://localhost:3000`
+- Frontend: `http://localhost:3002`
 
 ---
 
@@ -119,6 +119,9 @@ The migration script (`packages/backend/src/db/migrate.ts`) creates these tables
 | `season_standings`     | Aggregate points per wallet per season          |
 | `daily_category_scores`| Daily All Around and Fisher scores per wallet   |
 | `pyth_ohlc_cache`      | Cached daily OHLC candles from Pyth Benchmarks  |
+| `quest_progress`       | Leverage Master step completion (per-asset ladders, Phase 4 item 30) |
+| `raffle_results`       | Per-wallet raffle eligibility, ticket count, winner flag |
+| `raffle_draws`         | Deterministic draw audit trail (block hash, seed, winners) |
 
 Indexes are created on foreign keys and commonly queried columns. All migration SQL is idempotent (`CREATE TABLE IF NOT EXISTS`, `ADD COLUMN IF NOT EXISTS`). See the migration file for the full schema.
 
@@ -145,7 +148,8 @@ adrena-the-gauntlet/
 │   │       │   ├── seasons.ts        # Season CRUD + lifecycle (start, advance, complete)
 │   │       │   ├── categories.ts     # Daily category leaderboards + manual scoring + wallet breakdown
 │   │       │   ├── quests.ts         # Leverage Master quest progress
-│   │       │   └── raffle.ts         # Raffle results, verification, per-wallet info
+│   │       │   ├── raffle.ts         # Raffle results, verification, per-wallet info
+│   │       │   └── leaderboard.ts    # Cumulative leaderboard (Phase 5 item 20)
 │   │       └── services/
 │   │           ├── tournament-manager.ts  # Tournament lifecycle logic
 │   │           ├── scoring-engine.ts      # CPI computation
@@ -156,7 +160,8 @@ adrena-the-gauntlet/
 │   │           ├── quest-engine.ts        # Leverage Master step evaluation + leaderboard
 │   │           ├── raffle-engine.ts       # Raffle ticket computation, deterministic draw, verification
 │   │           ├── final-score.ts         # CPI + quest points join, batch computation, raffle tickets
-│   │           └── pyth-client.ts         # Pyth Benchmarks OHLC fetcher with DB cache
+│   │           ├── pyth-client.ts         # Pyth Benchmarks OHLC fetcher with DB cache
+│   │           └── cumulative-leaderboard.ts  # Cross-tournament aggregation for /api/leaderboard (Phase 5 item 20)
 │   └── frontend/
 │       └── src/
 │           ├── components/
@@ -165,13 +170,19 @@ adrena-the-gauntlet/
 │           └── app/
 │               ├── layout.tsx        # Root layout with navigation
 │               ├── page.tsx          # Dashboard (tournament list)
-│               ├── admin/page.tsx    # Admin panel
+│               ├── admin/                          # Admin (multi-route per Phase 5 item 19)
+│               │   ├── page.tsx                    # Landing — secret entry + sub-route cards
+│               │   ├── tournaments/page.tsx        # Tournament CRUD + lifecycle + raffle + categories
+│               │   ├── seasons/page.tsx            # Season CRUD + lifecycle
+│               │   ├── registrations/page.tsx     # Tournament-scoped registration browser
+│               │   └── analytics/page.tsx          # Per-tournament analytics + daily metrics + anomalies
 │               ├── register/page.tsx # Public registration
 │               ├── forge/page.tsx    # Forge index (auto-redirect)
 │               ├── forge/[tournamentId]/page.tsx  # Forge leaderboard + quest tabs
 │               ├── tournament/[id]/page.tsx           # Tournament detail
 │               ├── tournament/[id]/analytics/page.tsx # Post-tournament analytics
-│               ├── leaderboard/[id]/page.tsx          # Leaderboard
+│               ├── leaderboard/page.tsx               # Cumulative leaderboard (Phase 5 item 20)
+│               ├── leaderboard/[id]/page.tsx          # Per-tournament leaderboard (CPI, format-aware)
 │               ├── trader/[wallet]/page.tsx           # Trader profile
 │               ├── raffle/[tournamentId]/page.tsx     # Raffle results + verification
 │               ├── season/[id]/page.tsx               # Season detail + standings
