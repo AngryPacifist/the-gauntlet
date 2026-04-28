@@ -705,7 +705,11 @@ function ForgeRow({ entry, isExpanded, onToggle, breakdown, breakdownLoading, is
                         ? `${formatPrize(prizesByRank.get(entry.rank) ?? 0)} ${prizeTable.currency}`
                         : '—'}
                 </td>
-                <td style={{ ...tdStyle, color: '#fbbf24' }}>
+                <td style={{
+                    ...tdStyle,
+                    color: entry.isTopPercent ? '#64748b' : '#fbbf24',
+                    opacity: entry.isTopPercent ? 0.5 : 1,
+                }}>
                     {entry.raffleTickets}
                 </td>
                 <td style={tdStyle}>
