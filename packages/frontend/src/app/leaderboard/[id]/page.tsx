@@ -153,26 +153,23 @@ function extractQuestColumns(
         }
         case 'bottom_fisher': {
             const entry = d.longEntry as { proximity: number; roi: number } | null;
-            if (!entry) return [];
             return [
-                { label: '% from Bottom', value: `${(entry.proximity * 100).toFixed(2)}%` },
-                { label: 'ROI', value: `${(entry.roi * 100).toFixed(2)}%` },
+                { label: '% from Bottom', value: entry ? `${(entry.proximity * 100).toFixed(2)}%` : '—' },
+                { label: 'ROI', value: entry ? `${(entry.roi * 100).toFixed(2)}%` : '—' },
             ];
         }
         case 'top_tick_traveler': {
             const entry = d.shortEntry as { proximity: number; roi: number } | null;
-            if (!entry) return [];
             return [
-                { label: '% from Top', value: `${(entry.proximity * 100).toFixed(2)}%` },
-                { label: 'ROI', value: `${(entry.roi * 100).toFixed(2)}%` },
+                { label: '% from Top', value: entry ? `${(entry.proximity * 100).toFixed(2)}%` : '—' },
+                { label: 'ROI', value: entry ? `${(entry.roi * 100).toFixed(2)}%` : '—' },
             ];
         }
         case 'risk_manager':
         case 'humble_one': {
             const trade = d.bestTrade as { roi: number } | null;
-            if (!trade) return [];
             return [
-                { label: 'ROI', value: `${(trade.roi * 100).toFixed(2)}%` },
+                { label: 'ROI', value: trade ? `${(trade.roi * 100).toFixed(2)}%` : '—' },
             ];
         }
         default: {
