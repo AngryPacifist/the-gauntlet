@@ -104,8 +104,8 @@ router.post('/score', async (req, res) => {
         }
         const config = resolveConfig(tournament.config);
 
-        // Fetch OHLC
-        const ohlcData = await fetchDailyOHLCBatch(date);
+        // Phase 7.b: pass assetList so engine queries only the configured assets.
+        const ohlcData = await fetchDailyOHLCBatch(date, config.assetList);
 
         // Get registered wallets and their positions
         const regs = await db

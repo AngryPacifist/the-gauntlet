@@ -184,9 +184,9 @@ async function scoreDailyCategories(): Promise<void> {
         const now = new Date();
         const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
         const dateStr = yesterday.toISOString().slice(0, 10); // YYYY-MM-DD
-
-        // Fetch OHLC data once for all tournaments (same day, same data)
-        const ohlcData = await fetchDailyOHLCBatch(dateStr);
+        // Phase 7.b D28: batch fetch moved INSIDE per-tournament loop below
+        // so each tournament passes its own assetList to fetchDailyOHLCBatch.
+        // pyth_ohlc_cache deduplicates redundant fetches across tournaments.
 
         for (const tournament of activeTournaments) {
             console.log(
@@ -196,6 +196,9 @@ async function scoreDailyCategories(): Promise<void> {
 
             // Phase 3: resolve config once per tournament for engine threading
             const config = resolveConfig(tournament.config);
+
+            // Phase 7.b D28: per-tournament daily OHLC batch (moved from outside loop)
+            const ohlcData = await fetchDailyOHLCBatch(dateStr, config.assetList);
 
             // Get all registered wallets
             const regs = await db
@@ -393,8 +396,8 @@ async function scoreHourlyCategories(): Promise<void> {
         // Today in UTC (the day currently in progress)
         const dateStr = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
 
-        // Fetch intraday OHLC (hourly bars, no DB cache) for Fisher categories
-        const intradayOhlc = await fetchIntradayOHLCBatch(dateStr);
+        // Phase 7.b D28: intraday batch fetch moved INSIDE per-tournament loop below
+        // so each tournament passes its own assetList to fetchIntradayOHLCBatch.
 
         for (const tournament of activeTournaments) {
             console.log(
@@ -404,6 +407,9 @@ async function scoreHourlyCategories(): Promise<void> {
 
             // Phase 3: resolve config once per tournament for engine threading
             const config = resolveConfig(tournament.config);
+
+            // Phase 7.b D28: per-tournament intraday OHLC batch (moved from outside loop)
+            const intradayOhlc = await fetchIntradayOHLCBatch(dateStr, config.assetList);
 
             // Get all registered wallets
             const regs = await db

@@ -40,6 +40,14 @@ import styles from '../page.module.css';
 
 const ADMIN_SECRET_KEY = 'adrena_admin_secret';
 
+// Phase 7.b: Pyth Lazer feed_id auto-fill mapping for known symbols.
+// Mirror of backend types.ts ADRENA_TO_LAZER_FEED_ID. Auto-fills feed_id input
+// when admin selects/types a known symbol; admin can override per asset row.
+const KNOWN_LAZER_FEED_IDS: Record<string, number> = {
+    SOL: 3005, JITOSOL: 3023, BTC: 3001, WBTC: 3001, BONK: 3016,
+    USDC: 4001, XAU: 2056, XAG: 2069, WTI: 2035,
+};
+
 function readSecret(): string {
     if (typeof window === 'undefined') return '';
     return localStorage.getItem(ADMIN_SECRET_KEY) ?? '';
@@ -85,7 +93,7 @@ export default function AdminTournamentsPage() {
     const [cfgPrizeCurrency, setCfgPrizeCurrency] = useState<'ADX' | 'USDC'>('ADX');
     const [cfgSkillPrizes, setCfgSkillPrizes] = useState('500, 300, 200');
     const [cfgRafflePrizes, setCfgRafflePrizes] = useState('100, 50, 25');
-    const [cfgAssetList, setCfgAssetList] = useState<Array<{ symbol: string; mint?: string; joinedAt: string }>>([]);
+    const [cfgAssetList, setCfgAssetList] = useState<Array<{ symbol: string; mint?: string; joinedAt: string; feed_id?: number }>>([]);
     const [cfgTradableAssets, setCfgTradableAssets] = useState<Array<{ symbol: string; mint: string }>>([]);
     const [cfgTradableAssetsError, setCfgTradableAssetsError] = useState<string | null>(null);
 
@@ -267,11 +275,12 @@ export default function AdminTournamentsPage() {
         }
         if (cfgAssetList.length > 0) {
             config.assetList = cfgAssetList.map((a) => {
-                const item: { symbol: string; mint?: string; joinedAt: string } = {
+                const item: { symbol: string; mint?: string; joinedAt: string; feed_id?: number } = {
                     symbol: a.symbol.trim(),
                     joinedAt: a.joinedAt,
                 };
                 if (a.mint && a.mint.trim()) item.mint = a.mint.trim();
+                if (typeof a.feed_id === 'number' && a.feed_id > 0) item.feed_id = a.feed_id;
                 return item;
             });
         }
@@ -849,7 +858,9 @@ export default function AdminTournamentsPage() {
                                         <select className="input input--mono" value={asset.symbol}
                                             onChange={(e) => {
                                                 const selected = cfgTradableAssets.find((tt) => tt.symbol === e.target.value);
-                                                setCfgAssetList((prev) => prev.map((a, j) => j === i ? { ...a, symbol: e.target.value, mint: selected?.mint } : a));
+                                                // Phase 7.b: auto-fill feed_id from known Lazer mapping
+                                                const feed_id = KNOWN_LAZER_FEED_IDS[e.target.value];
+                                                setCfgAssetList((prev) => prev.map((a, j) => j === i ? { ...a, symbol: e.target.value, mint: selected?.mint, feed_id } : a));
                                             }} style={{ flex: 1 }}>
                                             <option value="">— select asset —</option>
                                             {cfgTradableAssets.map((tt) => (
@@ -858,8 +869,22 @@ export default function AdminTournamentsPage() {
                                         </select>
                                     ) : (
                                         <input type="text" className="input input--mono" placeholder="SYMBOL (e.g., SOL)" value={asset.symbol}
-                                            onChange={(e) => setCfgAssetList((prev) => prev.map((a, j) => j === i ? { ...a, symbol: e.target.value.toUpperCase() } : a))} style={{ flex: 1 }} />
+                                            onChange={(e) => {
+                                                const sym = e.target.value.toUpperCase();
+                                                // Phase 7.b: auto-fill feed_id from known Lazer mapping (free-text path)
+                                                const feed_id = KNOWN_LAZER_FEED_IDS[sym];
+                                                setCfgAssetList((prev) => prev.map((a, j) => j === i ? { ...a, symbol: sym, feed_id } : a));
+                                            }} style={{ flex: 1 }} />
                                     )}
+                                    <input type="number" className="input input--mono"
+                                        placeholder="feed_id"
+                                        value={asset.feed_id ?? ''}
+                                        onChange={(e) => {
+                                            const v = e.target.value ? Number(e.target.value) : undefined;
+                                            setCfgAssetList((prev) => prev.map((a, j) => j === i ? { ...a, feed_id: v } : a));
+                                        }}
+                                        title="Pyth Lazer feed_id — auto-filled for known symbols; override if needed"
+                                        style={{ width: '90px', fontSize: '0.8125rem' }} />
                                     <span className={styles.formHint} style={{ fontFamily: 'monospace', whiteSpace: 'nowrap' }}>joinedAt: {asset.joinedAt}</span>
                                     <button type="button" className="btn btn--secondary"
                                         onClick={() => setCfgAssetList((prev) => prev.filter((_, j) => j !== i))}

@@ -83,7 +83,7 @@ export interface TournamentConfig {
     cpiTicketMultiplier: number;
     questTicketMultiplier: number;
     riskManagerMinSize: number;
-    assetList?: Array<{ symbol: string; mint?: string; joinedAt: string }>;
+    assetList?: Array<{ symbol: string; mint?: string; joinedAt: string; feed_id?: number }>;
 }
 
 export interface Tournament {

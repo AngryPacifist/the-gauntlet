@@ -75,6 +75,10 @@ export interface TournamentConfig {
         // Engines prefer mint when present, fall back to symbol (D16).
         mint?: string;
         joinedAt: string;             // ISO date (YYYY-MM-DD) — first scoring day
+        // Phase 7.b: optional Pyth Lazer feed_id override.
+        // Resolution: feed_id ?? ADRENA_TO_LAZER_FEED_ID[symbol] ?? null (skip).
+        // Used by services/pyth-client.ts to query www.adrena.trade/api/oracle-bars.
+        feed_id?: number;
     }>;
 }
 
@@ -452,9 +456,26 @@ export interface OHLCBar {
     close: number;
 }
 
-// --- Pyth Symbol Mapping ---
+// --- Pyth Lazer Feed ID Mapping (primary, Phase 7.b) ---
+// Verified empirically 2026-05-01 via app.adrena.xyz browser DevTools +
+// datapi.adrena.trade/last-trading-prices payload (autonom.source_feed_id).
+// Adrena position `symbol` field → Pyth Lazer numeric feed_id used by
+// www.adrena.trade/api/oracle-bars?feed_id=<id>.
+export const ADRENA_TO_LAZER_FEED_ID: Record<string, number> = {
+    SOL: 3005,
+    JITOSOL: 3023,
+    BTC: 3001,
+    WBTC: 3001,    // aliased to BTC
+    BONK: 3016,
+    USDC: 4001,
+    XAU: 2056,
+    XAG: 2069,
+    WTI: 2035,
+};
+
+// --- Pyth Benchmarks Symbol Mapping (legacy fallback, Phase 7.b D33) ---
+// Pre-Phase-7 primary; now used only when /api/oracle-bars fails (per D33).
 // Verified against live Pyth Benchmarks API + Adrena liquidity-info endpoint.
-// Adrena position `symbol` field → Pyth TradingView `symbol` query param.
 export const ADRENA_TO_PYTH_SYMBOL: Record<string, string> = {
     SOL: 'Crypto.SOL/USD',
     BTC: 'Crypto.BTC/USD',
