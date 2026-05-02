@@ -175,10 +175,13 @@ export const questProgress = pgTable('quest_progress', {
     questType: varchar('quest_type', { length: 30 }).notNull(), // 'leverage_master'
     side: varchar('side', { length: 10 }).notNull(),  // 'long' | 'short'
     // Phase 4 item 30: per-asset LM ladders. Each (tournament, wallet, side, asset, week) tracks
-    // its own 10-step progression independently. Length 30 matches questType / symbol conventions.
+    // its own progression independently. Length 30 matches questType / symbol conventions.
     asset: varchar('asset', { length: 30 }).notNull(),
-    stepsCompleted: jsonb('steps_completed').notNull(), // boolean[10]
+    stepsCompleted: jsonb('steps_completed').notNull(), // boolean[N] where N = stepTotal
     stepCount: integer('step_count').notNull().default(0), // denormalized for ORDER BY
+    // Phase 7.a D32: denormalized step total per row (variable per asset).
+    // Default 10 backfills pre-Phase-7 rows safely (crypto ladder length).
+    stepTotal: integer('step_total').notNull().default(10),
     weekNumber: integer('week_number').notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 }, (table) => ({

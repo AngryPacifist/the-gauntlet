@@ -173,13 +173,13 @@ function extractQuestColumns(
             ];
         }
         default: {
-            // Phase 4 item 30: LM slugs are per-asset (leverage_master_${symbol}_${side}).
-            // Legacy slugs (leverage_master_long/_short) also match — backend emits
-            // stepCount in details for both cases.
+            // Phase 4 item 30 + 7.a D25: LM slugs are per-asset.
+            // stepCount + stepCountTotal both in details — backend emits both for variable-length ladders.
             if (category.startsWith('leverage_master_')) {
                 const count = (d.stepCount as number) ?? 0;
+                const total = (d.stepCountTotal as number) ?? 10;
                 return [
-                    { label: 'Steps', value: `${count}/10` },
+                    { label: 'Steps', value: `${count}/${total}` },
                 ];
             }
             return [];

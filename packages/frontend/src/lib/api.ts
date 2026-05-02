@@ -83,7 +83,7 @@ export interface TournamentConfig {
     cpiTicketMultiplier: number;
     questTicketMultiplier: number;
     riskManagerMinSize: number;
-    assetList?: Array<{ symbol: string; mint?: string; joinedAt: string; feed_id?: number }>;
+    assetList?: Array<{ symbol: string; mint?: string; joinedAt: string; feed_id?: number; lmSteps?: number[]; lmTolerance?: number }>;
 }
 
 export interface Tournament {
@@ -506,6 +506,9 @@ export async function getDailyScores(
 // --- Quest API Functions ---
 
 // Phase 4 item 30: per-asset LM ladders. Keys = asset symbols from config.assetList.
+// Phase 7.a: boolean array length is now per-asset variable (matches asset.lmSteps?.length
+// or default 10). Step values for rendering are resolved client-side from
+// tournament.config.assetList — not exposed here.
 export interface QuestProgressDetails {
     byAsset: Record<string, {
         long: boolean[];

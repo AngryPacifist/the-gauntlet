@@ -108,23 +108,30 @@ export const QUEST_DESCRIPTIONS: Record<string, QuestDescription> = {
 export function getLeverageMasterDescription(
     side: 'long' | 'short',
     assetSymbol?: string, // optional — narrows description to a specific asset tab
+    stepValues?: number[], // Phase 7.a: variable per-asset ladder text (sourced from tournament.config.assetList)
 ): QuestDescription {
     const sideLabel = side === 'long' ? 'Long' : 'Short';
     const sideArticle = side === 'long' ? 'long' : 'short';
     const assetScope = assetSymbol
         ? `for ${assetSymbol}`
         : 'across every supported asset';
+    // Phase 7.a: dynamic ladder description from per-asset stepValues; fallback to crypto default.
+    const ladder = stepValues && stepValues.length > 0
+        ? stepValues
+        : [10, 20, 30, 40, 50, 60, 70, 80, 90, 100];
+    const ladderText = ladder.map((v) => `${v}x`).join(', ');
+    const ladderRange = `from ${ladder[0]}x up to ${ladder[ladder.length - 1]}x across ${ladder.length} defined steps`;
 
     return {
-        tagline: `Push the limits on ${sideArticle}s — 10 steps per asset.`,
+        tagline: `Push the limits on ${sideArticle}s — ${ladder.length} steps per asset.`,
         description:
             `Leverage Master (${sideLabel}) is a weekly per-asset progression quest. Open qualifying ${sideArticle} positions ` +
-            `at increasing leverage tiers — from 10x up to 100x across 10 defined steps ${assetScope}. ` +
+            `at increasing leverage tiers — ${ladderRange} ${assetScope}. ` +
             `Each step requires a position at or above the tier's leverage. ` +
             `Completing the full ladder on a single asset earns that asset's share of the weekly LM ceiling; ` +
             `maxing LM overall requires topping ladders on every supported asset.`,
         rules: [
-            'Steps: 10x, 20x, 30x, 40x, 50x, 60x, 70x, 80x, 90x, 100x (±2x tolerance per step).',
+            `Steps: ${ladderText} (±2x tolerance per step by default; per-asset configurable).`,
             `Position must be a qualifying ${sideArticle} position above a minimum collateral threshold.`,
             'Position must meet a minimum open-duration requirement.',
             'Opening a qualifying position at any step counts — it doesn\'t need to be profitable.',

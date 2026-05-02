@@ -93,7 +93,7 @@ export default function AdminTournamentsPage() {
     const [cfgPrizeCurrency, setCfgPrizeCurrency] = useState<'ADX' | 'USDC'>('ADX');
     const [cfgSkillPrizes, setCfgSkillPrizes] = useState('500, 300, 200');
     const [cfgRafflePrizes, setCfgRafflePrizes] = useState('100, 50, 25');
-    const [cfgAssetList, setCfgAssetList] = useState<Array<{ symbol: string; mint?: string; joinedAt: string; feed_id?: number }>>([]);
+    const [cfgAssetList, setCfgAssetList] = useState<Array<{ symbol: string; mint?: string; joinedAt: string; feed_id?: number; lmSteps?: string; lmTolerance?: string }>>([]);
     const [cfgTradableAssets, setCfgTradableAssets] = useState<Array<{ symbol: string; mint: string }>>([]);
     const [cfgTradableAssetsError, setCfgTradableAssetsError] = useState<string | null>(null);
 
@@ -248,6 +248,30 @@ export default function AdminTournamentsPage() {
             return;
         }
 
+        // Phase 7.a: validate per-asset lmSteps + lmTolerance (block submit on error,
+        // matches existing fisherRankPoints validation pattern above).
+        for (const a of cfgAssetList) {
+            if (a.lmSteps && a.lmSteps.trim()) {
+                const parsed = a.lmSteps.split(',').map((x) => Number(x.trim())).filter((n) => !isNaN(n) && n > 0);
+                if (parsed.length === 0) {
+                    showToast(`Asset ${a.symbol}: lmSteps must be positive numbers (e.g. 10,20,30)`, 'error');
+                    return;
+                }
+                const ascending = parsed.every((v, idx) => idx === 0 || v > parsed[idx - 1]);
+                if (!ascending) {
+                    showToast(`Asset ${a.symbol}: lmSteps must be strictly ascending (e.g. 10,20,30 not 10,20,15)`, 'error');
+                    return;
+                }
+            }
+            if (a.lmTolerance && a.lmTolerance.trim()) {
+                const t = Number(a.lmTolerance.trim());
+                if (isNaN(t) || t <= 0) {
+                    showToast(`Asset ${a.symbol}: lmTolerance must be a positive number`, 'error');
+                    return;
+                }
+            }
+        }
+
         const config: Partial<TournamentConfig> = {
             format: cfgFormat,
             bracketSize: cfgBracketSize,
@@ -275,12 +299,23 @@ export default function AdminTournamentsPage() {
         }
         if (cfgAssetList.length > 0) {
             config.assetList = cfgAssetList.map((a) => {
-                const item: { symbol: string; mint?: string; joinedAt: string; feed_id?: number } = {
+                // Phase 7.b + 7.a: assetList entry shape extended with feed_id (7.b),
+                // lmSteps (7.a), and lmTolerance (7.a).
+                const item: { symbol: string; mint?: string; joinedAt: string; feed_id?: number; lmSteps?: number[]; lmTolerance?: number } = {
                     symbol: a.symbol.trim(),
                     joinedAt: a.joinedAt,
                 };
                 if (a.mint && a.mint.trim()) item.mint = a.mint.trim();
                 if (typeof a.feed_id === 'number' && a.feed_id > 0) item.feed_id = a.feed_id;
+                // Phase 7.a: lmSteps + lmTolerance — already validated above, just parse + assign
+                if (a.lmSteps && a.lmSteps.trim()) {
+                    const parsed = a.lmSteps.split(',').map((x) => Number(x.trim())).filter((n) => !isNaN(n) && n > 0);
+                    if (parsed.length > 0) item.lmSteps = parsed;
+                }
+                if (a.lmTolerance && a.lmTolerance.trim()) {
+                    const t = Number(a.lmTolerance.trim());
+                    if (!isNaN(t) && t > 0) item.lmTolerance = t;
+                }
                 return item;
             });
         }
@@ -886,6 +921,20 @@ export default function AdminTournamentsPage() {
                                         title="Pyth Lazer feed_id — auto-filled for known symbols; override if needed"
                                         style={{ width: '90px', fontSize: '0.8125rem' }} />
                                     <span className={styles.formHint} style={{ fontFamily: 'monospace', whiteSpace: 'nowrap' }}>joinedAt: {asset.joinedAt}</span>
+                                    {/* Phase 7.a: per-asset LM ladder config (lmSteps CSV + tolerance) */}
+                                    <input type="text" className="input input--mono"
+                                        placeholder="lmSteps CSV"
+                                        value={asset.lmSteps ?? ''}
+                                        onChange={(e) => setCfgAssetList((prev) => prev.map((a, j) => j === i ? { ...a, lmSteps: e.target.value } : a))}
+                                        title="Comma-separated step values (e.g. 10,20,30,40,50,60,70,80,90,100). Leave empty for crypto default."
+                                        style={{ width: '180px', fontSize: '0.8125rem' }} />
+                                    <input type="number" className="input input--mono"
+                                        placeholder="±tol"
+                                        value={asset.lmTolerance ?? ''}
+                                        onChange={(e) => setCfgAssetList((prev) => prev.map((a, j) => j === i ? { ...a, lmTolerance: e.target.value } : a))}
+                                        title="Tolerance window (default 2 for crypto; ~0.2 for sub-10x RWA ladders)"
+                                        step="0.1" min="0.01"
+                                        style={{ width: '70px', fontSize: '0.8125rem' }} />
                                     <button type="button" className="btn btn--secondary"
                                         onClick={() => setCfgAssetList((prev) => prev.filter((_, j) => j !== i))}
                                         style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem' }}>Remove</button>

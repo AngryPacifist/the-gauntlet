@@ -252,6 +252,18 @@ DO $$ BEGIN
     ALTER TABLE daily_category_scores ALTER COLUMN category TYPE VARCHAR(50);
   END IF;
 END $$;
+
+-- Phase 7.a D32: add step_total column to quest_progress (denormalized step count
+-- for variable-length per-asset ladders). Default 10 backfills existing rows
+-- (matches pre-Phase-7 crypto ladder length).
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'quest_progress' AND column_name = 'step_total' AND table_schema = 'public'
+  ) THEN
+    ALTER TABLE quest_progress ADD COLUMN step_total INTEGER NOT NULL DEFAULT 10;
+  END IF;
+END $$;
 `;
 
 const INDEXES_SQL = `

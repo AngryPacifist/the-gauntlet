@@ -340,8 +340,15 @@ export default function CategoriesPage({ params }: { params: Promise<{ tournamen
                                 // Legacy slugs (no asset) use '__legacy__' key.
                                 const assetKey = leverageTabAsset ?? '__legacy__';
                                 const asset = questData?.byAsset?.[assetKey];
-                                if (!asset) return Array(10).fill(false);
+                                // Phase 7.a: derive default step count from tournament config when no asset data yet
+                                const configEntry = tournament?.config?.assetList?.find(a => a.symbol === leverageTabAsset);
+                                const defaultLen = configEntry?.lmSteps?.length ?? 10;
+                                if (!asset) return Array(defaultLen).fill(false);
                                 return leverageTabSide === 'long' ? asset.long : asset.short;
+                            })()}
+                            stepValues={(() => {
+                                const configEntry = tournament?.config?.assetList?.find(a => a.symbol === leverageTabAsset);
+                                return configEntry?.lmSteps;
                             })()}
                             color={activeTab.color}
                         />
@@ -429,11 +436,18 @@ function getRankStyle(index: number): React.CSSProperties {
 }
 
 // ---- Leverage Master Badge Grid ----
+// Phase 7.a: const LEVERAGE_LABELS removed — labels are now generated per render
+// from the stepValues prop (per-asset ladder: e.g. [10,20,...,100] for crypto,
+// [1.5,2,2.5,3,3.5,4,4.5] for sub-10x RWA). Falls back to legacy crypto labels
+// when stepValues is undefined (pre-Phase-7 tournaments).
 
-const LEVERAGE_LABELS = ['10x', '20x', '30x', '40x', '50x', '60x', '70x', '80x', '90x', '100x'];
-
-function LeverageBadgeGrid({ steps, color }: { steps: boolean[]; color: string }) {
+function LeverageBadgeGrid({ steps, stepValues, color }: { steps: boolean[]; stepValues?: number[]; color: string }) {
     const completedCount = steps.filter(Boolean).length;
+    const total = steps.length;
+    // Phase 7.a: per-asset step values when present; default to crypto 10x ladder labels otherwise.
+    const labels = stepValues && stepValues.length === total
+        ? stepValues.map((v) => `${v}x`)
+        : Array.from({ length: total }, (_, i) => `${(i + 1) * 10}x`);
 
     return (
         <div>
@@ -443,11 +457,11 @@ function LeverageBadgeGrid({ steps, color }: { steps: boolean[]; color: string }
                 gap: 'var(--space-sm)',
                 marginBottom: 'var(--space-md)',
             }}>
-                {LEVERAGE_LABELS.map((label, i) => {
+                {labels.map((label, i) => {
                     const completed = steps[i];
                     return (
                         <div
-                            key={label}
+                            key={`${label}-${i}`}
                             style={{
                                 display: 'flex',
                                 flexDirection: 'column',
@@ -484,7 +498,7 @@ function LeverageBadgeGrid({ steps, color }: { steps: boolean[]; color: string }
                 color: completedCount > 0 ? color : 'var(--text-muted)',
                 fontWeight: 600,
             }}>
-                {completedCount}/10 steps completed
+                {completedCount}/{total} steps completed
             </p>
         </div>
     );

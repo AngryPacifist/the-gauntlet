@@ -57,6 +57,16 @@ export const LEVERAGE_STEPS: LeverageStep[] = [
     { step: 100, min: 98,  max: 100 },  // capped at Adrena protocol max
 ];
 
+// Phase 7.a: build LeverageStep[] from per-asset values + tolerance.
+// Used when assetList entry has lmSteps configured. Tolerance default = 2 (D24).
+export function buildLeverageSteps(stepValues: number[], tolerance: number = 2): LeverageStep[] {
+    return stepValues.map(step => ({
+        step,
+        min: step - tolerance,
+        max: step + tolerance,
+    }));
+}
+
 const SIDES = ['long', 'short'] as const;
 
 // --------------------------------------------------------------------------
@@ -157,9 +167,17 @@ export async function evaluateLeverageProgress(
         );
 
         const assetKey = assetEntry.symbol === '__legacy__' ? '__legacy__' : assetEntry.symbol;
+
+        // Phase 7.a D24: resolve per-asset ladder. lmSteps + lmTolerance from assetEntry,
+        // falls back to module-level LEVERAGE_STEPS (10x crypto ladder, ±2x tolerance).
+        const stepsForAsset: LeverageStep[] = assetEntry.lmSteps && assetEntry.lmSteps.length > 0
+            ? buildLeverageSteps(assetEntry.lmSteps, assetEntry.lmTolerance ?? 2)
+            : LEVERAGE_STEPS;
+        const stepTotal = stepsForAsset.length;
+
         byAsset[assetKey] = {
-            long: Array(10).fill(false),
-            short: Array(10).fill(false),
+            long: Array(stepTotal).fill(false),
+            short: Array(stepTotal).fill(false),
             longCount: 0,
             shortCount: 0,
         };
@@ -181,11 +199,11 @@ export async function evaluateLeverageProgress(
 
             const currentSteps: boolean[] = existing
                 ? (existing.stepsCompleted as boolean[])
-                : Array(10).fill(false);
+                : Array(stepTotal).fill(false);
 
             for (const position of assetPositions) {
-                for (let i = 0; i < LEVERAGE_STEPS.length; i++) {
-                    if (!currentSteps[i] && positionCompletesStep(position, LEVERAGE_STEPS[i], side, config)) {
+                for (let i = 0; i < stepsForAsset.length; i++) {
+                    if (!currentSteps[i] && positionCompletesStep(position, stepsForAsset[i], side, config)) {
                         currentSteps[i] = true;
                     }
                 }
@@ -195,12 +213,12 @@ export async function evaluateLeverageProgress(
 
             if (existing) {
                 await db.update(questProgress)
-                    .set({ stepsCompleted: currentSteps, stepCount, updatedAt: new Date() })
+                    .set({ stepsCompleted: currentSteps, stepCount, stepTotal, updatedAt: new Date() })
                     .where(eq(questProgress.id, existing.id));
             } else {
                 await db.insert(questProgress).values({
                     tournamentId, wallet, questType: 'leverage_master',
-                    side, asset: assetKey, stepsCompleted: currentSteps, stepCount, weekNumber,
+                    side, asset: assetKey, stepsCompleted: currentSteps, stepCount, stepTotal, weekNumber,
                 });
             }
 
@@ -254,6 +272,7 @@ export async function computeLeverageMasterLeaderboard(
                 .select({
                     wallet: questProgress.wallet,
                     stepCount: questProgress.stepCount,
+                    stepTotal: questProgress.stepTotal,  // Phase 7.a D25
                 })
                 .from(questProgress)
                 .where(and(
@@ -271,7 +290,8 @@ export async function computeLeverageMasterLeaderboard(
                     wallet: r.wallet,
                     category,
                     score: r.stepCount,
-                    details: { weekNumber, side, asset: assetKey, stepCount: r.stepCount },
+                    // Phase 7.a D25: stepCountTotal lets frontend render `${count}/${total}` without config lookup
+                    details: { weekNumber, side, asset: assetKey, stepCount: r.stepCount, stepCountTotal: r.stepTotal },
                 }));
 
             if (rows.length > 0) {
@@ -326,10 +346,12 @@ export async function getQuestProgress(
     }> = {};
 
     for (const r of weekRows) {
+        // Phase 7.a: use r.stepTotal for variable-length array initialization.
+        // Both long + short for same asset share the same stepTotal (per-asset config).
         if (!byAsset[r.asset]) {
             byAsset[r.asset] = {
-                long: Array(10).fill(false),
-                short: Array(10).fill(false),
+                long: Array(r.stepTotal).fill(false),
+                short: Array(r.stepTotal).fill(false),
                 longCount: 0,
                 shortCount: 0,
             };

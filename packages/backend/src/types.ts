@@ -79,6 +79,11 @@ export interface TournamentConfig {
         // Resolution: feed_id ?? ADRENA_TO_LAZER_FEED_ID[symbol] ?? null (skip).
         // Used by services/pyth-client.ts to query www.adrena.trade/api/oracle-bars.
         feed_id?: number;
+        // Phase 7.a: optional per-asset Leverage Master ladder.
+        // Engine builds LeverageStep[] via buildLeverageSteps(lmSteps, lmTolerance ?? 2).
+        // undefined = falls back to module constant LEVERAGE_STEPS (10x ladder).
+        lmSteps?: number[];           // e.g. [10, 20, 30, ..., 100] or [1.5, 2, 2.5, 3, 3.5, 4, 4.5]
+        lmTolerance?: number;         // tolerance window; default 2 (matches crypto)
     }>;
 }
 
@@ -440,9 +445,13 @@ export interface QuestProgressDetails {
     // Phase 4 item 30: per-asset LM ladders. `byAsset` keys are asset symbols
     // from config.assetList (e.g. 'SOL', 'BTC', 'BONK'). Each asset has
     // independent long + short ladders.
+    // Phase 7.a: ladder length is now per-asset (variable). Length = asset.lmSteps?.length
+    // when assetList entry has lmSteps configured, else LEVERAGE_STEPS.length (10).
+    // Step values for rendering are resolved client-side from tournament.config.assetList,
+    // not exposed in this payload.
     byAsset: Record<string, {
-        long: boolean[];       // boolean[10] — index 0 = 10x, index 9 = 100x
-        short: boolean[];      // boolean[10]
+        long: boolean[];       // boolean[N] where N = asset's step count
+        short: boolean[];      // boolean[N]
         longCount: number;     // denormalized count for fast rendering
         shortCount: number;
     }>;
