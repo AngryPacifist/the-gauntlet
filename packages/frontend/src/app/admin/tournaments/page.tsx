@@ -543,7 +543,13 @@ export default function AdminTournamentsPage() {
                                     <button className="btn btn--secondary" onClick={() => handleComputeRaffle(t.id, t.name)} disabled={actionLoading}>
                                         <Ticket size={14} /> Compute Raffle
                                     </button>
-                                    <button className="btn btn--secondary" onClick={() => { setDrawTournamentId(t.id); setShowDrawModal(true); }} disabled={actionLoading}>
+                                    <button className="btn btn--secondary" onClick={() => {
+                                        setDrawTournamentId(t.id);
+                                        // Phase 7.d: lock prizeCount to rafflePrizes.length on modal open.
+                                        const len = t.config.prizeTable?.rafflePrizes?.length;
+                                        setDrawPrizeCount(len && len > 0 ? len : 3);
+                                        setShowDrawModal(true);
+                                    }} disabled={actionLoading}>
                                         <Sparkles size={14} /> Draw Raffle
                                     </button>
                                     <button className="btn btn--danger" onClick={() => handleResetRaffle(t.id, t.name)} disabled={actionLoading}>
@@ -562,7 +568,13 @@ export default function AdminTournamentsPage() {
                                     <button className="btn btn--secondary" onClick={() => handleComputeRaffle(t.id, t.name)} disabled={actionLoading}>
                                         <Ticket size={14} /> Compute Raffle
                                     </button>
-                                    <button className="btn btn--secondary" onClick={() => { setDrawTournamentId(t.id); setShowDrawModal(true); }} disabled={actionLoading}>
+                                    <button className="btn btn--secondary" onClick={() => {
+                                        setDrawTournamentId(t.id);
+                                        // Phase 7.d: lock prizeCount to rafflePrizes.length on modal open.
+                                        const len = t.config.prizeTable?.rafflePrizes?.length;
+                                        setDrawPrizeCount(len && len > 0 ? len : 3);
+                                        setShowDrawModal(true);
+                                    }} disabled={actionLoading}>
                                         <Sparkles size={14} /> Draw Raffle
                                     </button>
                                     <button className="btn btn--secondary" onClick={() => handleVerifyRaffle(t.id)} disabled={actionLoading}>
@@ -892,7 +904,11 @@ export default function AdminTournamentsPage() {
                             </div>
                             <div className={styles.formGroup}>
                                 <label className={styles.formLabel}>Number of Winners</label>
-                                <input type="number" className="input input--mono" value={drawPrizeCount} onChange={(e) => setDrawPrizeCount(Number(e.target.value))} min={1} max={100} />
+                                <input type="number" className="input input--mono" value={drawPrizeCount} readOnly disabled
+                                    style={{ opacity: 0.7, cursor: 'not-allowed' }} />
+                                <span className={styles.formHint}>
+                                    Locked to <code>rafflePrizes.length</code> from tournament config (Phase 7.d) — prevents prizeCount/rafflePrizes mismatch.
+                                </span>
                             </div>
                             <div className={styles.modalActions}>
                                 <button type="button" className="btn btn--secondary" onClick={() => setShowDrawModal(false)}>Cancel</button>
