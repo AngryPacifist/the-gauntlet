@@ -16,6 +16,7 @@ import Link from 'next/link';
 import {
     listTournaments,
     createTournament,
+    updateTournament,
     deleteTournament,
     getTournamentBrackets,
     adminStartTournament,
@@ -34,7 +35,7 @@ import {
 import {
     Trophy, Plus, Play, BarChart3, ChevronRight, Trash2, Ban,
     ExternalLink, Terminal, Ticket, Sparkles, CheckCircle2,
-    CalendarDays, Lock, RotateCcw, Flame, Swords, ArrowLeft, Compass,
+    CalendarDays, Lock, RotateCcw, Flame, Swords, ArrowLeft, Compass, Pencil,
 } from 'lucide-react';
 import styles from '../page.module.css';
 
@@ -62,11 +63,15 @@ export default function AdminTournamentsPage() {
     const [loading, setLoading] = useState(true);
     const [adminSecret, setAdminSecret] = useState('');
 
-    // Create tournament modal
+    // Create tournament modal (also reused as Edit modal — see Phase 7.f)
     const [showCreateModal, setShowCreateModal] = useState(false);
     const [newName, setNewName] = useState('');
     const [creating, setCreating] = useState(false);
     const [modalSecretDraft, setModalSecretDraft] = useState('');
+    // Phase 7.f: when non-null, the modal is in EDIT mode for this tournament id.
+    // Submit branches: createTournament (null) vs updateTournament (number).
+    // Restricted to `registration` status — Edit button only renders for that status.
+    const [editingTournamentId, setEditingTournamentId] = useState<number | null>(null);
 
     // Config fields
     const [cfgFormat, setCfgFormat] = useState<'bracket' | 'rank_only'>('bracket');
@@ -162,6 +167,8 @@ export default function AdminTournamentsPage() {
     useEffect(() => { loadAll(); }, []);
 
     function resetConfigDefaults() {
+        // Phase 7.f: also clear edit-mode state so next modal-open is a fresh CREATE.
+        setEditingTournamentId(null);
         setNewName('');
         setCfgFormat('bracket');
         setCfgBracketSize(8);
@@ -197,6 +204,71 @@ export default function AdminTournamentsPage() {
         } else {
             localStorage.removeItem(ADMIN_SECRET_KEY);
         }
+    }
+
+    // Phase 7.f: populate Create modal state from an existing tournament.
+    // Used by handleOpenEdit to pre-fill the form for an EDIT operation.
+    // Mirrors resetConfigDefaults but reads from `t.config` instead of defaults.
+    function populateCfgFromTournament(t: Tournament) {
+        const c = t.config;
+        setNewName(t.name);
+        setCfgFormat(c.format);
+        setCfgBracketSize(c.bracketSize);
+        setCfgAdvanceRatio(c.advanceRatio);
+        setCfgRoundDurations(c.roundDurations.join(', '));
+        setCfgMinCollateral(c.minPositionCollateral);
+        setCfgMinDuration(c.minTradeDurationSec);
+        setCfgAllAroundMinTradeUsd(c.allAroundMinTradeUsd);
+        setCfgRiskManagerMinSize(c.riskManagerMinSize);
+        setCfgAllAroundMaxPointsPerAsset(c.allAroundMaxPointsPerAsset);
+        setCfgFisherRankPoints(c.fisherRankPoints.join(', '));
+        setCfgDailyQuestPoints(c.dailyQuestPoints.join(', '));
+        setCfgMultidayQuestPoints(c.multidayQuestPoints.join(', '));
+        setCfgTopPercentCutoff(c.topPercentCutoff);
+        setCfgRaffleMinClosedPositions(c.raffleMinClosedPositions);
+        setCfgCpiTicketMultiplier(c.cpiTicketMultiplier);
+        setCfgQuestTicketMultiplier(c.questTicketMultiplier);
+        setCfgUseHistoricalWindow(c.useHistoricalWindow);
+        setCfgHistoricalWindowDays(c.historicalWindowDays);
+        setCfgAssetCount(c.supportedAssetCount);
+
+        if (c.prizeTable) {
+            setCfgPrizeEnabled(true);
+            setCfgPrizeTotalPool(c.prizeTable.totalPool);
+            setCfgPrizeCurrency(c.prizeTable.currency as 'ADX' | 'USDC');
+            setCfgSkillPrizes(c.prizeTable.skillPrizes.join(', '));
+            setCfgRafflePrizes(c.prizeTable.rafflePrizes.join(', '));
+        } else {
+            setCfgPrizeEnabled(false);
+            setCfgPrizeTotalPool(1000);
+            setCfgPrizeCurrency('ADX');
+            setCfgSkillPrizes('500, 300, 200');
+            setCfgRafflePrizes('100, 50, 25');
+        }
+
+        if (c.assetList && c.assetList.length > 0) {
+            setCfgAssetList(c.assetList.map((a) => ({
+                symbol: a.symbol,
+                mint: a.mint,
+                joinedAt: a.joinedAt,
+                feed_id: a.feed_id,
+                lmSteps: a.lmSteps && a.lmSteps.length > 0 ? a.lmSteps.join(',') : undefined,
+                lmTolerance: a.lmTolerance != null ? String(a.lmTolerance) : undefined,
+            })));
+        } else {
+            setCfgAssetList([]);
+        }
+    }
+
+    // Phase 7.f: open Create modal in EDIT mode for an existing tournament.
+    // Restricted by caller to `registration` status (Edit button only renders for that).
+    function handleOpenEdit(t: Tournament) {
+        if (!adminSecret) { showToast('Enter admin secret on /admin landing first', 'error'); return; }
+        populateCfgFromTournament(t);
+        setEditingTournamentId(t.id);
+        setShowCreateModal(true);
+        // Trigger tradable-assets fetch if not yet loaded (same as create flow)
+        loadTradableAssetsIfReady(adminSecret);
     }
 
     // Phase 7.c: live prize-totals descriptor.
@@ -322,18 +394,29 @@ export default function AdminTournamentsPage() {
 
         try {
             setCreating(true);
-            const result = await createTournament(newName.trim(), config, effectiveSecret);
-            if (!adminSecret && modalSecretDraft) {
-                commitSecret(modalSecretDraft);
-                setModalSecretDraft('');
+            // Phase 7.f: branch on edit mode — update existing vs create new.
+            if (editingTournamentId !== null) {
+                await updateTournament(editingTournamentId, { name: newName.trim(), config }, effectiveSecret);
+                if (!adminSecret && modalSecretDraft) {
+                    commitSecret(modalSecretDraft);
+                    setModalSecretDraft('');
+                }
+                addLog(`Updated tournament "${newName}" (id: ${editingTournamentId})`);
+                showToast(`Tournament "${newName}" updated`, 'success');
+            } else {
+                const result = await createTournament(newName.trim(), config, effectiveSecret);
+                if (!adminSecret && modalSecretDraft) {
+                    commitSecret(modalSecretDraft);
+                    setModalSecretDraft('');
+                }
+                addLog(`Created tournament "${newName}" (id: ${result.id})`);
+                showToast(`Tournament "${newName}" created`, 'success');
             }
-            addLog(`Created tournament "${newName}" (id: ${result.id})`);
-            showToast(`Tournament "${newName}" created`, 'success');
             resetConfigDefaults();
             setShowCreateModal(false);
             loadAll();
         } catch (err) {
-            const msg = err instanceof Error ? err.message : 'Failed to create';
+            const msg = err instanceof Error ? err.message : (editingTournamentId !== null ? 'Failed to update' : 'Failed to create');
             addLog(`Error: ${msg}`);
             showToast(msg, 'error');
         } finally {
@@ -563,6 +646,10 @@ export default function AdminTournamentsPage() {
                         <div className={styles.controlActions}>
                             {t.status === 'registration' && (
                                 <>
+                                    {/* Phase 7.f: Edit button — opens Create modal in edit mode, only for registration status */}
+                                    <button className="btn btn--secondary" onClick={() => handleOpenEdit(t)} disabled={actionLoading}>
+                                        <Pencil size={14} /> Edit
+                                    </button>
                                     <button className="btn btn--primary" onClick={() => handleStart(t.id, t.name)} disabled={actionLoading}>
                                         <Play size={14} /> Start
                                     </button>
@@ -671,7 +758,9 @@ export default function AdminTournamentsPage() {
                 <div className={styles.modalOverlay} onClick={() => setShowCreateModal(false)}>
                     <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
                         <div className={styles.modalHeader}>
-                            <h2 className={styles.modalTitle}>Create Tournament</h2>
+                            <h2 className={styles.modalTitle}>
+                                {editingTournamentId !== null ? `Edit Tournament #${editingTournamentId}` : 'Create Tournament'}
+                            </h2>
                             <button className={styles.modalClose} onClick={() => setShowCreateModal(false)}>×</button>
                         </div>
                         <form onSubmit={handleCreate} className={styles.modalForm}>
@@ -949,7 +1038,9 @@ export default function AdminTournamentsPage() {
                             <div className={styles.modalActions}>
                                 <button type="button" className="btn btn--secondary" onClick={() => { resetConfigDefaults(); setShowCreateModal(false); }}>Cancel</button>
                                 <button type="submit" className="btn btn--primary" disabled={creating || !newName.trim()}>
-                                    <Plus size={14} /> {creating ? 'Creating...' : 'Create Tournament'}
+                                    {editingTournamentId !== null
+                                        ? <><Pencil size={14} /> {creating ? 'Saving...' : 'Save Changes'}</>
+                                        : <><Plus size={14} /> {creating ? 'Creating...' : 'Create Tournament'}</>}
                                 </button>
                             </div>
                         </form>
