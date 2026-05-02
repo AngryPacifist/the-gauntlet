@@ -11,7 +11,7 @@
 // Modal-internal-draft pattern preserved (Phase 4 admin UX fix).
 // ============================================================================
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import Link from 'next/link';
 import {
     listTournaments,
@@ -190,6 +190,18 @@ export default function AdminTournamentsPage() {
             localStorage.removeItem(ADMIN_SECRET_KEY);
         }
     }
+
+    // Phase 7.c: live prize-totals descriptor.
+    // Warns when skill+raffle sum doesn't match cfgPrizeTotalPool — ZeDef Apr 29
+    // hit this footgun (100k Total Pool, 1175 in array sums).
+    const prizeSums = useMemo(() => {
+        const parse = (s: string) => s.split(',').map((x) => Number(x.trim())).filter((n) => !isNaN(n) && n > 0);
+        const skillTotal = parse(cfgSkillPrizes).reduce((a, b) => a + b, 0);
+        const raffleTotal = parse(cfgRafflePrizes).reduce((a, b) => a + b, 0);
+        const combined = skillTotal + raffleTotal;
+        const matches = combined === cfgPrizeTotalPool;
+        return { skillTotal, raffleTotal, combined, matches };
+    }, [cfgSkillPrizes, cfgRafflePrizes, cfgPrizeTotalPool]);
 
     // ── Tournament handlers ──────────────────────────────────────────────────
 
@@ -783,6 +795,24 @@ export default function AdminTournamentsPage() {
                                     <div className={styles.formGroup}>
                                         <label className={styles.formLabel}>Raffle Prizes (winner 1, 2, 3, ...)</label>
                                         <input type="text" className="input input--mono" value={cfgRafflePrizes} onChange={(e) => setCfgRafflePrizes(e.target.value)} placeholder="100, 50, 25" />
+                                    </div>
+                                    {/* Phase 7.c: live prize-totals descriptor — warns when sums don't match Total Pool */}
+                                    <div style={{
+                                        padding: '0.5rem 0.75rem',
+                                        background: prizeSums.matches ? 'rgba(34, 197, 94, 0.08)' : 'rgba(245, 158, 11, 0.08)',
+                                        border: `1px solid ${prizeSums.matches ? 'rgba(34, 197, 94, 0.25)' : 'rgba(245, 158, 11, 0.25)'}`,
+                                        borderRadius: '6px',
+                                        fontSize: '0.8125rem',
+                                        color: prizeSums.matches ? '#22c55e' : '#fbbf24',
+                                        fontFamily: 'monospace',
+                                    }}>
+                                        <strong>{prizeSums.matches ? '✓' : '⚠'}</strong>
+                                        {' '}Skill total: {prizeSums.skillTotal.toLocaleString('en-US')}
+                                        {' | '}Raffle total: {prizeSums.raffleTotal.toLocaleString('en-US')}
+                                        {' | '}Combined: {prizeSums.combined.toLocaleString('en-US')}
+                                        {prizeSums.matches
+                                            ? ' (matches Total Pool)'
+                                            : ` (Total Pool: ${cfgPrizeTotalPool.toLocaleString('en-US')})`}
                                     </div>
                                 </>
                             )}
