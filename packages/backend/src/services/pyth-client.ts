@@ -1,14 +1,20 @@
 // ============================================================================
-// Pyth Benchmarks Client
+// Pyth OHLC Client (Pyth Benchmarks primary, Pyth Lazer via Adrena fallback)
 //
-// Fetches daily OHLC candle data from the Pyth Benchmarks TradingView shim.
-// Used by the Top Bottom Fisher category to get daily high/low prices.
+// Fetches daily + intraday OHLC candle data for proximity scoring categories
+// (Bottom Fisher, Top-Tick, All Around, Risk Manager, Humble One).
 //
-// API: https://benchmarks.pyth.network/v1/shims/tradingview/history
-// No API key required. Rate limit: 90 requests / 10 seconds (TradingView shim).
+// PRIMARY (Phase 8.f, post call2aamir 2026-05-02):
+//   https://benchmarks.pyth.network/v1/shims/tradingview/history
+//   No API key. Rate limit: 90 requests / 10 seconds. Public + stable.
 //
-// Daily bars are immutable once the day ends — we cache them permanently
-// in the pyth_ohlc_cache table to avoid redundant calls.
+// FALLBACK (Phase 7.b → demoted by 8.f):
+//   https://www.adrena.trade/api/oracle-bars (Adrena's Pyth Lazer Next.js proxy)
+//   Internal-only per call2aamir 2026-05-02. Kept as degraded-mode fallback
+//   when Pyth Benchmarks fails (rate limit, outage, network error).
+//
+// Daily bars are immutable once the day ends — cached permanently in the
+// pyth_ohlc_cache table to avoid redundant calls.
 // ============================================================================
 
 import { db } from '../db/index.js';
@@ -17,15 +23,18 @@ import { and, eq } from 'drizzle-orm';
 import { ADRENA_TO_LAZER_FEED_ID, ADRENA_TO_PYTH_SYMBOL } from '../types.js';
 import type { OHLCBar } from '../types.js';
 
-// Phase 7.b: primary OHLC source — Adrena's Next.js proxy serving Pyth Lazer.
-// Verified 2026-05-01: same TradingView UDF response shape as Pyth Benchmarks.
-const ADRENA_LAZER_BASE = 'https://www.adrena.trade/api/oracle-bars';
+// Phase 8.f: PRIMARY OHLC source — Pyth Benchmarks (public, stable).
+// 90 req/10s rate limit; 200ms throttle in batch fns keeps us well under.
+const PYTH_BENCHMARKS_BASE = 'https://benchmarks.pyth.network';
 
-// Phase 7.b D35: throttle between batched fetches to stay under Vercel WAF.
+// Phase 7.b D35 (still applies post-8.f): throttle between batched fetches.
+// Was for Vercel-WAF protection on Lazer; Benchmarks is public so could be
+// shorter, but 200ms is safe and identical batches keep behavior predictable.
 const BATCH_THROTTLE_MS = 200;
 
-// Legacy Pyth Benchmarks (Phase 7.b D33 fallback path).
-const PYTH_BENCHMARKS_BASE = 'https://benchmarks.pyth.network';
+// Phase 7.b → demoted by 8.f: FALLBACK OHLC source — Adrena's Pyth Lazer proxy.
+// Internal-only per call2aamir 2026-05-02. Used only when Benchmarks fails.
+const ADRENA_LAZER_BASE = 'https://www.adrena.trade/api/oracle-bars';
 
 // --------------------------------------------------------------------------
 // TradingView History API response shape
@@ -168,8 +177,12 @@ async function fetchOHLCFromUrl(
 }
 
 // --------------------------------------------------------------------------
-// Phase 7.b: dispatch helper — try Adrena Pyth Lazer first, fall back to
-// Pyth Benchmarks (D33) if Lazer returns null (non-2xx, non-"ok", or empty).
+// Phase 8.f (post call2aamir 2026-05-02): dispatch helper — try Pyth
+// Benchmarks first (PRIMARY), fall back to Adrena Pyth Lazer proxy on null.
+//
+// Reverses Phase 7.b dispatch order. Adrena confirmed /api/oracle-bars is
+// internal-only Next.js API — keep as fallback for redundancy but don't
+// rely on as production primary.
 // --------------------------------------------------------------------------
 async function fetchOHLCWithFallback(
     adrenaSymbol: string,
@@ -177,45 +190,45 @@ async function fetchOHLCWithFallback(
     aggregation: 'daily' | 'intraday',
     feedIdOverride?: number,
 ): Promise<OHLCBar | null> {
-    // 1. Try Adrena Pyth Lazer proxy
-    const feedId = feedIdOverride ?? ADRENA_TO_LAZER_FEED_ID[adrenaSymbol];
-    if (feedId != null) {
-        const resolution = aggregation === 'daily' ? '1D' : '60';
+    // 1. PRIMARY: Pyth Benchmarks (public, stable)
+    const pythSymbol = ADRENA_TO_PYTH_SYMBOL[adrenaSymbol];
+    if (pythSymbol) {
+        const resolution = aggregation === 'daily' ? 'D' : '60';
         const url =
-            `${ADRENA_LAZER_BASE}` +
-            `?feed_id=${feedId}` +
+            `${PYTH_BENCHMARKS_BASE}/v1/shims/tradingview/history` +
+            `?symbol=${encodeURIComponent(pythSymbol)}` +
             `&resolution=${resolution}` +
             `&from=${range.from}` +
             `&to=${range.to}`;
         const bar = await fetchOHLCFromUrl(
-            url, `Lazer ${adrenaSymbol} feed_id=${feedId} ${aggregation}`, aggregation,
+            url, `Benchmarks ${adrenaSymbol} ${pythSymbol} ${aggregation}`, aggregation,
         );
         if (bar) return bar;
         console.warn(
-            `[PythClient] Lazer null for ${adrenaSymbol} (feed_id ${feedId}); ` +
-            `falling back to Pyth Benchmarks (D33)`,
+            `[PythClient] Benchmarks null for ${adrenaSymbol} (${pythSymbol}); ` +
+            `falling back to Adrena Lazer proxy (Phase 8.f)`,
         );
     }
 
-    // 2. Fall back to Pyth Benchmarks
-    const pythSymbol = ADRENA_TO_PYTH_SYMBOL[adrenaSymbol];
-    if (!pythSymbol) {
-        if (feedId == null) {
+    // 2. FALLBACK: Adrena Pyth Lazer proxy (internal-only, redundancy only)
+    const feedId = feedIdOverride ?? ADRENA_TO_LAZER_FEED_ID[adrenaSymbol];
+    if (feedId == null) {
+        if (!pythSymbol) {
             console.warn(
-                `[PythClient] No Lazer feed_id and no Pyth Benchmarks symbol for "${adrenaSymbol}" — skipping`,
+                `[PythClient] No Benchmarks symbol AND no Lazer feed_id for "${adrenaSymbol}" — skipping`,
             );
         }
         return null;
     }
-    const resolution = aggregation === 'daily' ? 'D' : '60';
+    const resolution = aggregation === 'daily' ? '1D' : '60';
     const url =
-        `${PYTH_BENCHMARKS_BASE}/v1/shims/tradingview/history` +
-        `?symbol=${encodeURIComponent(pythSymbol)}` +
+        `${ADRENA_LAZER_BASE}` +
+        `?feed_id=${feedId}` +
         `&resolution=${resolution}` +
         `&from=${range.from}` +
         `&to=${range.to}`;
     return fetchOHLCFromUrl(
-        url, `Benchmarks ${adrenaSymbol} ${pythSymbol} ${aggregation}`, aggregation,
+        url, `Lazer ${adrenaSymbol} feed_id=${feedId} ${aggregation} (fallback)`, aggregation,
     );
 }
 

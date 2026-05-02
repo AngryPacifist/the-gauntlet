@@ -482,12 +482,25 @@ export const ADRENA_TO_LAZER_FEED_ID: Record<string, number> = {
     WTI: 2035,
 };
 
-// --- Pyth Benchmarks Symbol Mapping (legacy fallback, Phase 7.b D33) ---
-// Pre-Phase-7 primary; now used only when /api/oracle-bars fails (per D33).
-// Verified against live Pyth Benchmarks API + Adrena liquidity-info endpoint.
+// --- Pyth Benchmarks Symbol Mapping (PRIMARY, Phase 8.f) ---
+// Phase 8.f promoted to primary OHLC source post call2aamir 2026-05-02 confirming
+// /api/oracle-bars is internal-only Next.js API. Pyth Lazer (via Adrena's proxy)
+// becomes fallback; see services/pyth-client.ts:fetchOHLCWithFallback.
+//
+// RWA additions (XAU/XAG/WTI) verified empirically 2026-05-02 against
+// benchmarks.pyth.network/v1/shims/tradingview/history?symbol=<X>&resolution=D:
+//   XAU close 2026-05-01 = $4,615   (Lazer 2056 capture: $4,614.83)  ✓ match
+//   XAG close 2026-05-01 = $75.37   (Lazer 2069 capture: $75.36)     ✓ match
+//   WTI close 2026-05-01 = $99.45   via Commodities.USOILSPOT
+//     (Lazer 2035 capture: $102.53; ~3% spot-vs-continuous offset acceptable
+//      since proximity scoring is ratio-based; spot continuous chosen for
+//      handover-friendliness — no monthly futures roll, unlike WTIM6/USD).
 export const ADRENA_TO_PYTH_SYMBOL: Record<string, string> = {
     SOL: 'Crypto.SOL/USD',
     BTC: 'Crypto.BTC/USD',
     BONK: 'Crypto.BONK/USD',
     JITOSOL: 'Crypto.JITOSOL/USD',
+    XAU: 'Metal.XAU/USD',                  // Phase 8.f
+    XAG: 'Metal.XAG/USD',                  // Phase 8.f
+    WTI: 'Commodities.USOILSPOT',          // Phase 8.f (spot continuous, no roll)
 };
