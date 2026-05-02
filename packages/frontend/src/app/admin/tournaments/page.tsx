@@ -49,6 +49,51 @@ const KNOWN_LAZER_FEED_IDS: Record<string, number> = {
     USDC: 4001, XAU: 2056, XAG: 2069, WTI: 2035,
 };
 
+// Phase 8.a: preset prize distribution templates.
+// Triggered by ZeDef Apr 30 obs (2): manual array entry is error-prone;
+// preset rule + total pool is cleaner. Admin enters Total Pool; system
+// auto-derives skill+raffle arrays from (skillSharePct, raffleSharePct)
+// split + (skillCurve, raffleCurve) percentages. Each curve sums to 100.
+type PrizeTemplate = {
+    id: string;
+    label: string;
+    skillSharePct: number;       // % of total pool going to skill prizes
+    raffleSharePct: number;      // % going to raffle (skillShare + raffleShare = 100)
+    skillCurve: number[];        // % within skill share, summing to 100
+    raffleCurve: number[];       // % within raffle share, summing to 100
+};
+
+const PRIZE_TEMPLATES: PrizeTemplate[] = [
+    {
+        id: 'standard-80-20-6',
+        label: 'Standard 80/20 — 6 skill ranks, 5 raffle winners',
+        skillSharePct: 80, raffleSharePct: 20,
+        skillCurve: [31.25, 22.5, 17.5, 12.5, 10, 6.25],   // sums to 100
+        raffleCurve: [40, 25, 20, 10, 5],                   // sums to 100
+    },
+    {
+        id: 'standard-70-30-5',
+        label: 'Standard 70/30 — 5 skill ranks, 5 raffle winners',
+        skillSharePct: 70, raffleSharePct: 30,
+        skillCurve: [40, 25, 17, 11, 7],                    // sums to 100
+        raffleCurve: [40, 25, 20, 10, 5],                   // sums to 100
+    },
+    {
+        id: 'flat-50-50-3',
+        label: 'Flat 50/50 — 3 skill ranks, 3 raffle winners',
+        skillSharePct: 50, raffleSharePct: 50,
+        skillCurve: [50, 30, 20],                           // sums to 100
+        raffleCurve: [50, 30, 20],                          // sums to 100
+    },
+    {
+        id: 'winner-take-most-90-10',
+        label: 'Winner-take-most 90/10 — single skill winner, 5 raffle winners',
+        skillSharePct: 90, raffleSharePct: 10,
+        skillCurve: [100],                                  // sums to 100
+        raffleCurve: [40, 25, 20, 10, 5],                   // sums to 100
+    },
+];
+
 function readSecret(): string {
     if (typeof window === 'undefined') return '';
     return localStorage.getItem(ADMIN_SECRET_KEY) ?? '';
@@ -98,6 +143,15 @@ export default function AdminTournamentsPage() {
     const [cfgPrizeCurrency, setCfgPrizeCurrency] = useState<'ADX' | 'USDC'>('ADX');
     const [cfgSkillPrizes, setCfgSkillPrizes] = useState('500, 300, 200');
     const [cfgRafflePrizes, setCfgRafflePrizes] = useState('100, 50, 25');
+    // Phase 8.a: preset prize distribution mode + state.
+    // 'manual' (default) = admin types arrays directly (current behavior).
+    // 'preset' = admin selects template + customizes shares/curves; arrays auto-derive.
+    const [cfgPrizeMode, setCfgPrizeMode] = useState<'manual' | 'preset'>('manual');
+    const [cfgPresetTemplateId, setCfgPresetTemplateId] = useState<string>(PRIZE_TEMPLATES[0].id);
+    const [cfgSkillSharePct, setCfgSkillSharePct] = useState<number>(PRIZE_TEMPLATES[0].skillSharePct);
+    const [cfgRaffleSharePct, setCfgRaffleSharePct] = useState<number>(PRIZE_TEMPLATES[0].raffleSharePct);
+    const [cfgSkillCurve, setCfgSkillCurve] = useState<string>(PRIZE_TEMPLATES[0].skillCurve.join(', '));
+    const [cfgRaffleCurve, setCfgRaffleCurve] = useState<string>(PRIZE_TEMPLATES[0].raffleCurve.join(', '));
     const [cfgAssetList, setCfgAssetList] = useState<Array<{ symbol: string; mint?: string; joinedAt: string; feed_id?: number; lmSteps?: string; lmTolerance?: string }>>([]);
     const [cfgTradableAssets, setCfgTradableAssets] = useState<Array<{ symbol: string; mint: string }>>([]);
     const [cfgTradableAssetsError, setCfgTradableAssetsError] = useState<string | null>(null);
@@ -194,6 +248,13 @@ export default function AdminTournamentsPage() {
         setCfgPrizeCurrency('ADX');
         setCfgSkillPrizes('500, 300, 200');
         setCfgRafflePrizes('100, 50, 25');
+        // Phase 8.a: reset preset state to first template's defaults
+        setCfgPrizeMode('manual');
+        setCfgPresetTemplateId(PRIZE_TEMPLATES[0].id);
+        setCfgSkillSharePct(PRIZE_TEMPLATES[0].skillSharePct);
+        setCfgRaffleSharePct(PRIZE_TEMPLATES[0].raffleSharePct);
+        setCfgSkillCurve(PRIZE_TEMPLATES[0].skillCurve.join(', '));
+        setCfgRaffleCurve(PRIZE_TEMPLATES[0].raffleCurve.join(', '));
         setCfgAssetList([]);
     }
 
@@ -245,6 +306,14 @@ export default function AdminTournamentsPage() {
             setCfgSkillPrizes('500, 300, 200');
             setCfgRafflePrizes('100, 50, 25');
         }
+        // Phase 8.a: edit mode always opens in manual (existing tournaments persist
+        // arrays, not percentages — admin can switch to preset to re-derive if desired).
+        setCfgPrizeMode('manual');
+        setCfgPresetTemplateId(PRIZE_TEMPLATES[0].id);
+        setCfgSkillSharePct(PRIZE_TEMPLATES[0].skillSharePct);
+        setCfgRaffleSharePct(PRIZE_TEMPLATES[0].raffleSharePct);
+        setCfgSkillCurve(PRIZE_TEMPLATES[0].skillCurve.join(', '));
+        setCfgRaffleCurve(PRIZE_TEMPLATES[0].raffleCurve.join(', '));
 
         if (c.assetList && c.assetList.length > 0) {
             setCfgAssetList(c.assetList.map((a) => ({
@@ -282,6 +351,39 @@ export default function AdminTournamentsPage() {
         const matches = combined === cfgPrizeTotalPool;
         return { skillTotal, raffleTotal, combined, matches };
     }, [cfgSkillPrizes, cfgRafflePrizes, cfgPrizeTotalPool]);
+
+    // Phase 8.a: auto-derive skill/raffle arrays from preset shares + curves.
+    // Runs only when in preset mode. 7.c descriptor still catches mismatches
+    // (e.g. curve doesn't sum to 100, share% don't sum to 100).
+    // Defensive: NaN/negative inputs collapse to 0 — prevents "NaN, NaN, ..."
+    // strings appearing in cfgSkillPrizes/cfgRafflePrizes if admin pastes garbage
+    // into a number input.
+    useEffect(() => {
+        if (cfgPrizeMode !== 'preset') return;
+        const parsePcts = (s: string) => s.split(',').map((x) => Number(x.trim())).filter((n) => !isNaN(n) && n > 0);
+        const totalPool = isFinite(cfgPrizeTotalPool) && cfgPrizeTotalPool >= 0 ? cfgPrizeTotalPool : 0;
+        const skillShare = isFinite(cfgSkillSharePct) && cfgSkillSharePct >= 0 ? cfgSkillSharePct : 0;
+        const raffleShare = isFinite(cfgRaffleSharePct) && cfgRaffleSharePct >= 0 ? cfgRaffleSharePct : 0;
+        const skillPool = totalPool * skillShare / 100;
+        const rafflePool = totalPool * raffleShare / 100;
+        const skillPcts = parsePcts(cfgSkillCurve);
+        const rafflePcts = parsePcts(cfgRaffleCurve);
+        const skillArr = skillPcts.map(pct => Math.round(skillPool * pct / 100));
+        const raffleArr = rafflePcts.map(pct => Math.round(rafflePool * pct / 100));
+        setCfgSkillPrizes(skillArr.join(', '));
+        setCfgRafflePrizes(raffleArr.join(', '));
+    }, [cfgPrizeMode, cfgPrizeTotalPool, cfgSkillSharePct, cfgRaffleSharePct, cfgSkillCurve, cfgRaffleCurve]);
+
+    // Phase 8.a: when admin selects a different template, load its shares + curves.
+    function handleTemplateChange(templateId: string) {
+        const tpl = PRIZE_TEMPLATES.find(t => t.id === templateId);
+        if (!tpl) return;
+        setCfgPresetTemplateId(templateId);
+        setCfgSkillSharePct(tpl.skillSharePct);
+        setCfgRaffleSharePct(tpl.raffleSharePct);
+        setCfgSkillCurve(tpl.skillCurve.join(', '));
+        setCfgRaffleCurve(tpl.raffleCurve.join(', '));
+    }
 
     // ── Tournament handlers ──────────────────────────────────────────────────
 
@@ -933,13 +1035,82 @@ export default function AdminTournamentsPage() {
                                             </select>
                                         </div>
                                     </div>
+                                    {/* Phase 8.a: Mode toggle (Manual / Preset) */}
+                                    <div className={styles.formGroup}>
+                                        <label className={styles.formLabel}>Distribution Mode</label>
+                                        <div style={{ display: 'flex', gap: 'var(--space-sm)' }}>
+                                            <button type="button" className={`btn ${cfgPrizeMode === 'manual' ? 'btn--primary' : 'btn--secondary'}`}
+                                                onClick={() => setCfgPrizeMode('manual')} style={{ flex: 1 }}>
+                                                Manual (type arrays directly)
+                                            </button>
+                                            <button type="button" className={`btn ${cfgPrizeMode === 'preset' ? 'btn--primary' : 'btn--secondary'}`}
+                                                onClick={() => setCfgPrizeMode('preset')} style={{ flex: 1 }}>
+                                                Preset (Total Pool + percentages)
+                                            </button>
+                                        </div>
+                                        <span className={styles.formHint}>
+                                            {cfgPrizeMode === 'manual'
+                                                ? 'Type skill + raffle arrays directly. 7.c descriptor below shows totals.'
+                                                : 'Pick template + customize percentages. Skill/Raffle prize arrays auto-derived (read-only).'}
+                                        </span>
+                                    </div>
+                                    {/* Phase 8.a: Preset-only inputs (template dropdown + share% + curves) */}
+                                    {cfgPrizeMode === 'preset' && (
+                                        <>
+                                            <div className={styles.formGroup}>
+                                                <label className={styles.formLabel}>Template</label>
+                                                <select className="input" value={cfgPresetTemplateId} onChange={(e) => handleTemplateChange(e.target.value)}>
+                                                    {PRIZE_TEMPLATES.map((t) => (
+                                                        <option key={t.id} value={t.id}>{t.label}</option>
+                                                    ))}
+                                                </select>
+                                                <span className={styles.formHint}>Selecting a template loads its shares + curves into the inputs below. Edit freely to customize.</span>
+                                            </div>
+                                            <div className={styles.formGrid}>
+                                                <div className={styles.formGroup}>
+                                                    <label className={styles.formLabel}>Skill Share %</label>
+                                                    <input type="number" className="input input--mono" value={cfgSkillSharePct}
+                                                        onChange={(e) => setCfgSkillSharePct(Number(e.target.value))} min={0} max={100} step={1} />
+                                                </div>
+                                                <div className={styles.formGroup}>
+                                                    <label className={styles.formLabel}>Raffle Share %</label>
+                                                    <input type="number" className="input input--mono" value={cfgRaffleSharePct}
+                                                        onChange={(e) => setCfgRaffleSharePct(Number(e.target.value))} min={0} max={100} step={1} />
+                                                </div>
+                                            </div>
+                                            <div className={styles.formGroup}>
+                                                <label className={styles.formLabel}>Skill Curve % (rank 1, 2, 3, ...)</label>
+                                                <input type="text" className="input input--mono" value={cfgSkillCurve} onChange={(e) => setCfgSkillCurve(e.target.value)} placeholder="31.25, 22.5, 17.5, 12.5, 10, 6.25" />
+                                                <span className={styles.formHint}>Each rank's % within Skill Share. Should sum to 100.</span>
+                                            </div>
+                                            <div className={styles.formGroup}>
+                                                <label className={styles.formLabel}>Raffle Curve % (winner 1, 2, 3, ...)</label>
+                                                <input type="text" className="input input--mono" value={cfgRaffleCurve} onChange={(e) => setCfgRaffleCurve(e.target.value)} placeholder="40, 25, 20, 10, 5" />
+                                                <span className={styles.formHint}>Each winner position's % within Raffle Share. Should sum to 100.</span>
+                                            </div>
+                                        </>
+                                    )}
                                     <div className={styles.formGroup}>
                                         <label className={styles.formLabel}>Skill Prizes (rank 1, 2, 3, ...)</label>
-                                        <input type="text" className="input input--mono" value={cfgSkillPrizes} onChange={(e) => setCfgSkillPrizes(e.target.value)} placeholder="500, 300, 200" />
+                                        <input type="text" className="input input--mono" value={cfgSkillPrizes}
+                                            onChange={(e) => setCfgSkillPrizes(e.target.value)}
+                                            placeholder="500, 300, 200"
+                                            readOnly={cfgPrizeMode === 'preset'}
+                                            style={cfgPrizeMode === 'preset' ? { opacity: 0.7, cursor: 'not-allowed' } : undefined} />
+                                        {cfgPrizeMode === 'preset' && (
+                                            <span className={styles.formHint}>Auto-derived from preset shares + curves above.</span>
+                                        )}
                                     </div>
                                     <div className={styles.formGroup}>
                                         <label className={styles.formLabel}>Raffle Prizes (winner 1, 2, 3, ...)</label>
-                                        <input type="text" className="input input--mono" value={cfgRafflePrizes} onChange={(e) => setCfgRafflePrizes(e.target.value)} placeholder="100, 50, 25" />
+                                        <input type="text" className="input input--mono" value={cfgRafflePrizes}
+                                            onChange={(e) => setCfgRafflePrizes(e.target.value)}
+                                            placeholder="100, 50, 25"
+                                            readOnly={cfgPrizeMode === 'preset'}
+                                            style={cfgPrizeMode === 'preset' ? { opacity: 0.7, cursor: 'not-allowed' } : undefined} />
+                                        {cfgPrizeMode === 'preset' && (
+                                            <span className={styles.formHint}>Auto-derived from preset shares + curves above.</span>
+                                        )}
                                     </div>
                                     {/* Phase 7.c: live prize-totals descriptor — warns when sums don't match Total Pool */}
                                     <div style={{
