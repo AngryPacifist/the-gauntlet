@@ -109,6 +109,7 @@ export function getLeverageMasterDescription(
     side: 'long' | 'short',
     assetSymbol?: string, // optional — narrows description to a specific asset tab
     stepValues?: number[], // Phase 7.a: variable per-asset ladder text (sourced from tournament.config.assetList)
+    tolerance?: number,    // Phase 8 fix: per-asset lmTolerance (e.g. 0.2 for RWAs at 5x cap)
 ): QuestDescription {
     const sideLabel = side === 'long' ? 'Long' : 'Short';
     const sideArticle = side === 'long' ? 'long' : 'short';
@@ -121,6 +122,8 @@ export function getLeverageMasterDescription(
         : [10, 20, 30, 40, 50, 60, 70, 80, 90, 100];
     const ladderText = ladder.map((v) => `${v}x`).join(', ');
     const ladderRange = `from ${ladder[0]}x up to ${ladder[ladder.length - 1]}x across ${ladder.length} defined steps`;
+    // Phase 8 fix: tolerance also dynamic; default 2 matches the engine default in buildLeverageSteps.
+    const toleranceValue = tolerance ?? 2;
 
     return {
         tagline: `Push the limits on ${sideArticle}s — ${ladder.length} steps per asset.`,
@@ -131,7 +134,7 @@ export function getLeverageMasterDescription(
             `Completing the full ladder on a single asset earns that asset's share of the weekly LM ceiling; ` +
             `maxing LM overall requires topping ladders on every supported asset.`,
         rules: [
-            `Steps: ${ladderText} (±2x tolerance per step by default; per-asset configurable).`,
+            `Steps: ${ladderText} (±${toleranceValue}x tolerance per step; per-asset configurable).`,
             `Position must be a qualifying ${sideArticle} position above a minimum collateral threshold.`,
             'Position must meet a minimum open-duration requirement.',
             'Opening a qualifying position at any step counts — it doesn\'t need to be profitable.',

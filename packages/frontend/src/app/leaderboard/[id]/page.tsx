@@ -827,7 +827,7 @@ interface QuestLeaderboardsProps {
     questScores: Map<string, DailyCategoryScore[]>;
     questLoading: boolean;
     expandedRules: Set<string>;
-    assetList?: Array<{ symbol: string }>;  // Phase 4: for per-asset LM slug generation
+    assetList?: Array<{ symbol: string; lmSteps?: number[]; lmTolerance?: number }>;  // Phase 4: per-asset LM slug; Phase 8 fix: lmSteps + lmTolerance fed into description
     onPeriodChange: (p: QuestPeriod) => void;
     onNavigateDate: (dir: number) => void;
     onToggleRules: (cat: string) => void;
@@ -938,6 +938,7 @@ function QuestLeaderboards({
                         isForge={isForge}
                         searchedWallet={searchedWallet}
                         assetListLength={assetList?.length}
+                        assetList={assetList}
                     />
                 ))
             )}
@@ -957,9 +958,10 @@ interface CategoryLeaderboardProps {
     isForge: boolean;
     searchedWallet: string | null;
     assetListLength?: number;  // Phase 4 V8: for extractQuestColumns denominator
+    assetList?: Array<{ symbol: string; lmSteps?: number[]; lmTolerance?: number }>;  // Phase 8 fix: per-asset LM description (lmSteps + lmTolerance)
 }
 
-function CategoryLeaderboard({ category, scores, isRulesExpanded, onToggleRules, isForge, searchedWallet, assetListLength }: CategoryLeaderboardProps) {
+function CategoryLeaderboard({ category, scores, isRulesExpanded, onToggleRules, isForge, searchedWallet, assetListLength, assetList }: CategoryLeaderboardProps) {
     // Phase 4 item 30: LM descriptions are per-asset, rendered via helper.
     // Static non-LM entries still come from QUEST_DESCRIPTIONS record.
     const lmMatch = category.match(/^leverage_master_(.+)?_?(long|short)$/);
@@ -969,8 +971,10 @@ function CategoryLeaderboard({ category, scores, isRulesExpanded, onToggleRules,
     const lmAsset = lmMatch?.[1] && lmMatch[1] !== 'long' && lmMatch[1] !== 'short'
         ? lmMatch[1]
         : undefined;
+    // Phase 8 fix: pass per-asset lmSteps + lmTolerance so RWA panels render their actual ladder text.
+    const lmAssetConfig = lmAsset ? assetList?.find((a) => a.symbol === lmAsset) : undefined;
     const questInfo: QuestDescription | undefined = lmSide
-        ? getLeverageMasterDescription(lmSide, lmAsset)
+        ? getLeverageMasterDescription(lmSide, lmAsset, lmAssetConfig?.lmSteps, lmAssetConfig?.lmTolerance)
         : QUEST_DESCRIPTIONS[category];
     const label = getQuestLabel(category);
 
