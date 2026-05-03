@@ -121,9 +121,20 @@ export class AdrenaClient {
     //
     // We project to the minimal {symbol, mint} shape — other fields are not
     // relevant to the admin dropdown or engine asset matching.
+    //
+    // Phase 8.j (2026-05-04): defensive ?pool_name=main-pool query parameter.
+    // br0wnD3v announced an upcoming /liquidity-info shape change that wraps
+    // the response in data.pools[] (multi-pool, separating main-pool custodies
+    // from a new commodities-pool for RWAs). Per his spec the ?pool_name=<name>
+    // path keeps returning the legacy single-pool shape under data directly.
+    // Live API curl 2026-05-04 still returns the legacy bare-shape — his deploy
+    // hasn't landed yet — but adding the query now eliminates the silent-
+    // regression window between his deploy and our next code review (otherwise
+    // bare /liquidity-info would silently return [] via our data?.custodies ??
+    // [] guard, leaving newly-created tournaments without mint resolution).
     // --------------------------------------------------------------------------
     async getCustodies(): Promise<Array<{ symbol: string; mint: string }>> {
-        const url = `${this.baseUrl}/liquidity-info`;
+        const url = `${this.baseUrl}/liquidity-info?pool_name=main-pool`;
         const response = await this.fetchWithRetry(url);
 
         if (!response.success) {
