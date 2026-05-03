@@ -1013,8 +1013,8 @@ Manually triggers daily category scoring for a specific tournament and date. Com
 3. **Bottom Fisher** — Long entry proximity to daily low (Pyth OHLC)
 4. **Risk Manager** — Best risk-adjusted trade in 2-day windows (scored every 2nd day)
 5. **The Humble One** — Best low-leverage profitable trade in 2-day windows
-6. **Leverage Master (Long)** — 10-step badge grid, 10x-100x long positions
-7. **Leverage Master (Short)** — 10-step badge grid, 10x-100x short positions
+6. **Leverage Master (Long)** — Per-asset variable-step badge grid (Phase 7.a). Defaults to a 10-step `10x→100x` ladder for crypto assets; admin can configure custom `lmSteps` + `lmTolerance` per asset (e.g. `[1.5, 2, 2.5, 3, 3.5, 4, 4.5]` with `±0.2` tolerance for sub-10x RWAs like XAU/XAG/WTI). Long positions only.
+7. **Leverage Master (Short)** — Same per-asset variable-step semantics; separate ladder per side.
 
 If the tournament belongs to a season, Fisher (3/2/1 for top 3 each direction) and All Around (3/2/1 for top 3) season points are also awarded.
 
@@ -1059,6 +1059,8 @@ Returns a wallet's Leverage Master quest progress (badge grid data). Returns the
   }
 }
 ```
+
+**Note (Phase 7.a):** `long` and `short` array lengths are variable per asset — defaulting to 10 elements for crypto (`10x→100x` ladder), but configurable via the tournament's `assetList[i].lmSteps` (e.g. RWAs use a 7-element `[1.5, 2, 2.5, 3, 3.5, 4, 4.5]` ladder with `±0.2` tolerance). Each `quest_progress` row carries a `stepTotal` column (`stepCount` × ladder size) reflecting the configured length. Frontend should render `${count}/${total}` rather than assuming `/10`.
 
 If no progress exists, all boolean arrays default to `false` and counts to `0`.
 
