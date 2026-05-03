@@ -522,70 +522,35 @@ router.get('/analytics/:tournamentId/anomalies', async (req, res) => {
 });
 
 // --------------------------------------------------------------------------
-// GET /api/admin/tradable-assets — Phase 8.h: full Adrena tradable asset list
+// GET /api/admin/tradable-assets — Phase 8.k: static-mirror from adrena-abi
 //
-// Joins /last-trading-prices (full 9-symbol tradable list with autonom feed_ids)
-// + /liquidity-info (mints for the 4 custodies that have them) into enriched
-// {symbol, mint?, feed_id?} per asset.
+// Returns the canonical 9 tradable Adrena symbols with Pyth Lazer feed_id,
+// SPL token mint (main-pool only, sourced from src/lib.rs:46-50 constants in
+// the abi repo), synthetic-custody PDA (commodities-pool RWAs only — D45
+// keeps these informational pending empirical T1 confirmation), pool name,
+// and trading-hours profile (sessioned flag). Data sourced from a pinned
+// snapshot of github.com/AdrenaFoundation/adrena-abi — see
+// services/adrena-canonical.ts for sync notes + commit hash.
 //
-// Pre-Phase-8.h this was a /liquidity-info proxy returning only the 4 pool
-// custodies — broke admin asset selection for SOL, BTC, and RWAs post-Apr-29
-// Adrena relaunch (when SOL/BTC stopped being custodies and RWAs were added
-// as synthetic perpetuals with no underlying custody).
-//
-// Symbol normalization: /last-trading-prices uses "SOLUSD" suffix for crypto
-// (and bare "XAU"/"XAG"/"WTI" for RWAs); we strip the "USD" suffix to match
-// the bare-symbol convention used by Adrena position objects + admin UI +
-// scoring engine.
-//
-// Promise.allSettled handles partial source failure gracefully — if either
-// /last-trading-prices or /liquidity-info fails, return what's available.
+// Phase history:
+//   - Pre-Phase-8.h: /liquidity-info proxy (only 4 custodies; broke SOL/BTC/RWA
+//     selection post-Apr-29 relaunch).
+//   - Phase 8.h: backend joined /last-trading-prices (9 symbols) + /liquidity-info
+//     (4 mints) at request time. Two-HTTP-call dependency on Adrena API uptime
+//     per /admin/tradable-assets call.
+//   - Phase 8.j: defensive ?pool_name=main-pool against br0wnD3v's announced
+//     multi-pool /liquidity-info shape change.
+//   - Phase 8.k (this): static-mirror eliminates runtime HTTP entirely.
+//     Survives any future Adrena API shape changes. Faster. Deterministic.
+//     Surfaces RWA synthetic-custody mints (previously hidden behind
+//     ?pool_name=main-pool filter).
 //
 // Admin-protected by the router.use() middleware at top of file.
 // --------------------------------------------------------------------------
 router.get('/tradable-assets', async (_req, res) => {
     try {
-        const { AdrenaClient } = await import('../services/adrena-client.js');
-        const adrena = new AdrenaClient();
-
-        const [tpResult, custodiesResult] = await Promise.allSettled([
-            adrena.getTradingPrices(),
-            adrena.getCustodies(),
-        ]);
-
-        const tradingPrices = tpResult.status === 'fulfilled' ? tpResult.value : [];
-        const custodies = custodiesResult.status === 'fulfilled' ? custodiesResult.value : [];
-
-        // Phase 8.h normalization: strip "USD" suffix from crypto symbols
-        // ("SOLUSD" → "SOL"). RWAs ("XAU", "XAG", "WTI") are already bare.
-        const normalize = (s: string) =>
-            s.endsWith('USD') && s.length > 3 ? s.slice(0, -3) : s;
-
-        const mintMap = new Map(custodies.map((c) => [c.symbol, c.mint]));
-
-        // Build enriched response: union symbols from both endpoints.
-        const enriched = new Map<string, { symbol: string; mint?: string; feed_id?: number }>();
-
-        // Pass 1: from /last-trading-prices (full tradable list with feed_ids)
-        for (const tp of tradingPrices) {
-            const symbol = normalize(tp.symbol);
-            const feedIdNum = tp.source_feed_id != null ? Number(tp.source_feed_id) : NaN;
-            enriched.set(symbol, {
-                symbol,
-                mint: mintMap.get(symbol),
-                feed_id: !isNaN(feedIdNum) ? feedIdNum : undefined,
-            });
-        }
-
-        // Pass 2: defensive — any custody not in /last-trading-prices (shouldn't
-        // happen but adds robustness if Adrena's APIs ever drift).
-        for (const c of custodies) {
-            if (!enriched.has(c.symbol)) {
-                enriched.set(c.symbol, { symbol: c.symbol, mint: c.mint });
-            }
-        }
-
-        res.json({ success: true, data: Array.from(enriched.values()) });
+        const { getTradableAssets } = await import('../services/adrena-canonical.js');
+        res.json({ success: true, data: getTradableAssets() });
     } catch (error) {
         console.error('[Admin] Error fetching tradable assets:', error);
         res.status(500).json({

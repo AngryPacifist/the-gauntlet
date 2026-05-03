@@ -676,13 +676,24 @@ export async function adminGetAnomalies(
     });
 }
 
-// Phase 8.h: enriched tradable assets — joins /last-trading-prices (full 9
-// tradable symbols, feed_ids from autonom oracle) + /liquidity-info (mints
-// for the 4 custodies that have them). Replaces Phase 4's /liquidity-info-only
-// proxy. mint and feed_id are optional per asset (not all 9 have a custody mint).
+// Phase 8.k: static-mirror from adrena-abi (post-8.h enriched shape, post-8.j
+// defensive query — both subsumed). Backend reads services/adrena-canonical.ts
+// which is a pinned snapshot of github.com/AdrenaFoundation/adrena-abi.
+//   - mint: main-pool standard SPL token mint (undefined for SOL + BTC + all 3 RWAs)
+//   - synthetic_custody_mint: commodities-pool RWA synthetic-custody PDA (XAU/XAG/WTI only)
+//   - pool_name: 'main-pool' | 'commodities-pool'
+//   - sessioned: true for RWAs (market hours), false for crypto (24/7)
+//   - feed_id: Pyth Lazer feed_id (always present)
 export async function adminGetTradableAssets(
     adminSecret: string,
-): Promise<Array<{ symbol: string; mint?: string; feed_id?: number }>> {
+): Promise<Array<{
+    symbol: string;
+    feed_id: number;
+    sessioned: boolean;
+    mint?: string;
+    synthetic_custody_mint?: string;
+    pool_name: 'main-pool' | 'commodities-pool';
+}>> {
     return apiFetch('/api/admin/tradable-assets', {
         headers: { 'X-Admin-Secret': adminSecret },
     });

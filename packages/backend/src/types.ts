@@ -465,22 +465,10 @@ export interface OHLCBar {
     close: number;
 }
 
-// --- Pyth Lazer Feed ID Mapping (primary, Phase 7.b) ---
-// Verified empirically 2026-05-01 via app.adrena.xyz browser DevTools +
-// datapi.adrena.trade/last-trading-prices payload (autonom.source_feed_id).
-// Adrena position `symbol` field → Pyth Lazer numeric feed_id used by
-// www.adrena.trade/api/oracle-bars?feed_id=<id>.
-export const ADRENA_TO_LAZER_FEED_ID: Record<string, number> = {
-    SOL: 3005,
-    JITOSOL: 3023,
-    BTC: 3001,
-    WBTC: 3001,    // aliased to BTC
-    BONK: 3016,
-    USDC: 4001,
-    XAU: 2056,
-    XAG: 2069,
-    WTI: 2035,
-};
+// --- Pyth Lazer Feed ID Mapping moved to services/adrena-canonical.ts (Phase 8.k) ---
+// `ADRENA_TO_LAZER_FEED_ID` is now sourced from a pinned snapshot of the
+// canonical adrena-abi repo (configs/oracles/autonom.mainnet.json). Import
+// from `./services/adrena-canonical.js` instead of from this file.
 
 // --- Pyth Benchmarks Symbol Mapping (PRIMARY, Phase 8.f) ---
 // Phase 8.f promoted to primary OHLC source post call2aamir 2026-05-02 confirming

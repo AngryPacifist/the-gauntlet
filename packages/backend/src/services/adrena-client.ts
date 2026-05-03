@@ -1,8 +1,13 @@
 // ============================================================================
 // Adrena API Client
 //
-// Wraps the Adrena public API at datapi.adrena.trade.
-// Primary endpoint for competitions: GET /position (trade history per wallet)
+// Wraps the Adrena public API at datapi.adrena.trade for trader position data.
+// Sole endpoint after Phase 8.k: GET /position (trade history per wallet).
+//
+// Static asset metadata (mints, feed_ids, sessioned flags) moved to
+// services/adrena-canonical.ts — synced from github.com/AdrenaFoundation/adrena-abi.
+// Pre-8.k getCustodies() and getTradingPrices() were deleted; admin/tradable-assets
+// now reads the static-mirror, no other consumers existed (full audit 2026-05-04).
 //
 // Reference: resources/adrena-api-reference.md
 // ============================================================================
@@ -90,120 +95,6 @@ export class AdrenaClient {
         });
 
         return positions;
-    }
-
-    // --------------------------------------------------------------------------
-    // GET /liquidity-info — Fetch tradable custody list (Phase 4 item 29-engine)
-    //
-    // Returns symbol + mint for each custody in the Adrena pool. Consumed by
-    // the admin tournament-creation modal to populate the asset dropdown,
-    // and by the backend to validate symbol → mint resolution.
-    //
-    // No client-side cache (D17): the endpoint is already 60s server-side
-    // cached per Adrena API reference §4.1, and admin dropdown load frequency
-    // is low enough that stacking caches adds surface area without benefit.
-    //
-    // API response shape (verified 2026-04-23 via adrena-api-reference.md §4.1):
-    // {
-    //   "success": true,
-    //   "data": {
-    //     "totalPoolValueUsd": 12500000.00,
-    //     "custodies": [
-    //       {
-    //         "symbol": "SOL",
-    //         "mint": "So11111111111111111111111111111111111111112",
-    //         "currentRatio": 0.42, "targetRatio": 0.40,
-    //         "utilization": 0.61, "aumUsd": 5250000.00, "liquidityUsd": 3200000.00
-    //       }
-    //     ]
-    //   }
-    // }
-    //
-    // We project to the minimal {symbol, mint} shape — other fields are not
-    // relevant to the admin dropdown or engine asset matching.
-    //
-    // Phase 8.j (2026-05-04): defensive ?pool_name=main-pool query parameter.
-    // br0wnD3v announced an upcoming /liquidity-info shape change that wraps
-    // the response in data.pools[] (multi-pool, separating main-pool custodies
-    // from a new commodities-pool for RWAs). Per his spec the ?pool_name=<name>
-    // path keeps returning the legacy single-pool shape under data directly.
-    // Live API curl 2026-05-04 still returns the legacy bare-shape — his deploy
-    // hasn't landed yet — but adding the query now eliminates the silent-
-    // regression window between his deploy and our next code review (otherwise
-    // bare /liquidity-info would silently return [] via our data?.custodies ??
-    // [] guard, leaving newly-created tournaments without mint resolution).
-    // --------------------------------------------------------------------------
-    async getCustodies(): Promise<Array<{ symbol: string; mint: string }>> {
-        const url = `${this.baseUrl}/liquidity-info?pool_name=main-pool`;
-        const response = await this.fetchWithRetry(url);
-
-        if (!response.success) {
-            throw new Error(
-                `Adrena API error (GET /liquidity-info): ${response.error ?? 'Unknown error'}`,
-            );
-        }
-
-        const data = response.data as
-            | { custodies?: Array<{ symbol: string; mint: string }> }
-            | undefined;
-        const custodies = data?.custodies ?? [];
-
-        return custodies.map((c) => ({ symbol: c.symbol, mint: c.mint }));
-    }
-
-    // --------------------------------------------------------------------------
-    // GET /last-trading-prices — Phase 8.h: full tradable asset list
-    //
-    // Replaces the /liquidity-info-only path for "what assets does Adrena
-    // trade" — post-Apr-29 relaunch /liquidity-info only returns 4 custodies
-    // while /last-trading-prices returns all 9 tradable symbols across
-    // autonom + switchboard arrays (chaoslabs empty/deprecated).
-    //
-    // Autonom's `source_feed_id` field equals the Pyth Lazer feed_id we use
-    // for OHLC fetches — verified empirically 2026-05-03 against
-    // ADRENA_TO_LAZER_FEED_ID for all 9 symbols (SOLUSD→3005, etc.).
-    //
-    // Switchboard's source_feed_id is a long hash (different ID type) — we
-    // ignore it; only autonom's source_feed_id maps to Pyth Lazer numerics.
-    //
-    // Symbols are returned RAW (with "USD" suffix for crypto where applicable);
-    // route layer normalizes ("SOLUSD" → "SOL"; bare RWAs unchanged).
-    // --------------------------------------------------------------------------
-    async getTradingPrices(): Promise<Array<{ symbol: string; source_feed_id?: string }>> {
-        const url = `${this.baseUrl}/last-trading-prices`;
-        const response = await this.fetchWithRetry(url);
-
-        if (!response.success) {
-            throw new Error(
-                `Adrena API error (GET /last-trading-prices): ${response.error ?? 'Unknown error'}`,
-            );
-        }
-
-        const data = response.data as
-            | Record<string, { prices?: Array<{ symbol: string; source_feed_id?: string }> }>
-            | undefined;
-
-        // Union symbols across all oracle arrays. Prefer autonom's source_feed_id
-        // (matches Pyth Lazer feed_ids); ignore other oracles' source_feed_id.
-        const symbolMap = new Map<string, string | undefined>();
-        for (const [oracleName, oracle] of Object.entries(data ?? {})) {
-            if (!oracle.prices) continue;
-            for (const p of oracle.prices) {
-                if (!p.symbol) continue;
-                if (oracleName === 'autonom') {
-                    // Autonom is canonical: always set (overwrites any non-autonom value)
-                    symbolMap.set(p.symbol, p.source_feed_id);
-                } else if (!symbolMap.has(p.symbol)) {
-                    // Non-autonom oracle: add symbol only if not already present
-                    symbolMap.set(p.symbol, undefined);
-                }
-            }
-        }
-
-        return Array.from(symbolMap.entries()).map(([symbol, source_feed_id]) => ({
-            symbol,
-            source_feed_id,
-        }));
     }
 
     // --------------------------------------------------------------------------

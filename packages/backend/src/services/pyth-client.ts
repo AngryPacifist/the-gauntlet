@@ -20,7 +20,8 @@
 import { db } from '../db/index.js';
 import { pythOhlcCache } from '../db/schema.js';
 import { and, eq } from 'drizzle-orm';
-import { ADRENA_TO_LAZER_FEED_ID, ADRENA_TO_PYTH_SYMBOL } from '../types.js';
+import { ADRENA_TO_PYTH_SYMBOL } from '../types.js';
+import { ADRENA_TO_LAZER_FEED_ID } from './adrena-canonical.js';
 import type { OHLCBar } from '../types.js';
 
 // Phase 8.f: PRIMARY OHLC source — Pyth Benchmarks (public, stable).
