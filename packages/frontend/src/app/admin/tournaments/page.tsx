@@ -41,13 +41,9 @@ import styles from '../page.module.css';
 
 const ADMIN_SECRET_KEY = 'adrena_admin_secret';
 
-// Phase 7.b: Pyth Lazer feed_id auto-fill mapping for known symbols.
-// Mirror of backend types.ts ADRENA_TO_LAZER_FEED_ID. Auto-fills feed_id input
-// when admin selects/types a known symbol; admin can override per asset row.
-const KNOWN_LAZER_FEED_IDS: Record<string, number> = {
-    SOL: 3005, JITOSOL: 3023, BTC: 3001, WBTC: 3001, BONK: 3016,
-    USDC: 4001, XAU: 2056, XAG: 2069, WTI: 2035,
-};
+// Phase 8.h: KNOWN_LAZER_FEED_IDS dropped — feed_id now sourced from backend
+// /admin/tradable-assets response (which derives it from autonom's
+// source_feed_id in /last-trading-prices). Single source of truth.
 
 // Phase 8.a: preset prize distribution templates.
 // Triggered by ZeDef Apr 30 obs (2): manual array entry is error-prone;
@@ -153,7 +149,7 @@ export default function AdminTournamentsPage() {
     const [cfgSkillCurve, setCfgSkillCurve] = useState<string>(PRIZE_TEMPLATES[0].skillCurve.join(', '));
     const [cfgRaffleCurve, setCfgRaffleCurve] = useState<string>(PRIZE_TEMPLATES[0].raffleCurve.join(', '));
     const [cfgAssetList, setCfgAssetList] = useState<Array<{ symbol: string; mint?: string; joinedAt: string; feed_id?: number; lmSteps?: string; lmTolerance?: string }>>([]);
-    const [cfgTradableAssets, setCfgTradableAssets] = useState<Array<{ symbol: string; mint: string }>>([]);
+    const [cfgTradableAssets, setCfgTradableAssets] = useState<Array<{ symbol: string; mint?: string; feed_id?: number }>>([]);
     const [cfgTradableAssetsError, setCfgTradableAssetsError] = useState<string | null>(null);
 
     // Raffle draw modal
@@ -1153,22 +1149,25 @@ export default function AdminTournamentsPage() {
                                         <select className="input input--mono" value={asset.symbol}
                                             onChange={(e) => {
                                                 const selected = cfgTradableAssets.find((tt) => tt.symbol === e.target.value);
-                                                // Phase 7.b: auto-fill feed_id from known Lazer mapping
-                                                const feed_id = KNOWN_LAZER_FEED_IDS[e.target.value];
-                                                setCfgAssetList((prev) => prev.map((a, j) => j === i ? { ...a, symbol: e.target.value, mint: selected?.mint, feed_id } : a));
+                                                // Phase 8.h: feed_id sourced from backend's /admin/tradable-assets response
+                                                setCfgAssetList((prev) => prev.map((a, j) => j === i ? { ...a, symbol: e.target.value, mint: selected?.mint, feed_id: selected?.feed_id } : a));
                                             }} style={{ flex: 1 }}>
                                             <option value="">— select asset —</option>
                                             {cfgTradableAssets.map((tt) => (
-                                                <option key={tt.mint} value={tt.symbol}>{tt.symbol} ({tt.mint.slice(0, 4)}…{tt.mint.slice(-4)})</option>
+                                                // Phase 8.h: mint is optional (RWAs/SOL/BTC have no custody mint).
+                                                // Use symbol as key (unique per response). Show mint hint only when present.
+                                                <option key={tt.symbol} value={tt.symbol}>
+                                                    {tt.symbol}{tt.mint ? ` (${tt.mint.slice(0, 4)}…${tt.mint.slice(-4)})` : ''}
+                                                </option>
                                             ))}
                                         </select>
                                     ) : (
                                         <input type="text" className="input input--mono" placeholder="SYMBOL (e.g., SOL)" value={asset.symbol}
                                             onChange={(e) => {
                                                 const sym = e.target.value.toUpperCase();
-                                                // Phase 7.b: auto-fill feed_id from known Lazer mapping (free-text path)
-                                                const feed_id = KNOWN_LAZER_FEED_IDS[sym];
-                                                setCfgAssetList((prev) => prev.map((a, j) => j === i ? { ...a, symbol: sym, feed_id } : a));
+                                                // Phase 8.h: free-text path is degraded mode (backend tradable-assets unreachable).
+                                                // Clear feed_id on symbol change — admin types it manually in the feed_id input.
+                                                setCfgAssetList((prev) => prev.map((a, j) => j === i ? { ...a, symbol: sym, feed_id: undefined } : a));
                                             }} style={{ flex: 1 }} />
                                     )}
                                     <input type="number" className="input input--mono"

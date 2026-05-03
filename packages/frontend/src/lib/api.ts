@@ -676,12 +676,13 @@ export async function adminGetAnomalies(
     });
 }
 
-// Phase 4: Adrena /liquidity-info proxy for admin asset list dropdown.
-// Returns minimal {symbol, mint} pairs — other /liquidity-info fields
-// (currentRatio, utilization, aumUsd, liquidityUsd) are not used by the dropdown.
+// Phase 8.h: enriched tradable assets — joins /last-trading-prices (full 9
+// tradable symbols, feed_ids from autonom oracle) + /liquidity-info (mints
+// for the 4 custodies that have them). Replaces Phase 4's /liquidity-info-only
+// proxy. mint and feed_id are optional per asset (not all 9 have a custody mint).
 export async function adminGetTradableAssets(
     adminSecret: string,
-): Promise<Array<{ symbol: string; mint: string }>> {
+): Promise<Array<{ symbol: string; mint?: string; feed_id?: number }>> {
     return apiFetch('/api/admin/tradable-assets', {
         headers: { 'X-Admin-Secret': adminSecret },
     });

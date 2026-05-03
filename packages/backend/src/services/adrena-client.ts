@@ -141,6 +141,61 @@ export class AdrenaClient {
     }
 
     // --------------------------------------------------------------------------
+    // GET /last-trading-prices — Phase 8.h: full tradable asset list
+    //
+    // Replaces the /liquidity-info-only path for "what assets does Adrena
+    // trade" — post-Apr-29 relaunch /liquidity-info only returns 4 custodies
+    // while /last-trading-prices returns all 9 tradable symbols across
+    // autonom + switchboard arrays (chaoslabs empty/deprecated).
+    //
+    // Autonom's `source_feed_id` field equals the Pyth Lazer feed_id we use
+    // for OHLC fetches — verified empirically 2026-05-03 against
+    // ADRENA_TO_LAZER_FEED_ID for all 9 symbols (SOLUSD→3005, etc.).
+    //
+    // Switchboard's source_feed_id is a long hash (different ID type) — we
+    // ignore it; only autonom's source_feed_id maps to Pyth Lazer numerics.
+    //
+    // Symbols are returned RAW (with "USD" suffix for crypto where applicable);
+    // route layer normalizes ("SOLUSD" → "SOL"; bare RWAs unchanged).
+    // --------------------------------------------------------------------------
+    async getTradingPrices(): Promise<Array<{ symbol: string; source_feed_id?: string }>> {
+        const url = `${this.baseUrl}/last-trading-prices`;
+        const response = await this.fetchWithRetry(url);
+
+        if (!response.success) {
+            throw new Error(
+                `Adrena API error (GET /last-trading-prices): ${response.error ?? 'Unknown error'}`,
+            );
+        }
+
+        const data = response.data as
+            | Record<string, { prices?: Array<{ symbol: string; source_feed_id?: string }> }>
+            | undefined;
+
+        // Union symbols across all oracle arrays. Prefer autonom's source_feed_id
+        // (matches Pyth Lazer feed_ids); ignore other oracles' source_feed_id.
+        const symbolMap = new Map<string, string | undefined>();
+        for (const [oracleName, oracle] of Object.entries(data ?? {})) {
+            if (!oracle.prices) continue;
+            for (const p of oracle.prices) {
+                if (!p.symbol) continue;
+                if (oracleName === 'autonom') {
+                    // Autonom is canonical: always set (overwrites any non-autonom value)
+                    symbolMap.set(p.symbol, p.source_feed_id);
+                } else if (!symbolMap.has(p.symbol)) {
+                    // Non-autonom oracle: add symbol only if not already present
+                    symbolMap.set(p.symbol, undefined);
+                }
+            }
+        }
+
+        return Array.from(symbolMap.entries()).map(([symbol, source_feed_id]) => ({
+            symbol,
+            source_feed_id,
+        }));
+    }
+
+    // --------------------------------------------------------------------------
     // Helper: Filter positions to only those within a specific time window.
     //
     // For competition scoring, we only care about positions that were OPENED
