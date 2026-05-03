@@ -3,8 +3,15 @@
 // ============================================================================
 // Admin Registrations — Phase 5 item 19 sub-route (NEW per Section 3C gap)
 //
-// View registered wallets per tournament. Read-only in v1 (no mutate ops).
-// Backend: GET /api/register/:tournamentId (existing — routes/registration.ts:62-83).
+// View registered wallets per tournament + admin-driven late registration form.
+// Phase 8 (2026-05-04): added Register Wallet form for late additions during
+// rank_only-active tournaments (per ZeDef T1 pre-launch Q3b). Form calls the
+// existing public /api/register endpoint — gating happens backend-side
+// (tournament-manager.ts:registerWallet status guards).
+//
+// Backend:
+//   GET  /api/register/:tournamentId — registration list (routes/registration.ts:62-83)
+//   POST /api/register               — register wallet (routes/registration.ts:20-59)
 // ============================================================================
 
 import { useEffect, useState } from 'react';
@@ -12,9 +19,10 @@ import Link from 'next/link';
 import {
     listTournaments,
     getRegistrations,
+    registerWallet,
     type Tournament,
 } from '@/lib/api';
-import { Users, ArrowLeft, Search } from 'lucide-react';
+import { Users, ArrowLeft, Search, UserPlus } from 'lucide-react';
 
 interface Registration {
     id: number;
@@ -35,6 +43,10 @@ export default function AdminRegistrationsPage() {
     const [regsLoading, setRegsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [search, setSearch] = useState('');
+    // Phase 8: admin-driven late registration form
+    const [walletInput, setWalletInput] = useState('');
+    const [registering, setRegistering] = useState(false);
+    const [regResult, setRegResult] = useState<{ registered: boolean; reason?: string } | null>(null);
 
     useEffect(() => {
         let cancelled = false;
@@ -54,6 +66,10 @@ export default function AdminRegistrationsPage() {
     }, []);
 
     useEffect(() => {
+        // Phase 8: clear stale form state when switching tournaments
+        setWalletInput('');
+        setRegResult(null);
+
         if (selectedId === null) {
             setRegistrations([]);
             return;
@@ -79,6 +95,27 @@ export default function AdminRegistrationsPage() {
     const filtered = search.trim()
         ? registrations.filter((r) => r.wallet.toLowerCase().includes(search.toLowerCase()))
         : registrations;
+
+    async function handleRegister(e: React.FormEvent) {
+        e.preventDefault();
+        if (selectedId === null || !walletInput.trim()) return;
+        try {
+            setRegistering(true);
+            setRegResult(null);
+            const result = await registerWallet(selectedId, walletInput.trim());
+            setRegResult(result);
+            if (result.registered) {
+                // Refetch so the new wallet appears in the table immediately
+                const data = await getRegistrations(selectedId);
+                setRegistrations(data);
+                setWalletInput('');
+            }
+        } catch (err) {
+            setRegResult({ registered: false, reason: err instanceof Error ? err.message : 'Failed to register' });
+        } finally {
+            setRegistering(false);
+        }
+    }
 
     return (
         <div className="container">
@@ -162,6 +199,58 @@ export default function AdminRegistrationsPage() {
                         </div>
                         <span className={`badge badge--${selectedTournament.status}`}>{selectedTournament.status}</span>
                     </div>
+                </section>
+            )}
+
+            {/* Register Wallet form (Phase 8 — late additions for active rank_only) */}
+            {selectedId !== null && !regsLoading && (
+                <section className="card" style={{ padding: 'var(--space-md)', marginBottom: 'var(--space-md)' }}>
+                    <h3 style={{
+                        fontSize: '0.75rem',
+                        fontWeight: 700,
+                        color: 'var(--text-muted)',
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.05em',
+                        margin: '0 0 var(--space-sm)',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                    }}>
+                        <UserPlus size={14} />
+                        Register Wallet
+                    </h3>
+                    <form onSubmit={handleRegister} style={{ display: 'flex', gap: '0.5rem', alignItems: 'flex-start', flexWrap: 'wrap' }}>
+                        <input
+                            type="text"
+                            className="input input--mono"
+                            placeholder="Solana wallet address (32-44 chars)..."
+                            value={walletInput}
+                            onChange={(e) => setWalletInput(e.target.value)}
+                            disabled={registering}
+                            style={{ flex: 1, minWidth: '320px' }}
+                        />
+                        <button
+                            type="submit"
+                            className="btn btn--primary"
+                            disabled={registering || !walletInput.trim()}
+                        >
+                            {registering ? 'Registering…' : 'Register'}
+                        </button>
+                    </form>
+                    {regResult && (
+                        <p style={{
+                            margin: 'var(--space-xs) 0 0',
+                            fontSize: '0.75rem',
+                            color: regResult.registered ? 'var(--status-success)' : 'var(--status-warning)',
+                        }}>
+                            {regResult.registered
+                                ? 'Registered. Table refreshed.'
+                                : `Not registered: ${regResult.reason ?? 'unknown reason'}`}
+                        </p>
+                    )}
+                    <p style={{ margin: 'var(--space-xs) 0 0', fontSize: '0.6875rem', color: 'var(--text-muted)' }}>
+                        Use for late additions during a <code>rank_only</code> active tournament. Backend gates: blocked if status is <code>completed</code>/<code>cancelled</code>; for <code>bracket</code> format, must still be in <code>registration</code>.
+                    </p>
                 </section>
             )}
 
