@@ -45,15 +45,35 @@ const QUEST_LABELS: Record<string, string> = {
     leverage_master_short: 'Leverage Master (Short)',
 };
 
+// Phase 8 fix: single source of truth for parsing leverage_master_* category slugs.
+// Schema: 'leverage_master_<ASSET>_<SIDE>' (per-asset) | 'leverage_master_<SIDE>' (legacy).
+// Returns { side, asset } where asset is undefined for legacy slugs OR if the captured
+// asset literally equals 'long'/'short' (defensive — preserves the malformed-input
+// behavior that the prior `(.+)?_?` regex in CategoryLeaderboard tolerated by accident).
+function parseLeverageMasterSlug(category: string): {
+    side: 'long' | 'short' | null;
+    asset: string | undefined;
+} {
+    const m = category.match(/^leverage_master_(.+)_(long|short)$/);
+    if (m) {
+        const [, asset, side] = m;
+        if (asset === 'long' || asset === 'short') {
+            return { side: side as 'long' | 'short', asset: undefined };
+        }
+        return { side: side as 'long' | 'short', asset };
+    }
+    if (category === 'leverage_master_long') return { side: 'long', asset: undefined };
+    if (category === 'leverage_master_short') return { side: 'short', asset: undefined };
+    return { side: null, asset: undefined };
+}
+
 // Phase 4 item 30: returns human label for a category slug.
-// Handles the 5 non-LM + 2 legacy LM slugs from QUEST_LABELS above,
-// plus per-asset LM slugs (leverage_master_SYMBOL_long/_short) via regex parse.
+// Phase 8 fix: parsing logic delegated to parseLeverageMasterSlug for consistency.
 function getQuestLabel(category: string): string {
     if (QUEST_LABELS[category]) return QUEST_LABELS[category];
-    const match = category.match(/^leverage_master_(.+)_(long|short)$/);
-    if (match) {
-        const [, symbol, side] = match;
-        return `Leverage Master ${symbol} (${side === 'long' ? 'Long' : 'Short'})`;
+    const { side, asset } = parseLeverageMasterSlug(category);
+    if (side && asset) {
+        return `Leverage Master ${asset} (${side === 'long' ? 'Long' : 'Short'})`;
     }
     return category;
 }
@@ -963,15 +983,10 @@ interface CategoryLeaderboardProps {
 
 function CategoryLeaderboard({ category, scores, isRulesExpanded, onToggleRules, isForge, searchedWallet, assetListLength, assetList }: CategoryLeaderboardProps) {
     // Phase 4 item 30: LM descriptions are per-asset, rendered via helper.
-    // Static non-LM entries still come from QUEST_DESCRIPTIONS record.
-    const lmMatch = category.match(/^leverage_master_(.+)?_?(long|short)$/);
-    const lmSide: 'long' | 'short' | null = category.startsWith('leverage_master_')
-        ? (category.endsWith('_long') ? 'long' : 'short')
-        : null;
-    const lmAsset = lmMatch?.[1] && lmMatch[1] !== 'long' && lmMatch[1] !== 'short'
-        ? lmMatch[1]
-        : undefined;
-    // Phase 8 fix: pass per-asset lmSteps + lmTolerance so RWA panels render their actual ladder text.
+    // Phase 8 fix: slug parsing centralized via parseLeverageMasterSlug — replaces
+    // the prior buggy `(.+)?_?` regex that captured the trailing underscore into
+    // match[1] (e.g. 'XAU_' instead of 'XAU'), masking the per-asset config lookup.
+    const { side: lmSide, asset: lmAsset } = parseLeverageMasterSlug(category);
     const lmAssetConfig = lmAsset ? assetList?.find((a) => a.symbol === lmAsset) : undefined;
     const questInfo: QuestDescription | undefined = lmSide
         ? getLeverageMasterDescription(lmSide, lmAsset, lmAssetConfig?.lmSteps, lmAssetConfig?.lmTolerance)
