@@ -1207,7 +1207,7 @@ export default function AdminTournamentsPage() {
                                         value={asset.lmTolerance ?? ''}
                                         onChange={(e) => setCfgAssetList((prev) => prev.map((a, j) => j === i ? { ...a, lmTolerance: e.target.value } : a))}
                                         title="Tolerance window (default 2 for crypto; ~0.2 for sub-10x RWA ladders)"
-                                        step="0.1" min="0.01"
+                                        step="0.01" min="0.01"
                                         style={{ width: '70px', fontSize: '0.8125rem' }} />
                                     <button type="button" className="btn btn--secondary"
                                         onClick={() => setCfgAssetList((prev) => prev.filter((_, j) => j !== i))}
