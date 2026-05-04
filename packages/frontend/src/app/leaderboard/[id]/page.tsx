@@ -541,12 +541,23 @@ function GeneralLeaderboard({
             if (!e.isTopPercent) continue;
             rankCounts.set(e.rank, (rankCounts.get(e.rank) ?? 0) + 1);
         }
+        // Phase 8.n: pro-rata scale so the configured skill pool always flows
+        // fully to active top% wallets. K = total top% count; usedWeights sums
+        // the first K skillPrizes slots (zero-padded if K > length). Scale =
+        // totalSkillPool / usedWeights. K ≥ length → scale = 1 (unchanged);
+        // K < length → scale > 1 (boost active wallets to consume the full
+        // pool, preserving the rank-1-gets-most curve). Total payout always
+        // sums to sum(skillPrizes). Conservation: scale × usedWeights = total.
+        const totalTopCount = Array.from(rankCounts.values()).reduce((a, b) => a + b, 0);
+        const totalSkillPool = prizeTable.skillPrizes.reduce((a, b) => a + b, 0);
+        const usedWeights = prizeTable.skillPrizes.slice(0, totalTopCount).reduce((a, b) => a + b, 0);
+        const scale = usedWeights > 0 ? totalSkillPool / usedWeights : 1;
         for (const [rank, count] of rankCounts) {
             let sum = 0;
             for (let i = 0; i < count; i++) {
                 sum += prizeTable.skillPrizes[rank - 1 + i] ?? 0;
             }
-            map.set(rank, sum / count);
+            map.set(rank, (sum * scale) / count);
         }
         return map;
     }, [entries, prizeTable]);
