@@ -264,6 +264,36 @@ DO $$ BEGIN
     ALTER TABLE quest_progress ADD COLUMN step_total INTEGER NOT NULL DEFAULT 10;
   END IF;
 END $$;
+
+-- Phase 8 fix (Day-42, surfaced live during T1 hourly tick): drop the legacy
+-- 5-col UNIQUE constraint that the inline UNIQUE(...) clause in CREATE TABLE
+-- created. The Phase 4 migration block (above) added the 6-col
+-- idx_quest_progress_unique but the inline constraint was never explicitly
+-- dropped — its DROP INDEX IF EXISTS targeted a name that the inline
+-- constraint doesn't use.
+--
+-- Symptom: per-asset LM INSERT fails with 5-col unique violation when a
+-- (tournament, wallet, side, week) tuple already has ANY asset row, even
+-- though the new 6-col index correctly allows different assets to coexist.
+-- The throw aborts scheduler.ts:scoreHourlyCategories' for-loop, so all
+-- subsequent wallets in the tick get NO LM tracking.
+--
+-- Recovery: dropping the constraint leaves the 6-col idx_quest_progress_unique
+-- in place. Existing rows trivially satisfy the looser 6-col uniqueness
+-- (5-col is strictly stricter). Next hourly tick re-evaluates all wallets
+-- from positions and INSERTs the missing per-asset rows cleanly — no data
+-- corruption, just data that was previously failing to land.
+DO $$ BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.table_constraints
+    WHERE table_name = 'quest_progress'
+      AND constraint_name = 'quest_progress_tournament_id_wallet_quest_type_side_week_nu_key'
+      AND table_schema = 'public'
+  ) THEN
+    ALTER TABLE quest_progress
+      DROP CONSTRAINT quest_progress_tournament_id_wallet_quest_type_side_week_nu_key;
+  END IF;
+END $$;
 `;
 
 const INDEXES_SQL = `
