@@ -133,7 +133,10 @@ export async function computeAllTickets(
             }
         }
 
-        const isTopPercent = rank <= topCutIndex;
+        // Phase 8.m: gate TOP 30% on positive finalScore. Mirrors the guard
+        // in routes/tournaments.ts:/forge so persisted raffle_results stays
+        // consistent with the rendered leaderboard.
+        const isTopPercent = rank <= topCutIndex && fs.finalScore > 0;
 
         // Fetch closed position count from Adrena API
         let closedPositionCount = 0;

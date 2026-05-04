@@ -200,7 +200,9 @@ export async function computeQuestPoints(
                 ? dailyPoints
                 : multidayPoints;
 
-            if (rank < pointsTable.length) {
+            // Phase 8.m: score > 0 guard (mirror of computeAllQuestPoints).
+            const walletScore = valid.find((v) => v.wallet === wallet)?.score ?? 0;
+            if (rank < pointsTable.length && walletScore > 0) {
                 totalQuestPoints += pointsTable[rank];
             }
         }
@@ -254,7 +256,11 @@ export async function computeQuestPoints(
             const rank = getCompetitionRank(valid, wallet);
             if (rank === -1) continue;
 
-            if (rank < LEVERAGE_QUEST_POINTS.length) {
+            // Phase 8.m: score > 0 guard. For LM, score = stepCount; zero = no
+            // leverage steps completed, same baseline-inflation issue as daily
+            // categories.
+            const walletScore = valid.find((v) => v.wallet === wallet)?.score ?? 0;
+            if (rank < LEVERAGE_QUEST_POINTS.length && walletScore > 0) {
                 totalQuestPoints += LEVERAGE_QUEST_POINTS[rank];
             }
         }
@@ -327,13 +333,18 @@ export async function computeAllQuestPoints(
             continue;
         }
 
-        // Assign quest points using tie-aware competition ranking
+        // Assign quest points using tie-aware competition ranking.
+        // Phase 8.m: score > 0 guard. Without it, wallets tied at score=0 (no
+        // actual participation in the category) all share the top-1 rank-points
+        // slot, producing a baseline 0.60 quest points for every registered
+        // wallet (3 daily categories × 0.2). Surfaced by ZeDef on T1 day-1
+        // leaderboard observation Day 42.
         let competitionRank = 0;
         for (let i = 0; i < rows.length; i++) {
             if (i > 0 && rows[i].score !== rows[i - 1].score) {
                 competitionRank = i;
             }
-            if (competitionRank < pointsTable.length) {
+            if (competitionRank < pointsTable.length && rows[i].score > 0) {
                 const current = walletPoints.get(rows[i].wallet) ?? 0;
                 walletPoints.set(rows[i].wallet, current + pointsTable[competitionRank]);
             }

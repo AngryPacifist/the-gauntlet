@@ -391,7 +391,11 @@ router.get('/:id/forge', async (req, res) => {
                 questPoints: r.questPoints,
                 finalScore: r.finalScore,
                 raffleTickets: r.raffleTickets,
-                isTopPercent: currentRank <= top30Index,
+                // Phase 8.m: gate TOP 30% on positive finalScore. Prevents
+                // the "all 15 wallets labeled TOP 30%" symptom when many
+                // wallets tie at finalScore=0 and rank <= cutoff. ZeDef T1
+                // day-1 observation Day 42.
+                isTopPercent: currentRank <= top30Index && r.finalScore > 0,
             };
         });
 
