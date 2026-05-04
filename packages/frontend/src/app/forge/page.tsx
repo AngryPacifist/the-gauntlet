@@ -46,7 +46,7 @@ export default function ForgeIndexPage() {
     if (error) {
         return (
             <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}>
-                <div style={{ textAlign: 'center', color: '#94a3b8' }}>
+                <div style={{ textAlign: 'center', color: 'var(--text-muted)' }}>
                     <Flame size={48} style={{ margin: '0 auto 16px', opacity: 0.4 }} />
                     <p>{error}</p>
                 </div>

@@ -1,0 +1,889 @@
+/* ============================================================================
+   Leaderboard Per-Tournament — Module CSS (Phase 8.i.5.D.4.1)
+   Replaces inline-style + Slate-palette literals from page.tsx with Adrena
+   CSS vars + named classes.
+   ============================================================================ */
+
+.page {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: var(--space-xl) var(--space-md);
+}
+
+.headerWrap {
+    margin-bottom: var(--space-lg);
+}
+
+.backLink {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-sm);
+    color: var(--text-muted);
+    font-size: 0.875rem;
+    margin-bottom: var(--space-md);
+    text-decoration: none;
+    transition: color var(--transition-fast);
+}
+
+.backLink:hover {
+    color: var(--accent-primary);
+}
+
+.headerRow {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+    flex-wrap: wrap;
+}
+
+.flameIcon {
+    color: var(--status-warning);
+    flex-shrink: 0;
+}
+
+.titleBlock {
+    flex: 1;
+    min-width: 0;
+}
+
+.titleRow {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+}
+
+.title {
+    font-size: 1.75rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin: 0;
+}
+
+.subtitle {
+    color: var(--text-muted);
+    margin: var(--space-xs) 0 0;
+    font-size: 0.875rem;
+}
+
+/* Status Badge */
+.statusBadge {
+    padding: 3px 10px;
+    border-radius: var(--radius-full);
+    font-size: 0.6875rem;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+}
+
+.statusBadgeRegistration {
+    background: var(--status-warning-bg);
+    color: var(--status-warning);
+}
+
+.statusBadgeActive {
+    background: var(--status-success-bg);
+    color: var(--status-success);
+    animation: pulse 2s infinite;
+}
+
+.statusBadgeCompleted {
+    background: rgba(139, 139, 158, 0.15);
+    color: var(--text-secondary);
+}
+
+.statusBadgeCancelled {
+    background: var(--status-danger-bg);
+    color: var(--status-danger);
+}
+
+/* Register Button */
+.registerBtn {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-xs);
+    padding: var(--space-sm) var(--space-md);
+    border-radius: var(--radius-md);
+    border: none;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    cursor: pointer;
+    background: var(--gradient-brand);
+    color: white;
+    transition: all var(--transition-fast);
+}
+
+.registerBtn:hover:not(:disabled) {
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-glow-accent);
+}
+
+.registerBtn:disabled {
+    background: var(--bg-elevated);
+    color: var(--text-muted);
+    opacity: 0.7;
+    cursor: not-allowed;
+}
+
+/* Prize Info Banner */
+.prizeBanner {
+    margin-top: var(--space-md);
+    padding: var(--space-md) var(--space-lg);
+    border-radius: var(--radius-md);
+    background: rgba(108, 92, 231, 0.05);
+    border: 1px solid rgba(108, 92, 231, 0.2);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-lg);
+    flex-wrap: wrap;
+}
+
+.prizeMain {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+}
+
+.prizeLabel {
+    font-size: 0.6875rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.prizeValue {
+    font-size: 1.75rem;
+    font-weight: 700;
+    color: var(--accent-primary);
+    font-family: var(--font-mono);
+}
+
+.prizeSplits {
+    display: flex;
+    gap: var(--space-xl);
+}
+
+.prizeSplit {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+}
+
+.prizeSplitLabel {
+    font-size: 0.6875rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.prizeSplitValueSkill {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--status-success);
+    font-family: var(--font-mono);
+}
+
+.prizeSplitValueRaffle {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--accent-primary);
+    font-family: var(--font-mono);
+}
+
+/* Page-level tabs (General / Quests) */
+.pageTabs {
+    display: flex;
+    gap: var(--space-sm);
+    margin-bottom: var(--space-lg);
+}
+
+.pageTab {
+    padding: var(--space-sm) var(--space-md);
+    border-radius: var(--radius-full);
+    border: none;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    cursor: pointer;
+    background: var(--bg-card);
+    color: var(--text-muted);
+    transition: all var(--transition-fast);
+}
+
+.pageTab:hover {
+    color: var(--text-secondary);
+}
+
+.pageTabActive {
+    background: var(--gradient-brand);
+    color: white;
+}
+
+/* Fallen Fighters Info Card */
+.ffCard {
+    margin-bottom: var(--space-md);
+    padding: var(--space-sm) var(--space-md);
+    border-radius: var(--radius-md);
+    background: var(--status-warning-bg);
+    border: 1px solid rgba(255, 165, 2, 0.2);
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-sm);
+}
+
+.ffCardIcon {
+    color: var(--status-warning);
+    flex-shrink: 0;
+    margin-top: 2px;
+}
+
+.ffCardTitle {
+    color: var(--status-warning);
+    font-weight: 600;
+    font-size: 0.8125rem;
+    margin: 0;
+}
+
+.ffCardDesc {
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    margin: var(--space-xs) 0 0;
+    line-height: 1.5;
+}
+
+/* Search input */
+.searchInput {
+    width: 100%;
+    max-width: 400px;
+    margin-bottom: var(--space-md);
+}
+
+/* Leaderboard Table */
+.tableWrap {
+    overflow-x: auto;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border-subtle);
+    background: var(--bg-card);
+}
+
+.table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.8125rem;
+}
+
+.table thead tr {
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border-subtle);
+}
+
+.table th {
+    padding: var(--space-sm) var(--space-sm);
+    text-align: right;
+    color: var(--text-muted);
+    font-size: 0.6875rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    white-space: nowrap;
+}
+
+.thLeft {
+    text-align: left;
+}
+
+.table td {
+    padding: var(--space-xs) var(--space-sm);
+    text-align: right;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    border-bottom: 1px solid var(--border-subtle);
+}
+
+.tdLeft {
+    text-align: left;
+}
+
+.row {
+    cursor: pointer;
+    transition: background var(--transition-fast);
+}
+
+.row:hover {
+    background: var(--bg-card-hover);
+}
+
+.rowExpanded {
+    background: var(--bg-card-hover);
+}
+
+.rowSearched {
+    background: rgba(108, 92, 231, 0.08);
+    border-left: 2px solid var(--accent-primary);
+}
+
+.rankBadge {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-xs);
+}
+
+.rankBadge1 {
+    color: var(--accent-gold);
+    font-weight: 700;
+}
+
+.rankBadge2 {
+    color: var(--accent-silver);
+    font-weight: 700;
+}
+
+.rankBadge3 {
+    color: var(--accent-bronze);
+    font-weight: 700;
+}
+
+.walletLink {
+    font-family: var(--font-mono);
+    color: var(--text-secondary);
+    text-decoration: none;
+    border-bottom: 1px dashed var(--border-default);
+}
+
+.walletLink:hover {
+    color: var(--text-primary);
+}
+
+.walletText {
+    font-family: var(--font-mono);
+    color: var(--text-secondary);
+    border-bottom: 1px dashed var(--border-default);
+}
+
+.questPoints {
+    color: var(--accent-primary);
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-xs);
+}
+
+.finalScore {
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.prizeCol {
+    color: var(--status-success);
+}
+
+.ticketColTop {
+    color: var(--text-muted);
+    opacity: 0.5;
+}
+
+.ticketColRaffle {
+    color: var(--status-warning);
+}
+
+.statusChip {
+    padding: 2px 8px;
+    border-radius: var(--radius-full);
+    font-size: 0.6875rem;
+    font-weight: 600;
+}
+
+.statusChipTop {
+    background: var(--status-success-bg);
+    color: var(--status-success);
+}
+
+.statusChipRaffle {
+    background: var(--status-warning-bg);
+    color: var(--status-warning);
+}
+
+.emptyRow {
+    text-align: center;
+    padding: var(--space-2xl);
+    color: var(--text-muted);
+}
+
+.chevron {
+    color: var(--text-muted);
+}
+
+/* Expanded breakdown */
+.expandedRow {
+    padding: var(--space-md) var(--space-lg);
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border-subtle);
+}
+
+.breakdownGrid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-lg);
+}
+
+.breakdownHeading {
+    color: var(--text-primary);
+    margin: 0 0 var(--space-sm);
+    font-size: 0.8125rem;
+    font-weight: 600;
+}
+
+.breakdownEmpty {
+    color: var(--text-muted);
+    font-size: 0.8125rem;
+}
+
+/* Horizontal Bar */
+.hbar {
+    margin-bottom: var(--space-sm);
+}
+
+.hbarHeader {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.6875rem;
+    margin-bottom: 2px;
+}
+
+.hbarLabel {
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.hbarValue {
+    color: var(--text-primary);
+    font-weight: 600;
+}
+
+.hbarTrack {
+    height: 6px;
+    background: var(--bg-elevated);
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+}
+
+.hbarFill {
+    height: 100%;
+    border-radius: var(--radius-sm);
+    transition: width 0.3s ease;
+}
+
+/* Quest Period Tabs */
+.periodTabs {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    margin-bottom: var(--space-md);
+    flex-wrap: wrap;
+}
+
+.periodTab {
+    padding: var(--space-xs) var(--space-md);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border-default);
+    font-size: 0.8125rem;
+    font-weight: 600;
+    cursor: pointer;
+    background: transparent;
+    color: var(--text-muted);
+    transition: all var(--transition-fast);
+}
+
+.periodTab:hover {
+    color: var(--text-secondary);
+}
+
+.periodTabActive {
+    border-color: var(--accent-primary);
+    background: rgba(108, 92, 231, 0.1);
+    color: var(--accent-primary);
+}
+
+/* Date Nav */
+.dateNav {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+    margin-left: auto;
+}
+
+.dateNavBtn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border-radius: var(--radius-sm);
+    background: var(--bg-card);
+    border: 1px solid var(--border-default);
+    color: var(--text-muted);
+    cursor: pointer;
+}
+
+.dateNavBtn:hover {
+    color: var(--text-primary);
+    border-color: var(--border-strong);
+}
+
+.dateLabel {
+    color: var(--text-muted);
+    font-size: 0.8125rem;
+    min-width: 180px;
+    text-align: center;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-xs);
+}
+
+.dateChip {
+    padding: 2px 8px;
+    border-radius: var(--radius-full);
+    font-size: 0.625rem;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+}
+
+.dateChipLive {
+    background: var(--status-success-bg);
+    color: var(--status-success);
+    animation: pulse 2s infinite;
+}
+
+.dateChipFinal {
+    background: rgba(139, 139, 158, 0.15);
+    color: var(--text-secondary);
+}
+
+.todayBtn {
+    width: auto;
+    padding: 0 var(--space-sm);
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--accent-primary);
+    border: 1px solid rgba(108, 92, 231, 0.4);
+    background: rgba(108, 92, 231, 0.1);
+    border-radius: var(--radius-sm);
+    height: 28px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.todayBtn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    color: var(--text-muted);
+    border-color: var(--border-default);
+    background: var(--bg-card);
+}
+
+/* Category Leaderboard Card */
+.categoryCard {
+    margin-bottom: var(--space-lg);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border-subtle);
+    background: var(--bg-card);
+    overflow: hidden;
+}
+
+.categoryHeader {
+    padding: var(--space-sm) var(--space-md);
+    border-bottom: 1px solid var(--border-subtle);
+}
+
+.categoryTitleRow {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+}
+
+.categoryTitle {
+    color: var(--text-primary);
+    font-size: 0.9375rem;
+    font-weight: 600;
+    margin: 0;
+}
+
+.rulesToggle {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-xs);
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--text-muted);
+    font-size: 0.6875rem;
+}
+
+.rulesToggle:hover {
+    color: var(--text-secondary);
+}
+
+.categoryTagline {
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    margin: var(--space-xs) 0 0;
+    font-style: italic;
+}
+
+.rulesPanel {
+    padding: var(--space-sm) var(--space-md);
+    border-bottom: 1px solid var(--border-subtle);
+    background: var(--bg-secondary);
+}
+
+.rulesDesc {
+    color: var(--text-secondary);
+    font-size: 0.75rem;
+    margin: 0 0 var(--space-sm);
+    line-height: 1.5;
+}
+
+.rulesList {
+    margin: 0;
+    padding: 0 0 0 var(--space-md);
+    color: var(--text-muted);
+    font-size: 0.6875rem;
+    line-height: 1.7;
+}
+
+.row6Empty {
+    text-align: center;
+    color: var(--text-muted);
+    font-style: italic;
+}
+
+.row6EmptyWallet {
+    font-family: var(--font-mono);
+    margin-right: var(--space-sm);
+    color: var(--text-secondary);
+}
+
+.row6Border {
+    border-top: 1px dashed var(--border-default);
+    background: rgba(108, 92, 231, 0.04);
+}
+
+.row6Rank {
+    color: var(--text-muted);
+    font-weight: 400;
+}
+
+.noData {
+    padding: var(--space-lg);
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 0.8125rem;
+}
+
+/* CPI Explanation panel */
+.cpiPanel {
+    margin-bottom: var(--space-md);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border-subtle);
+    background: var(--bg-card);
+    overflow: hidden;
+}
+
+.cpiToggle {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--space-sm) var(--space-md);
+    background: none;
+    border: none;
+    color: var(--text-primary);
+    cursor: pointer;
+    text-align: left;
+}
+
+.cpiToggleInner {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    min-width: 0;
+}
+
+.cpiTextWrap {
+    min-width: 0;
+}
+
+.cpiTitle {
+    font-size: 0.9375rem;
+    font-weight: 600;
+}
+
+.cpiTagline {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    font-style: italic;
+    margin-top: 2px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.cpiBody {
+    padding: 0 var(--space-md) var(--space-md);
+    border-top: 1px solid var(--border-subtle);
+}
+
+.cpiSection {
+    margin-bottom: var(--space-md);
+}
+
+.cpiSectionHead {
+    color: var(--text-primary);
+    font-size: 0.75rem;
+    font-weight: 700;
+    margin: var(--space-sm) 0 var(--space-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.cpiPara {
+    color: var(--text-secondary);
+    font-size: 0.8125rem;
+    margin: 0 0 var(--space-sm);
+    line-height: 1.5;
+}
+
+.cpiList {
+    margin: 0;
+    padding: 0 0 0 var(--space-md);
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    line-height: 1.7;
+}
+
+.cpiListItem {
+    margin-bottom: var(--space-xs);
+}
+
+/* Modal */
+.modalOverlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.7);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 300;
+    padding: var(--space-md);
+}
+
+.modalCard {
+    background: var(--bg-card);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    padding: var(--space-lg);
+    max-width: 480px;
+    width: 100%;
+}
+
+.modalHead {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: var(--space-md);
+}
+
+.modalTitle {
+    color: var(--text-primary);
+    font-size: 1.125rem;
+    font-weight: 700;
+    margin: 0;
+}
+
+.modalCloseBtn {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 0;
+}
+
+.modalLabel {
+    display: block;
+    color: var(--text-secondary);
+    font-size: 0.8125rem;
+    margin-bottom: var(--space-xs);
+}
+
+.modalInput {
+    width: 100%;
+    margin-bottom: var(--space-md);
+}
+
+.modalActions {
+    display: flex;
+    gap: var(--space-sm);
+    justify-content: flex-end;
+}
+
+.regResult {
+    margin-top: var(--space-md);
+    padding: var(--space-sm) var(--space-md);
+    border-radius: var(--radius-md);
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+    font-size: 0.8125rem;
+}
+
+.regResultOk {
+    background: var(--status-success-bg);
+    color: var(--status-success);
+}
+
+.regResultErr {
+    background: var(--status-danger-bg);
+    color: var(--status-danger);
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .breakdownGrid {
+        grid-template-columns: 1fr;
+    }
+
+    .prizeBanner {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .prizeSplits {
+        gap: var(--space-md);
+        flex-wrap: wrap;
+    }
+
+    .pageTabs {
+        flex-wrap: wrap;
+    }
+
+    .periodTabs {
+        flex-wrap: wrap;
+    }
+
+    .dateNav {
+        width: 100%;
+        justify-content: space-between;
+        margin-left: 0;
+    }
+}
+
+@media (max-width: 480px) {
+    .title {
+        font-size: 1.375rem;
+    }
+
+    .prizeValue {
+        font-size: 1.25rem;
+    }
+}

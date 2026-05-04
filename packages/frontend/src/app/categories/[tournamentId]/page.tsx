@@ -1,5 +1,13 @@
 'use client';
 
+// ============================================================================
+// Daily Categories — Per-tournament page
+// Phase 8.i.5.D.4.5: inline-style cleanup. Local tabBtnStyle/thStyle/tdStyle
+// helpers dropped; module classes from page.module.css. Per-category accent
+// colors stay inline (5 distinct category brand colors — intentional, not
+// part of the Adrena palette migration).
+// ============================================================================
+
 import { useEffect, useState, use, useMemo } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import {
@@ -15,6 +23,7 @@ import {
 } from '@/lib/api';
 import { Compass, Target, TrendingUp, Shield, Trophy, Calendar, Zap } from 'lucide-react';
 import Link from 'next/link';
+import styles from './page.module.css';
 
 // Phase 4: base tabs (non-LM). LM tabs are per-asset, appended dynamically below.
 interface CategoryTab {
@@ -177,8 +186,8 @@ export default function CategoriesPage({ params }: { params: Promise<{ tournamen
     if (isNaN(tournamentId)) {
         return (
             <div className="container">
-                <div className="card" style={{ marginTop: 'var(--space-2xl)', padding: 'var(--space-xl)', textAlign: 'center' }}>
-                    <p style={{ color: 'var(--status-danger)' }}>Invalid tournament ID</p>
+                <div className="card error-state">
+                    <p>Invalid tournament ID</p>
                 </div>
             </div>
         );
@@ -203,7 +212,7 @@ export default function CategoriesPage({ params }: { params: Promise<{ tournamen
             </header>
 
             {/* Dynamic Tabs */}
-            <div style={{ display: 'flex', gap: 'var(--space-sm)', marginBottom: 'var(--space-lg)', flexWrap: 'wrap' }}>
+            <div className={styles.tabRow}>
                 {categoryTabs.map((catTab) => {
                     const Icon = catTab.icon;
                     const isActive = tab === catTab.slug;
@@ -211,12 +220,12 @@ export default function CategoriesPage({ params }: { params: Promise<{ tournamen
                         <button
                             key={catTab.slug}
                             onClick={() => setTab(catTab.slug)}
-                            style={{
-                                ...tabBtnStyle,
-                                background: isActive ? catTab.colorBg : 'var(--bg-card)',
-                                borderColor: isActive ? catTab.color : 'var(--border-default)',
-                                color: isActive ? catTab.color : 'var(--text-muted)',
-                            }}
+                            className={styles.tabBtn}
+                            style={isActive ? {
+                                background: catTab.colorBg,
+                                borderColor: catTab.color,
+                                color: catTab.color,
+                            } : undefined}
                         >
                             <Icon size={14} />
                             {catTab.label}
@@ -226,19 +235,13 @@ export default function CategoriesPage({ params }: { params: Promise<{ tournamen
             </div>
 
             {/* Description */}
-            <div className="card" style={{
-                padding: 'var(--space-md) var(--space-lg)',
-                marginBottom: 'var(--space-lg)',
-                fontSize: '14px',
-                color: 'var(--text-secondary)',
-                lineHeight: 1.6,
-            }}>
+            <div className={`card ${styles.descCard}`}>
                 <strong style={{ color: activeTab.color }}>{activeTab.label}</strong> &mdash; {activeTab.description}
             </div>
 
             {/* Cumulative Leaderboard */}
-            <section style={{ marginBottom: 'var(--space-2xl)' }}>
-                <h2 style={{ fontSize: '1.125rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: 'var(--space-md)', display: 'flex', alignItems: 'center', gap: 'var(--space-sm)' }}>
+            <section className={styles.section}>
+                <h2 className={styles.sectionTitle}>
                     <Trophy size={18} />
                     Cumulative Leaderboard
                 </h2>
@@ -250,36 +253,31 @@ export default function CategoriesPage({ params }: { params: Promise<{ tournamen
                 ) : leaderboard.length === 0 ? (
                     <p style={{ color: 'var(--text-muted)' }}>No scores yet for this category.</p>
                 ) : (
-                    <div style={{ overflowX: 'auto' }}>
-                        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                    <div className={styles.tableWrap}>
+                        <table className={styles.table}>
                             <thead>
-                                <tr style={{ borderBottom: '1px solid var(--border-default)' }}>
-                                    <th style={thStyle}>#</th>
-                                    <th style={thStyle}>Wallet</th>
-                                    <th style={{ ...thStyle, textAlign: 'right' }}>Total Score</th>
-                                    <th style={{ ...thStyle, textAlign: 'right' }}>Days Active</th>
+                                <tr>
+                                    <th>#</th>
+                                    <th>Wallet</th>
+                                    <th className={styles.thRight}>Total Score</th>
+                                    <th className={styles.thRight}>Days Active</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {leaderboard.map((entry, i) => (
-                                    <tr key={entry.wallet} style={{ borderBottom: '1px solid var(--border-subtle)' }}>
-                                        <td style={tdStyle}>
+                                    <tr key={entry.wallet}>
+                                        <td>
                                             <span style={getRankStyle(computeCompetitionRank(leaderboard, i) - 1)}>
                                                 {computeCompetitionRank(leaderboard, i)}
                                             </span>
                                         </td>
-                                        <td style={{ ...tdStyle, fontFamily: 'var(--font-mono)', fontSize: '13px' }}>
+                                        <td className={styles.tdMono}>
                                             {entry.wallet.slice(0, 4)}...{entry.wallet.slice(-4)}
                                         </td>
-                                        <td style={{
-                                            ...tdStyle,
-                                            textAlign: 'right',
-                                            fontWeight: 600,
-                                            color: activeTab.color,
-                                        }}>
+                                        <td className={styles.tdRight} style={{ fontWeight: 600, color: activeTab.color }}>
                                             {typeof entry.totalScore === 'number' ? entry.totalScore.toFixed(1) : entry.totalScore}
                                         </td>
-                                        <td style={{ ...tdStyle, textAlign: 'right' }}>
+                                        <td className={styles.tdRight}>
                                             {entry.daysScored}
                                         </td>
                                     </tr>
@@ -292,29 +290,27 @@ export default function CategoriesPage({ params }: { params: Promise<{ tournamen
 
             {/* Leverage Master Badge Grid (shown only for leverage tabs) */}
             {isLeverageTab && (
-                <section style={{ marginBottom: 'var(--space-2xl)' }}>
-                    <h2 style={{ fontSize: '1.125rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: 'var(--space-md)', display: 'flex', alignItems: 'center', gap: 'var(--space-sm)' }}>
+                <section className={styles.section}>
+                    <h2 className={styles.sectionTitle}>
                         <Zap size={18} />
                         Step Progress
                     </h2>
-                    <div className="card" style={{ padding: 'var(--space-lg)' }}>
-                        <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: 'var(--space-md)' }}>
-                            Each badge represents a leverage tier. Open a position at the target leverage (\u00b12x tolerance) to complete a step.
+                    <div className={`card ${styles.lmCard}`}>
+                        <p className={styles.lmIntro}>
+                            Each badge represents a leverage tier. Open a position at the target leverage (±2x tolerance) to complete a step.
                         </p>
 
                         {/* Wallet input for quest lookup */}
-                        <div style={{ display: 'flex', gap: 'var(--space-sm)', marginBottom: 'var(--space-md)', alignItems: 'center' }}>
+                        <div className={styles.lmInputRow}>
                             <input
                                 type="text"
-                                className="input input--mono"
+                                className={`input input--mono ${styles.lmInput}`}
                                 placeholder="Enter wallet address to view progress..."
                                 value={walletInput}
                                 onChange={(e) => setWalletInput(e.target.value)}
-                                style={{ flex: 1, fontSize: '13px' }}
                             />
                             <button
-                                className="btn btn--secondary"
-                                style={{ fontSize: '13px', padding: '8px 16px', whiteSpace: 'nowrap' }}
+                                className={`btn btn--secondary ${styles.lmBtn}`}
                                 onClick={() => {
                                     if (walletInput.trim()) {
                                         const params = new URLSearchParams(searchParams.toString());
@@ -329,7 +325,7 @@ export default function CategoriesPage({ params }: { params: Promise<{ tournamen
                         </div>
 
                         {walletParam && (
-                            <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: 'var(--space-sm)', fontFamily: 'var(--font-mono)' }}>
+                            <p className={styles.lmWalletHint}>
                                 {walletParam.slice(0, 4)}...{walletParam.slice(-4)}
                             </p>
                         )}
@@ -358,45 +354,37 @@ export default function CategoriesPage({ params }: { params: Promise<{ tournamen
 
             {/* Daily Breakdown */}
             <section>
-                <h2 style={{ fontSize: '1.125rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: 'var(--space-md)', display: 'flex', alignItems: 'center', gap: 'var(--space-sm)' }}>
+                <h2 className={styles.sectionTitle}>
                     <Calendar size={18} />
                     Daily Breakdown
                 </h2>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-sm)', marginBottom: 'var(--space-md)' }}>
+                <div className={styles.dateInputRow}>
                     <input
                         type="date"
                         value={dailyDate}
                         onChange={(e) => setDailyDate(e.target.value)}
-                        className="input"
-                        style={{
-                            width: 'auto',
-                        }}
+                        className={`input ${styles.dateInput}`}
                     />
                 </div>
 
                 {dailyDate && dailyScores.length > 0 ? (
-                    <div style={{ overflowX: 'auto' }}>
-                        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                    <div className={styles.tableWrap}>
+                        <table className={styles.table}>
                             <thead>
-                                <tr style={{ borderBottom: '1px solid var(--border-default)' }}>
-                                    <th style={thStyle}>#</th>
-                                    <th style={thStyle}>Wallet</th>
-                                    <th style={{ ...thStyle, textAlign: 'right' }}>Score</th>
+                                <tr>
+                                    <th>#</th>
+                                    <th>Wallet</th>
+                                    <th className={styles.thRight}>Score</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {dailyScores.map((s, i) => (
-                                    <tr key={s.id} style={{ borderBottom: '1px solid var(--border-subtle)' }}>
-                                        <td style={tdStyle}>{i + 1}</td>
-                                        <td style={{ ...tdStyle, fontFamily: 'var(--font-mono)', fontSize: '13px' }}>
+                                    <tr key={s.id}>
+                                        <td>{i + 1}</td>
+                                        <td className={styles.tdMono}>
                                             {s.wallet.slice(0, 4)}...{s.wallet.slice(-4)}
                                         </td>
-                                        <td style={{
-                                            ...tdStyle,
-                                            textAlign: 'right',
-                                            fontWeight: 600,
-                                            color: activeTab.color,
-                                        }}>
+                                        <td className={styles.tdRight} style={{ fontWeight: 600, color: activeTab.color }}>
                                             {typeof s.score === 'number' ? s.score.toFixed(1) : s.score}
                                         </td>
                                     </tr>
@@ -429,9 +417,9 @@ function computeCompetitionRank(entries: CategoryLeaderboardEntry[], index: numb
 }
 
 function getRankStyle(index: number): React.CSSProperties {
-    if (index === 0) return { fontWeight: 700, color: '#ffd700' };
-    if (index === 1) return { fontWeight: 700, color: '#c0c0c0' };
-    if (index === 2) return { fontWeight: 700, color: '#cd7f32' };
+    if (index === 0) return { fontWeight: 700, color: 'var(--accent-gold)' };
+    if (index === 1) return { fontWeight: 700, color: 'var(--accent-silver)' };
+    if (index === 2) return { fontWeight: 700, color: 'var(--accent-bronze)' };
     return {};
 }
 
@@ -451,84 +439,31 @@ function LeverageBadgeGrid({ steps, stepValues, color }: { steps: boolean[]; ste
 
     return (
         <div>
-            <div style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(5, 1fr)',
-                gap: 'var(--space-sm)',
-                marginBottom: 'var(--space-md)',
-            }}>
+            <div className={styles.badgeGrid}>
                 {labels.map((label, i) => {
                     const completed = steps[i];
                     return (
                         <div
                             key={`${label}-${i}`}
-                            style={{
-                                display: 'flex',
-                                flexDirection: 'column',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                padding: 'var(--space-sm) var(--space-xs)',
-                                borderRadius: 'var(--radius-md)',
-                                border: `1px solid ${completed ? color : 'var(--border-default)'}`,
-                                background: completed ? `${color}15` : 'var(--bg-card)',
-                                transition: 'all var(--transition-default)',
-                                minHeight: '56px',
-                            }}
+                            className={styles.lmBadge}
+                            style={completed ? {
+                                borderColor: color,
+                                background: `${color}15`,
+                            } : undefined}
                         >
-                            <span style={{
-                                fontSize: '16px',
-                                fontWeight: 700,
-                                color: completed ? color : 'var(--text-muted)',
-                            }}>
+                            <span className={styles.badgeLabel} style={completed ? { color } : undefined}>
                                 {label}
                             </span>
-                            <span style={{
-                                fontSize: '11px',
-                                color: completed ? color : 'var(--text-muted)',
-                                marginTop: '2px',
-                            }}>
+                            <span className={styles.badgeStatus} style={completed ? { color } : undefined}>
                                 {completed ? '✓' : '—'}
                             </span>
                         </div>
                     );
                 })}
             </div>
-            <p style={{
-                fontSize: '13px',
-                color: completedCount > 0 ? color : 'var(--text-muted)',
-                fontWeight: 600,
-            }}>
+            <p className={styles.badgeProgress} style={completedCount > 0 ? { color } : undefined}>
                 {completedCount}/{total} steps completed
             </p>
         </div>
     );
 }
-
-const tabBtnStyle: React.CSSProperties = {
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: '6px',
-    padding: '10px 20px',
-    border: '1px solid var(--border-default)',
-    borderRadius: 'var(--radius-md)',
-    fontSize: '14px',
-    fontWeight: 600,
-    cursor: 'pointer',
-    transition: 'all var(--transition-default)',
-};
-
-const thStyle: React.CSSProperties = {
-    padding: '10px 12px',
-    textAlign: 'left',
-    fontSize: '12px',
-    fontWeight: 600,
-    color: 'var(--text-muted)',
-    textTransform: 'uppercase',
-    letterSpacing: '0.05em',
-};
-
-const tdStyle: React.CSSProperties = {
-    padding: '10px 12px',
-    fontSize: '14px',
-    color: 'var(--text-secondary)',
-};

@@ -9,6 +9,7 @@ import {
 } from '@/lib/api';
 import { Trophy, Calendar, ArrowRight, Crown } from 'lucide-react';
 import Link from 'next/link';
+import styles from './page.module.css';
 
 export default function SeasonDetailPage({ params }: { params: Promise<{ id: string }> }) {
     const { id } = use(params);
@@ -52,9 +53,9 @@ export default function SeasonDetailPage({ params }: { params: Promise<{ id: str
     if (loading) {
         return (
             <div className="container">
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 'var(--space-md)', padding: 'var(--space-3xl) 0' }}>
+                <div className={styles.center}>
                     <div className="spinner" />
-                    <p style={{ color: 'var(--text-muted)' }}>Loading season...</p>
+                    <p>Loading season...</p>
                 </div>
             </div>
         );
@@ -63,8 +64,8 @@ export default function SeasonDetailPage({ params }: { params: Promise<{ id: str
     if (error || !season) {
         return (
             <div className="container">
-                <div className="card" style={{ marginTop: 'var(--space-2xl)', padding: 'var(--space-xl)', textAlign: 'center' }}>
-                    <p style={{ color: 'var(--status-danger)' }}>{error || 'Season not found'}</p>
+                <div className={`card ${styles.errorCard}`}>
+                    <p>{error || 'Season not found'}</p>
                 </div>
             </div>
         );
@@ -72,15 +73,9 @@ export default function SeasonDetailPage({ params }: { params: Promise<{ id: str
 
     return (
         <div className="container">
-            {/* Header */}
             <header className="page-header">
-                <Link
-                    href="/seasons"
-                    style={{ color: 'var(--text-muted)', fontSize: '14px', textDecoration: 'none' }}
-                >
-                    ← Back to Seasons
-                </Link>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-md)', marginTop: 'var(--space-sm)' }}>
+                <Link href="/seasons" className={styles.backLink}>← Back to Seasons</Link>
+                <div className={styles.titleRow}>
                     <h1 className="page-header__title" style={{ marginBottom: 0 }}>
                         {season.name}
                     </h1>
@@ -95,9 +90,8 @@ export default function SeasonDetailPage({ params }: { params: Promise<{ id: str
                 </p>
             </header>
 
-            {/* Standings Table */}
-            <section style={{ marginBottom: 'var(--space-2xl)' }}>
-                <h2 style={{ fontSize: '1.25rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: 'var(--space-md)', display: 'flex', alignItems: 'center', gap: 'var(--space-sm)' }}>
+            <section className={styles.section}>
+                <h2 className={styles.sectionTitle}>
                     <Trophy size={20} />
                     Season Standings
                 </h2>
@@ -105,39 +99,33 @@ export default function SeasonDetailPage({ params }: { params: Promise<{ id: str
                 {standings.length === 0 ? (
                     <p style={{ color: 'var(--text-muted)' }}>No standings yet.</p>
                 ) : (
-                    <div style={{ overflowX: 'auto' }}>
-                        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                    <div className={styles.tableWrap}>
+                        <table className={styles.table}>
                             <thead>
-                                <tr style={{ borderBottom: '1px solid var(--border-default)' }}>
-                                    <th style={thStyle}>#</th>
-                                    <th style={thStyle}>Wallet</th>
-                                    <th style={{ ...thStyle, textAlign: 'right' }}>Points</th>
-                                    <th style={{ ...thStyle, textAlign: 'right' }}>Weeks</th>
-                                    <th style={{ ...thStyle, textAlign: 'right' }}>Best</th>
-                                    <th style={{ ...thStyle, textAlign: 'center' }}>Status</th>
+                                <tr>
+                                    <th>#</th>
+                                    <th>Wallet</th>
+                                    <th className={styles.thRight}>Points</th>
+                                    <th className={styles.thRight}>Weeks</th>
+                                    <th className={styles.thRight}>Best</th>
+                                    <th className={styles.thCenter}>Status</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {standings.map((s, i) => (
-                                    <tr key={s.id} style={{ borderBottom: '1px solid var(--border-subtle)' }}>
-                                        <td style={tdStyle}>
-                                            {i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : i + 1}
-                                        </td>
-                                        <td style={{ ...tdStyle, fontFamily: 'var(--font-mono)', fontSize: '13px' }}>
+                                    <tr key={s.id}>
+                                        <td>{i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : i + 1}</td>
+                                        <td className={styles.tdMono}>
                                             {s.wallet.slice(0, 4)}...{s.wallet.slice(-4)}
                                         </td>
-                                        <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 600, color: 'var(--status-success)' }}>
-                                            {s.totalPoints}
-                                        </td>
-                                        <td style={{ ...tdStyle, textAlign: 'right' }}>
-                                            {s.weeksParticipated}
-                                        </td>
-                                        <td style={{ ...tdStyle, textAlign: 'right' }}>
+                                        <td className={styles.points}>{s.totalPoints}</td>
+                                        <td className={styles.tdRight}>{s.weeksParticipated}</td>
+                                        <td className={styles.tdRight}>
                                             {s.bestPlacement !== null ? `#${s.bestPlacement}` : '—'}
                                         </td>
-                                        <td style={{ ...tdStyle, textAlign: 'center' }}>
+                                        <td className={styles.tdCenter}>
                                             {s.qualifiedForFinal ? (
-                                                <span style={{ color: 'var(--accent-primary)', fontSize: '12px', fontWeight: 600 }}>
+                                                <span className={styles.qualified}>
                                                     <Crown size={12} /> Qualified
                                                 </span>
                                             ) : '—'}
@@ -150,36 +138,24 @@ export default function SeasonDetailPage({ params }: { params: Promise<{ id: str
                 )}
             </section>
 
-            {/* Weekly Tournaments */}
             <section>
-                <h2 style={{ fontSize: '1.25rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: 'var(--space-md)', display: 'flex', alignItems: 'center', gap: 'var(--space-sm)' }}>
+                <h2 className={styles.sectionTitle}>
                     <Calendar size={20} />
                     Weekly Gauntlets
                 </h2>
 
-                <div style={{ display: 'grid', gap: 'var(--space-sm)' }}>
+                <div className={styles.weeklyGrid}>
                     {(season.tournaments ?? []).map((t) => (
                         <Link
                             key={t.id}
                             href={`/tournament/${t.id}`}
-                            className="card card--hoverable"
-                            style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'space-between',
-                                padding: 'var(--space-md) var(--space-lg)',
-                                textDecoration: 'none',
-                            }}
+                            className={`card card--hoverable ${styles.weeklyRow}`}
                         >
                             <div>
-                                <div style={{ color: 'var(--text-primary)', fontWeight: 600, fontSize: '15px' }}>
-                                    {t.name}
-                                </div>
-                                <div style={{ color: 'var(--text-muted)', fontSize: '13px', marginTop: 'var(--space-xs)' }}>
-                                    {getStatusBadge(t.status)}
-                                </div>
+                                <div className={styles.weeklyName}>{t.name}</div>
+                                <div className={styles.weeklyStatus}>{getStatusBadge(t.status)}</div>
                             </div>
-                            <ArrowRight size={16} style={{ color: 'var(--text-muted)' }} />
+                            <ArrowRight size={16} className={styles.weeklyArrow} />
                         </Link>
                     ))}
                 </div>
@@ -187,19 +163,3 @@ export default function SeasonDetailPage({ params }: { params: Promise<{ id: str
         </div>
     );
 }
-
-const thStyle: React.CSSProperties = {
-    padding: '10px 12px',
-    textAlign: 'left',
-    fontSize: '12px',
-    fontWeight: 600,
-    color: 'var(--text-muted)',
-    textTransform: 'uppercase',
-    letterSpacing: '0.05em',
-};
-
-const tdStyle: React.CSSProperties = {
-    padding: '10px 12px',
-    fontSize: '14px',
-    color: 'var(--text-secondary)',
-};

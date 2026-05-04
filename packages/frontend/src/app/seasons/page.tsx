@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { listSeasons, type Season } from '@/lib/api';
 import { Trophy, Calendar, ChevronRight } from 'lucide-react';
+import styles from './page.module.css';
 
 export default function SeasonsPage() {
     const [seasons, setSeasons] = useState<Season[]>([]);
@@ -29,9 +30,9 @@ export default function SeasonsPage() {
     if (loading) {
         return (
             <div className="container">
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 'var(--space-md)', padding: 'var(--space-3xl) 0' }}>
+                <div className={styles.center}>
                     <div className="spinner" />
-                    <p style={{ color: 'var(--text-muted)' }}>Loading seasons...</p>
+                    <p className={styles.loading}>Loading seasons...</p>
                 </div>
             </div>
         );
@@ -40,8 +41,8 @@ export default function SeasonsPage() {
     if (error) {
         return (
             <div className="container">
-                <div className="card" style={{ marginTop: 'var(--space-2xl)', padding: 'var(--space-xl)', textAlign: 'center' }}>
-                    <p style={{ color: 'var(--status-danger)' }}>{error}</p>
+                <div className={`card ${styles.errorCard}`}>
+                    <p>{error}</p>
                 </div>
             </div>
         );
@@ -60,58 +61,47 @@ export default function SeasonsPage() {
             </header>
 
             {seasons.length === 0 ? (
-                <div className="card" style={{ padding: 'var(--space-2xl)', textAlign: 'center' }}>
-                    <p style={{ color: 'var(--text-muted)', fontSize: '1rem' }}>No seasons yet.</p>
-                    <p style={{ color: 'var(--text-muted)', fontSize: '0.8125rem', marginTop: 'var(--space-sm)' }}>
+                <div className={`card ${styles.empty}`}>
+                    <p className={styles.emptyTitle}>No seasons yet.</p>
+                    <p className={styles.emptySub}>
                         Seasons are created by admins from the Admin panel.
                     </p>
                 </div>
             ) : (
-                <div className="card-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: 'var(--space-lg)' }}>
+                <div className={styles.cardGrid}>
                     {seasons.map((season, idx) => (
                         <Link
                             key={season.id}
                             href={`/season/${season.id}`}
-                            className="card card--hoverable"
-                            style={{
-                                padding: 'var(--space-lg)',
-                                textDecoration: 'none',
-                                display: 'flex',
-                                flexDirection: 'column',
-                                gap: 'var(--space-md)',
-                                animation: `fadeInUp 0.3s cubic-bezier(0.4, 0, 0.2, 1) ${idx * 0.05}s both`,
-                            }}
+                            className={`card card--hoverable ${styles.seasonCard}`}
+                            style={{ animationDelay: `${idx * 0.05}s` }}
                         >
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                                <h2 style={{ fontSize: '1.125rem', fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>
-                                    {season.name}
-                                </h2>
+                            <div className={styles.cardHead}>
+                                <h2 className={styles.cardName}>{season.name}</h2>
                                 <span className={`badge badge--${season.status}`}>
                                     {season.status}
                                 </span>
                             </div>
 
-                            <div style={{ display: 'flex', gap: 'var(--space-lg)', fontSize: '0.8125rem' }}>
-                                <div>
-                                    <div style={{ color: 'var(--text-muted)', fontWeight: 600, fontSize: '0.6875rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                                        <Calendar size={10} style={{ marginRight: 3 }} />
+                            <div className={styles.cardStats}>
+                                <div className={styles.cardStat}>
+                                    <span className={styles.cardStat__label}>
+                                        <Calendar size={10} />
                                         Week
-                                    </div>
-                                    <div style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, fontSize: '1.25rem', color: 'var(--text-primary)' }}>
+                                    </span>
+                                    <span className={styles.cardStat__value}>
                                         {season.currentWeek} / {season.config.weekCount}
-                                    </div>
+                                    </span>
                                 </div>
-                                <div>
-                                    <div style={{ color: 'var(--text-muted)', fontWeight: 600, fontSize: '0.6875rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                                        Qualification Slots
-                                    </div>
-                                    <div style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, fontSize: '1.25rem', color: 'var(--text-primary)' }}>
+                                <div className={styles.cardStat}>
+                                    <span className={styles.cardStat__label}>Qualification Slots</span>
+                                    <span className={styles.cardStat__value}>
                                         {season.config.qualificationSlots}
-                                    </div>
+                                    </span>
                                 </div>
                             </div>
 
-                            <div style={{ display: 'flex', justifyContent: 'flex-end', color: 'var(--text-muted)', fontSize: '0.75rem', alignItems: 'center', gap: 4 }}>
+                            <div className={styles.cardFooter}>
                                 View Season <ChevronRight size={12} />
                             </div>
                         </Link>

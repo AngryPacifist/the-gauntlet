@@ -1,0 +1,67 @@
+/* ============================================================================
+   Cumulative Leaderboard — Module CSS (Phase 8.i.5.D.4.7)
+   ============================================================================ */
+
+.tabRow {
+    display: flex;
+    gap: var(--space-sm);
+    margin-bottom: var(--space-lg);
+    border-bottom: 1px solid var(--border-subtle);
+    flex-wrap: wrap;
+}
+.tabBtn {
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: var(--text-muted);
+    padding: var(--space-sm) var(--space-md);
+    font-size: 0.875rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+    margin-bottom: -1px;
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-xs);
+}
+.tabBtn:hover { color: var(--text-secondary); }
+.tabBtnActive {
+    background: var(--bg-secondary);
+    border-bottom-color: var(--accent-primary);
+    color: var(--text-primary);
+    font-weight: 700;
+}
+
+.metaCard { padding: var(--space-md); margin-bottom: var(--space-md); }
+.metaRow {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: var(--space-sm);
+}
+.metaTitle { font-size: 1.125rem; font-weight: 700; color: var(--text-primary); margin: 0; }
+.metaSub { font-size: 0.75rem; color: var(--text-muted); margin: var(--space-xs) 0 0; }
+
+.tableCard { padding: 0; overflow: hidden; }
+.table { width: 100%; border-collapse: collapse; font-size: 0.8125rem; }
+.table thead tr { background: var(--bg-secondary); border-bottom: 1px solid var(--border-subtle); }
+.table th { padding: var(--space-xs) var(--space-sm); text-align: right; color: var(--text-muted); font-weight: 600; font-size: 0.6875rem; text-transform: uppercase; letter-spacing: 0.05em; }
+.thLeft { text-align: left; }
+.table td { padding: var(--space-xs) var(--space-sm); text-align: right; color: var(--text-secondary); border-bottom: 1px solid var(--border-subtle); }
+.tdLeft { text-align: left; }
+.tdMono { font-family: var(--font-mono); }
+.tdStrong { font-weight: 700; color: var(--text-primary); }
+.questPoints { color: var(--accent-primary); }
+
+.viewFull {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-xs);
+    color: var(--accent-primary);
+    text-decoration: none;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    margin-top: var(--space-md);
+}
+.viewFullWrap { text-align: right; margin-top: var(--space-md); }

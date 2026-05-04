@@ -2,6 +2,8 @@
 
 // ============================================================================
 // Admin Analytics — Phase 5 item 19 sub-route
+// Phase 8.i.5.D.4.2: inline-style cleanup. Slate-palette literals + repeating
+// table inline styles → module classes from admin/page.module.css.
 //
 // Tournament analytics + daily position metrics + quest anomaly detection.
 // Extracted from monolithic /admin/page.tsx (pre-Phase-5).
@@ -30,6 +32,10 @@ const ADMIN_SECRET_KEY = 'adrena_admin_secret';
 function readSecret(): string {
     if (typeof window === 'undefined') return '';
     return localStorage.getItem(ADMIN_SECRET_KEY) ?? '';
+}
+
+function shortWallet(w: string): string {
+    return `${w.slice(0, 4)}...${w.slice(-4)}`;
 }
 
 export default function AdminAnalyticsPage() {
@@ -163,7 +169,7 @@ export default function AdminAnalyticsPage() {
             )}
 
             <header className="page-header">
-                <Link href="/admin" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', color: 'var(--text-muted)', fontSize: '0.8125rem', textDecoration: 'none', marginBottom: 'var(--space-sm)' }}>
+                <Link href="/admin" className={styles.adminHeaderLink}>
                     <ArrowLeft size={14} /> Back to Admin
                 </Link>
                 <h1 className="page-header__title">
@@ -200,46 +206,46 @@ export default function AdminAnalyticsPage() {
 
                     {/* Analytics panel */}
                     {analyticsId === t.id && (
-                        <div style={{ marginTop: 'var(--space-md)', padding: 'var(--space-md)', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)' }}>
+                        <div className={styles.analyticsPanel}>
                             {analyticsLoading ? (
-                                <div style={{ textAlign: 'center', padding: 'var(--space-md)', color: 'var(--text-muted)' }}>Loading analytics...</div>
+                                <div className={styles.analyticsLoading}>Loading analytics...</div>
                             ) : analyticsData ? (
                                 <>
-                                    <div style={{ display: 'flex', gap: 'var(--space-lg)', marginBottom: 'var(--space-md)', flexWrap: 'wrap' }}>
-                                        <div style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)' }}>
-                                            <strong style={{ color: 'var(--text-primary)' }}>{analyticsData.tournament.totalTraders}</strong> traders
+                                    <div className={styles.analyticsStatRow}>
+                                        <div className={styles.analyticsStat}>
+                                            <strong>{analyticsData.tournament.totalTraders}</strong> traders
                                         </div>
-                                        <div style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)' }}>
-                                            <strong style={{ color: 'var(--text-primary)' }}>{analyticsData.tournament.totalRounds}</strong> rounds
+                                        <div className={styles.analyticsStat}>
+                                            <strong>{analyticsData.tournament.totalRounds}</strong> rounds
                                         </div>
-                                        <div style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)' }}>
-                                            <strong style={{ color: 'var(--text-primary)' }}>{analyticsData.tournament.totalRegistrations}</strong> registrations
+                                        <div className={styles.analyticsStat}>
+                                            <strong>{analyticsData.tournament.totalRegistrations}</strong> registrations
                                         </div>
                                     </div>
                                     {analyticsData.roundStats.length > 0 && (
                                         <>
-                                            <h4 style={{ fontSize: '0.8125rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: 'var(--space-sm)' }}>Round Progression</h4>
-                                            <div style={{ overflowX: 'auto', marginBottom: 'var(--space-md)' }}>
-                                                <table style={{ width: '100%', fontSize: '0.75rem', borderCollapse: 'collapse' }}>
+                                            <h4 className={styles.analyticsHead}>Round Progression</h4>
+                                            <div className={styles.analyticsTableWrap}>
+                                                <table className={styles.analyticsTable}>
                                                     <thead>
-                                                        <tr style={{ borderBottom: '1px solid var(--border-subtle)' }}>
-                                                            <th style={{ textAlign: 'left', padding: '6px 8px', color: 'var(--text-muted)', fontWeight: 600 }}>Round</th>
-                                                            <th style={{ textAlign: 'right', padding: '6px 8px', color: 'var(--text-muted)', fontWeight: 600 }}>Traders</th>
-                                                            <th style={{ textAlign: 'right', padding: '6px 8px', color: 'var(--text-muted)', fontWeight: 600 }}>Elim.</th>
-                                                            <th style={{ textAlign: 'right', padding: '6px 8px', color: 'var(--text-muted)', fontWeight: 600 }}>Adv.</th>
-                                                            <th style={{ textAlign: 'right', padding: '6px 8px', color: 'var(--text-muted)', fontWeight: 600 }}>Avg CPI</th>
-                                                            <th style={{ textAlign: 'right', padding: '6px 8px', color: 'var(--text-muted)', fontWeight: 600 }}>Max CPI</th>
+                                                        <tr>
+                                                            <th>Round</th>
+                                                            <th className={styles.analyticsThRight}>Traders</th>
+                                                            <th className={styles.analyticsThRight}>Elim.</th>
+                                                            <th className={styles.analyticsThRight}>Adv.</th>
+                                                            <th className={styles.analyticsThRight}>Avg CPI</th>
+                                                            <th className={styles.analyticsThRight}>Max CPI</th>
                                                         </tr>
                                                     </thead>
                                                     <tbody>
                                                         {analyticsData.roundStats.map((r, i) => (
-                                                            <tr key={`${r.roundName}-${i}`} style={{ borderBottom: '1px solid var(--border-subtle)' }}>
-                                                                <td style={{ padding: '6px 8px', color: 'var(--text-primary)' }}>{r.roundName}</td>
-                                                                <td style={{ padding: '6px 8px', textAlign: 'right', color: 'var(--text-secondary)' }}>{r.traderCount}</td>
-                                                                <td style={{ padding: '6px 8px', textAlign: 'right', color: '#ef4444' }}>{r.eliminatedCount}</td>
-                                                                <td style={{ padding: '6px 8px', textAlign: 'right', color: '#22c55e' }}>{r.advancedCount}</td>
-                                                                <td style={{ padding: '6px 8px', textAlign: 'right', color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)' }}>{r.avgCpi.toFixed(1)}</td>
-                                                                <td style={{ padding: '6px 8px', textAlign: 'right', color: '#f59e0b', fontFamily: 'var(--font-mono)' }}>{r.maxCpi.toFixed(1)}</td>
+                                                            <tr key={`${r.roundName}-${i}`}>
+                                                                <td>{r.roundName}</td>
+                                                                <td className={`${styles.analyticsTdRight} ${styles.analyticsTdMuted}`}>{r.traderCount}</td>
+                                                                <td className={`${styles.analyticsTdRight} ${styles.analyticsTdDanger}`}>{r.eliminatedCount}</td>
+                                                                <td className={`${styles.analyticsTdRight} ${styles.analyticsTdSuccess}`}>{r.advancedCount}</td>
+                                                                <td className={`${styles.analyticsTdRight} ${styles.analyticsTdMono}`}>{r.avgCpi.toFixed(1)}</td>
+                                                                <td className={`${styles.analyticsTdRight} ${styles.analyticsTdWarning}`}>{r.maxCpi.toFixed(1)}</td>
                                                             </tr>
                                                         ))}
                                                     </tbody>
@@ -249,16 +255,16 @@ export default function AdminAnalyticsPage() {
                                     )}
                                     {analyticsData.componentInsights && (
                                         <>
-                                            <h4 style={{ fontSize: '0.8125rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: 'var(--space-sm)' }}>Component Insights (Advanced vs Eliminated)</h4>
-                                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 'var(--space-sm)', marginBottom: 'var(--space-md)' }}>
+                                            <h4 className={styles.analyticsHead}>Component Insights (Advanced vs Eliminated)</h4>
+                                            <div className={styles.componentInsightGrid}>
                                                 {(['pnl', 'risk', 'consistency', 'activity'] as const).map((key) => (
-                                                    <div key={key} style={{ padding: '8px', background: 'var(--bg-primary)', borderRadius: 'var(--radius-sm)', textAlign: 'center' }}>
-                                                        <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '4px' }}>{key}</div>
-                                                        <div style={{ fontSize: '0.8125rem', fontWeight: 700, color: '#22c55e', fontFamily: 'var(--font-mono)' }}>
+                                                    <div key={key} className={styles.insightTile}>
+                                                        <div className={styles.insightLabel}>{key}</div>
+                                                        <div className={styles.insightAdvanced}>
                                                             {analyticsData.componentInsights!.advancedAvg[key].toFixed(1)}
                                                         </div>
-                                                        <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)' }}>vs</div>
-                                                        <div style={{ fontSize: '0.8125rem', fontWeight: 700, color: '#ef4444', fontFamily: 'var(--font-mono)' }}>
+                                                        <div className={styles.insightVs}>vs</div>
+                                                        <div className={styles.insightEliminated}>
                                                             {analyticsData.componentInsights!.eliminatedAvg[key].toFixed(1)}
                                                         </div>
                                                     </div>
@@ -268,14 +274,14 @@ export default function AdminAnalyticsPage() {
                                     )}
                                     {analyticsData.topPerformers.length > 0 && (
                                         <>
-                                            <h4 style={{ fontSize: '0.8125rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: 'var(--space-sm)' }}>Top Performers</h4>
-                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                            <h4 className={styles.analyticsHead}>Top Performers</h4>
+                                            <div className={styles.performersList}>
                                                 {analyticsData.topPerformers.slice(0, 5).map((p, i) => (
-                                                    <div key={`${p.wallet}-${p.roundNumber}`} style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-sm)', padding: '4px 8px', fontSize: '0.75rem' }}>
-                                                        <span style={{ color: i === 0 ? '#f59e0b' : 'var(--text-muted)', fontWeight: 700, width: '20px' }}>#{i + 1}</span>
-                                                        <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)' }}>{p.wallet.slice(0, 4)}...{p.wallet.slice(-4)}</span>
-                                                        <span style={{ fontFamily: 'var(--font-mono)', color: '#f59e0b', fontWeight: 600 }}>{p.cpiScore.toFixed(1)}</span>
-                                                        <span style={{ color: 'var(--text-muted)' }}>{p.roundName}</span>
+                                                    <div key={`${p.wallet}-${p.roundNumber}`} className={styles.performerRow}>
+                                                        <span className={`${styles.performerRank} ${i === 0 ? styles.performerRankFirst : styles.performerRankOther}`}>#{i + 1}</span>
+                                                        <span className={styles.performerWallet}>{shortWallet(p.wallet)}</span>
+                                                        <span className={styles.performerCpi}>{p.cpiScore.toFixed(1)}</span>
+                                                        <span className={styles.performerRound}>{p.roundName}</span>
                                                     </div>
                                                 ))}
                                             </div>
@@ -288,66 +294,75 @@ export default function AdminAnalyticsPage() {
 
                     {/* Daily Metrics panel */}
                     {dailyId === t.id && (
-                        <div style={{ marginTop: 'var(--space-md)', padding: 'var(--space-md)', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-md)', marginBottom: 'var(--space-md)', flexWrap: 'wrap' }}>
-                                <h4 style={{ fontSize: '0.8125rem', fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>Daily Position Metrics</h4>
-                                <input type="date" className="input input--mono" value={dailyDate} onChange={(e) => setDailyDate(e.target.value)} style={{ maxWidth: '180px', fontSize: '0.75rem' }} />
-                                <button className="btn btn--secondary" onClick={() => handleRefreshDaily(t.id)} disabled={dailyLoading} style={{ fontSize: '0.75rem', padding: '4px 12px' }}>
+                        <div className={styles.analyticsPanel}>
+                            <div className={styles.dailyMetricsHead}>
+                                <h4 className={styles.dailyMetricsTitle}>Daily Position Metrics</h4>
+                                <input
+                                    type="date"
+                                    className={`input input--mono ${styles.dailyMetricsDate}`}
+                                    value={dailyDate}
+                                    onChange={(e) => setDailyDate(e.target.value)}
+                                />
+                                <button
+                                    className={`btn btn--secondary ${styles.dailyMetricsBtn}`}
+                                    onClick={() => handleRefreshDaily(t.id)}
+                                    disabled={dailyLoading}
+                                >
                                     {dailyLoading ? 'Loading...' : 'Fetch'}
                                 </button>
                             </div>
                             {dailyLoading ? (
-                                <div style={{ textAlign: 'center', padding: 'var(--space-md)', color: 'var(--text-muted)' }}>Loading daily metrics...</div>
+                                <div className={styles.analyticsLoading}>Loading daily metrics...</div>
                             ) : dailyData ? (
                                 <>
-                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 'var(--space-sm)', marginBottom: 'var(--space-md)' }}>
-                                        <div style={{ padding: '8px', background: 'var(--bg-primary)', borderRadius: 'var(--radius-sm)', textAlign: 'center' }}>
-                                            <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Active Traders</div>
-                                            <div style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--text-primary)' }}>{dailyData.stats.activeTraders}</div>
+                                    <div className={styles.dailyStatGrid}>
+                                        <div className={styles.dailyStatTile}>
+                                            <div className={styles.dailyStatLabel}>Active Traders</div>
+                                            <div className={styles.dailyStatValue}>{dailyData.stats.activeTraders}</div>
                                         </div>
-                                        <div style={{ padding: '8px', background: 'var(--bg-primary)', borderRadius: 'var(--radius-sm)', textAlign: 'center' }}>
-                                            <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Total Trades</div>
-                                            <div style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--text-primary)' }}>{dailyData.stats.totalTrades}</div>
+                                        <div className={styles.dailyStatTile}>
+                                            <div className={styles.dailyStatLabel}>Total Trades</div>
+                                            <div className={styles.dailyStatValue}>{dailyData.stats.totalTrades}</div>
                                         </div>
                                         {dailyData.stats.fees && (
-                                            <div style={{ padding: '8px', background: 'var(--bg-primary)', borderRadius: 'var(--radius-sm)', textAlign: 'center' }}>
-                                                <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Total Fees</div>
-                                                <div style={{ fontSize: '1rem', fontWeight: 700, color: '#f59e0b' }}>${dailyData.stats.fees.total.toFixed(2)}</div>
+                                            <div className={styles.dailyStatTile}>
+                                                <div className={styles.dailyStatLabel}>Total Fees</div>
+                                                <div className={`${styles.dailyStatValue} ${styles.dailyStatValueWarning}`}>${dailyData.stats.fees.total.toFixed(2)}</div>
                                             </div>
                                         )}
                                     </div>
                                     {dailyData.stats.size && (
-                                        <div style={{ marginBottom: 'var(--space-sm)', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                                        <div className={styles.dailyMetricsLine}>
                                             <strong>Position Size:</strong> min ${dailyData.stats.size.min.toFixed(2)} / max ${dailyData.stats.size.max.toFixed(2)} / avg ${dailyData.stats.size.avg.toFixed(2)}
                                         </div>
                                     )}
                                     {dailyData.stats.leverage && (
-                                        <div style={{ marginBottom: 'var(--space-sm)', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                                        <div className={styles.dailyMetricsLine}>
                                             <strong>Leverage at Open:</strong> min {dailyData.stats.leverage.min.toFixed(1)}x / max {dailyData.stats.leverage.max.toFixed(1)}x / avg {dailyData.stats.leverage.avg.toFixed(1)}x
                                         </div>
                                     )}
                                     {dailyData.walletMetrics.length > 0 && (
-                                        <div style={{ overflowX: 'auto' }}>
-                                            <table style={{ width: '100%', fontSize: '0.75rem', borderCollapse: 'collapse' }}>
+                                        <div className={styles.analyticsTableWrap}>
+                                            <table className={styles.analyticsTable}>
                                                 <thead>
-                                                    <tr style={{ borderBottom: '1px solid var(--border-subtle)' }}>
-                                                        <th style={{ textAlign: 'left', padding: '6px 8px', color: 'var(--text-muted)', fontWeight: 600 }}>Wallet</th>
-                                                        <th style={{ textAlign: 'right', padding: '6px 8px', color: 'var(--text-muted)', fontWeight: 600 }}>Trades</th>
-                                                        <th style={{ textAlign: 'right', padding: '6px 8px', color: 'var(--text-muted)', fontWeight: 600 }}>L/S</th>
-                                                        <th style={{ textAlign: 'right', padding: '6px 8px', color: 'var(--text-muted)', fontWeight: 600 }}>Avg Size</th>
-                                                        <th style={{ textAlign: 'right', padding: '6px 8px', color: 'var(--text-muted)', fontWeight: 600 }}>Avg Lev.</th>
-                                                        <th style={{ textAlign: 'right', padding: '6px 8px', color: 'var(--text-muted)', fontWeight: 600 }}>Fees</th>
+                                                    <tr>
+                                                        <th>Wallet</th>
+                                                        <th className={styles.analyticsThRight}>Trades</th>
+                                                        <th className={styles.analyticsThRight}>L/S</th>
+                                                        <th className={styles.analyticsThRight}>Avg Size</th>
+                                                        <th className={styles.analyticsThRight}>Avg Lev.</th>
+                                                        <th className={styles.analyticsThRight}>Fees</th>
                                                     </tr>
                                                 </thead>
                                                 <tbody>
                                                     {dailyData.walletMetrics.slice(0, 20).map((w) => (
-                                                        <tr key={w.wallet} style={{ borderBottom: '1px solid var(--border-subtle)' }}>
-                                                            <td style={{ padding: '6px 8px', fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)' }}>{w.wallet.slice(0, 4)}...{w.wallet.slice(-4)}</td>
-                                                            <td style={{ padding: '6px 8px', textAlign: 'right', color: 'var(--text-primary)' }}>{w.tradeCount}</td>
-                                                            <td style={{ padding: '6px 8px', textAlign: 'right', color: 'var(--text-secondary)' }}>{w.longCount}/{w.shortCount}</td>
-                                                            <td style={{ padding: '6px 8px', textAlign: 'right', fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)' }}>${w.avgSize.toFixed(2)}</td>
-                                                            <td style={{ padding: '6px 8px', textAlign: 'right', fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)' }}>{w.avgLeverage.toFixed(1)}x</td>
-                                                            <td style={{ padding: '6px 8px', textAlign: 'right', fontFamily: 'var(--font-mono)', color: '#f59e0b' }}>${w.totalFees.toFixed(2)}</td>
+                                                        <tr key={w.wallet}>
+                                                            <td className={styles.analyticsTdMono}>{shortWallet(w.wallet)}</td>
+                                                            <td className={styles.analyticsTdRight}>{w.tradeCount}</td>
+                                                            <td className={`${styles.analyticsTdRight} ${styles.analyticsTdMuted}`}>{w.longCount}/{w.shortCount}</td>
+                                                            <td className={`${styles.analyticsTdRight} ${styles.analyticsTdMono}`}>${w.avgSize.toFixed(2)}</td>
+                                                            <td className={`${styles.analyticsTdRight} ${styles.analyticsTdMono}`}>{w.avgLeverage.toFixed(1)}x</td>
+                                                            <td className={`${styles.analyticsTdRight} ${styles.analyticsTdWarning}`}>${w.totalFees.toFixed(2)}</td>
                                                         </tr>
                                                     ))}
                                                 </tbody>
@@ -356,48 +371,50 @@ export default function AdminAnalyticsPage() {
                                     )}
                                 </>
                             ) : (
-                                <div style={{ textAlign: 'center', padding: 'var(--space-md)', color: 'var(--text-muted)', fontSize: '0.8125rem' }}>Select a date and click Fetch</div>
+                                <div className={styles.dailyEmpty}>Select a date and click Fetch</div>
                             )}
                         </div>
                     )}
 
                     {/* Anomaly detection panel */}
                     {anomalyId === t.id && (
-                        <div style={{ marginTop: 'var(--space-md)', padding: 'var(--space-md)', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)' }}>
-                            <h4 style={{ fontSize: '0.8125rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: 'var(--space-sm)' }}>Quest Anomaly Detection</h4>
+                        <div className={styles.analyticsPanel}>
+                            <h4 className={styles.analyticsHead}>Quest Anomaly Detection</h4>
                             {anomalyLoading ? (
-                                <div style={{ textAlign: 'center', padding: 'var(--space-md)', color: 'var(--text-muted)' }}>Scanning for anomalies...</div>
+                                <div className={styles.analyticsLoading}>Scanning for anomalies...</div>
                             ) : anomalyData ? (
                                 <>
-                                    <div style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)', marginBottom: 'var(--space-md)' }}>
-                                        Streak threshold: <strong style={{ color: 'var(--text-primary)' }}>{anomalyData.streakThreshold}+ consecutive days</strong> in top 5 ·{' '}
-                                        <strong style={{ color: anomalyData.anomalyCount > 0 ? '#f59e0b' : '#22c55e' }}>{anomalyData.anomalyCount}</strong> anomalies detected
+                                    <div className={styles.anomalyHead}>
+                                        Streak threshold: <strong>{anomalyData.streakThreshold}+ consecutive days</strong> in top 5 ·{' '}
+                                        <strong className={`${styles.anomalyHeadCount} ${anomalyData.anomalyCount > 0 ? styles.anomalyHeadCountWarn : styles.anomalyHeadCountSafe}`}>
+                                            {anomalyData.anomalyCount}
+                                        </strong> anomalies detected
                                     </div>
                                     {anomalyData.anomalies.length > 0 ? (
-                                        <div style={{ overflowX: 'auto' }}>
-                                            <table style={{ width: '100%', fontSize: '0.75rem', borderCollapse: 'collapse' }}>
+                                        <div className={styles.analyticsTableWrap}>
+                                            <table className={styles.analyticsTable}>
                                                 <thead>
-                                                    <tr style={{ borderBottom: '1px solid var(--border-subtle)' }}>
-                                                        <th style={{ textAlign: 'left', padding: '6px 8px', color: 'var(--text-muted)', fontWeight: 600 }}>Wallet</th>
-                                                        <th style={{ textAlign: 'left', padding: '6px 8px', color: 'var(--text-muted)', fontWeight: 600 }}>Category</th>
-                                                        <th style={{ textAlign: 'right', padding: '6px 8px', color: 'var(--text-muted)', fontWeight: 600 }}>Streak</th>
-                                                        <th style={{ textAlign: 'left', padding: '6px 8px', color: 'var(--text-muted)', fontWeight: 600 }}>Dates</th>
+                                                    <tr>
+                                                        <th>Wallet</th>
+                                                        <th>Category</th>
+                                                        <th className={styles.analyticsThRight}>Streak</th>
+                                                        <th>Dates</th>
                                                     </tr>
                                                 </thead>
                                                 <tbody>
                                                     {anomalyData.anomalies.map((a, i) => (
-                                                        <tr key={`${a.wallet}-${a.category}-${i}`} style={{ borderBottom: '1px solid var(--border-subtle)' }}>
-                                                            <td style={{ padding: '6px 8px', fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)' }}>{a.wallet.slice(0, 4)}...{a.wallet.slice(-4)}</td>
-                                                            <td style={{ padding: '6px 8px', color: 'var(--text-primary)' }}>{a.category.replace(/_/g, ' ')}</td>
-                                                            <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 700, color: a.streakLength >= 5 ? '#ef4444' : '#f59e0b' }}>{a.streakLength}d</td>
-                                                            <td style={{ padding: '6px 8px', fontFamily: 'var(--font-mono)', fontSize: '0.6875rem', color: 'var(--text-muted)' }}>{a.dates[0]} → {a.dates[a.dates.length - 1]}</td>
+                                                        <tr key={`${a.wallet}-${a.category}-${i}`}>
+                                                            <td className={styles.analyticsTdMono}>{shortWallet(a.wallet)}</td>
+                                                            <td>{a.category.replace(/_/g, ' ')}</td>
+                                                            <td className={`${styles.analyticsTdRight} ${a.streakLength >= 5 ? styles.anomalyStreakSevere : styles.anomalyStreakModerate}`}>{a.streakLength}d</td>
+                                                            <td className={styles.anomalyDates}>{a.dates[0]} → {a.dates[a.dates.length - 1]}</td>
                                                         </tr>
                                                     ))}
                                                 </tbody>
                                             </table>
                                         </div>
                                     ) : (
-                                        <div style={{ textAlign: 'center', padding: 'var(--space-md)', color: '#22c55e', fontSize: '0.8125rem' }}>✓ No anomalies detected</div>
+                                        <div className={styles.anomalyEmpty}>✓ No anomalies detected</div>
                                     )}
                                 </>
                             ) : null}

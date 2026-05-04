@@ -1,0 +1,53 @@
+/* ============================================================================
+   Raffle Per-Tournament — Module CSS (Phase 8.i.5.D.4.6)
+   ============================================================================ */
+
+.errorCard { margin-top: var(--space-2xl); padding: var(--space-xl); text-align: center; color: var(--status-danger); }
+.backLink { color: var(--text-muted); font-size: 0.875rem; text-decoration: none; display: inline-flex; align-items: center; gap: var(--space-xs); }
+.backLink:hover { color: var(--accent-primary); }
+
+.statGrid { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); margin-bottom: var(--space-xl); }
+
+.formulaCard {
+    padding: var(--space-md) var(--space-lg);
+    margin-bottom: var(--space-lg);
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+    line-height: 1.6;
+}
+.formulaTitle { color: var(--accent-primary); font-weight: 700; }
+.formulaCode { font-size: 0.8125rem; background: var(--bg-elevated); padding: 2px 6px; border-radius: var(--radius-sm); }
+.formulaRules { font-size: 0.75rem; color: var(--text-muted); display: block; margin-top: var(--space-xs); }
+
+.searchCard { padding: var(--space-md) var(--space-lg); margin-bottom: var(--space-lg); }
+.searchRow { display: flex; gap: var(--space-sm); align-items: center; }
+.searchInput { flex: 1; font-size: 0.8125rem; }
+.searchBtn { font-size: 0.8125rem; padding: var(--space-sm) var(--space-md); white-space: nowrap; }
+
+.tableWrap { overflow-x: auto; }
+.table { width: 100%; border-collapse: collapse; }
+.table thead tr { border-bottom: 1px solid var(--border-default); }
+.table th { padding: 10px 12px; text-align: left; font-size: 0.75rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; }
+.thRight { text-align: right; }
+.thCenter { text-align: center; }
+.table td { padding: 10px 12px; font-size: 0.875rem; color: var(--text-secondary); border-bottom: 1px solid var(--border-subtle); }
+.tdRight { text-align: right; }
+.tdCenter { text-align: center; }
+.tdMono { font-family: var(--font-mono); font-size: 0.8125rem; }
+.rowHighlighted { background: rgba(108, 92, 231, 0.08); transition: background 0.3s ease; }
+.ticketsHas { font-weight: 700; font-size: 0.9375rem; color: var(--accent-primary); }
+.ticketsZero { font-weight: 700; font-size: 0.9375rem; color: var(--text-muted); }
+
+.statusBadge {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: var(--radius-full);
+    font-size: 0.6875rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    border: 1px solid currentColor;
+}
+.statusBadgeWinner { color: var(--accent-gold); background: rgba(255, 215, 0, 0.1); }
+.statusBadgeTop { color: var(--status-warning); background: var(--status-warning-bg); }
+.statusBadgeIneligible { color: var(--text-muted); background: var(--bg-elevated); }
+.statusBadgeEligible { color: var(--status-success); background: var(--status-success-bg); }

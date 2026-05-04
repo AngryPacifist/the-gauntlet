@@ -37,6 +37,7 @@ import {
     ExternalLink, Terminal, Ticket, Sparkles, CheckCircle2,
     CalendarDays, Lock, RotateCcw, Flame, Swords, ArrowLeft, Compass, Pencil,
 } from 'lucide-react';
+import { Select } from '@/components/Select';
 import styles from '../page.module.css';
 
 const ADMIN_SECRET_KEY = 'adrena_admin_secret';
@@ -1035,10 +1036,15 @@ export default function AdminTournamentsPage() {
                                         </div>
                                         <div className={styles.formGroup}>
                                             <label className={styles.formLabel}>Currency</label>
-                                            <select value={cfgPrizeCurrency} onChange={(e) => setCfgPrizeCurrency(e.target.value as 'ADX' | 'USDC')} className="input">
-                                                <option value="ADX">ADX</option>
-                                                <option value="USDC">USDC</option>
-                                            </select>
+                                            <Select
+                                                ariaLabel="Prize currency"
+                                                value={cfgPrizeCurrency}
+                                                onChange={(v) => setCfgPrizeCurrency(v as 'ADX' | 'USDC')}
+                                                options={[
+                                                    { value: 'ADX', label: 'ADX' },
+                                                    { value: 'USDC', label: 'USDC' },
+                                                ]}
+                                            />
                                         </div>
                                     </div>
                                     {/* Phase 8.a: Mode toggle (Manual / Preset) */}
@@ -1065,11 +1071,15 @@ export default function AdminTournamentsPage() {
                                         <>
                                             <div className={styles.formGroup}>
                                                 <label className={styles.formLabel}>Template</label>
-                                                <select className="input" value={cfgPresetTemplateId} onChange={(e) => handleTemplateChange(e.target.value)}>
-                                                    {PRIZE_TEMPLATES.map((t) => (
-                                                        <option key={t.id} value={t.id}>{t.label}</option>
-                                                    ))}
-                                                </select>
+                                                <Select
+                                                    ariaLabel="Prize distribution template"
+                                                    value={cfgPresetTemplateId}
+                                                    onChange={handleTemplateChange}
+                                                    options={PRIZE_TEMPLATES.map((t) => ({
+                                                        value: t.id,
+                                                        label: t.label,
+                                                    }))}
+                                                />
                                                 <span className={styles.formHint}>Selecting a template loads its shares + curves into the inputs below. Edit freely to customize.</span>
                                             </div>
                                             <div className={styles.formGrid}>
@@ -1154,64 +1164,68 @@ export default function AdminTournamentsPage() {
                                 </p>
                             )}
                             {cfgAssetList.map((asset, i) => (
-                                <div key={i} style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginBottom: '0.5rem' }}>
-                                    {cfgTradableAssets.length > 0 ? (
-                                        <select className="input input--mono" value={asset.symbol}
+                                <div key={i} className={styles.assetRow}>
+                                    {/* Phase 8.i.5.D.3 + 5.D.6.3 Site 1: labeled grid + Custom Select.
+                                     * Custom Select replaces native <select>+free-text fallback (8.h pattern).
+                                     * If cfgTradableAssets empty (admin secret not yet loaded), Select shows "No options".
+                                     * Hint combines both `mint` (main-pool SPL token mint) AND `synthetic_custody_mint`
+                                     * (commodities-pool RWA synth PDA) per D45 — both must remain admin-visible.
+                                     * Engines do NOT match against synth PDA (RWA position.token_account_mint = "1111…"). */}
+                                    <div className={styles.assetRowField}>
+                                        <label className={styles.assetRowFieldLabel}>Symbol</label>
+                                        <Select
+                                            ariaLabel="Asset symbol"
+                                            value={asset.symbol}
+                                            onChange={(symbol) => {
+                                                const fromApi = cfgTradableAssets.find((tt) => tt.symbol === symbol);
+                                                setCfgAssetList((prev) => prev.map((a, j) => j === i ? { ...a, symbol, mint: fromApi?.mint, feed_id: fromApi?.feed_id } : a));
+                                            }}
+                                            placeholder="— select asset —"
+                                            options={cfgTradableAssets.map((tt) => {
+                                                const parts = [
+                                                    tt.mint ? `${tt.mint.slice(0, 4)}…${tt.mint.slice(-4)}` : null,
+                                                    tt.synthetic_custody_mint ? `synth: ${tt.synthetic_custody_mint.slice(0, 4)}…${tt.synthetic_custody_mint.slice(-4)}` : null,
+                                                ].filter((p): p is string => p !== null);
+                                                return {
+                                                    value: tt.symbol,
+                                                    label: tt.symbol,
+                                                    hint: parts.length > 0 ? parts.join(' / ') : undefined,
+                                                };
+                                            })}
+                                        />
+                                    </div>
+                                    <div className={styles.assetRowField}>
+                                        <label className={styles.assetRowFieldLabel}>Feed ID</label>
+                                        <input type="number" className="input input--mono"
+                                            placeholder="feed_id"
+                                            value={asset.feed_id ?? ''}
                                             onChange={(e) => {
-                                                const selected = cfgTradableAssets.find((tt) => tt.symbol === e.target.value);
-                                                // Phase 8.h: feed_id sourced from backend's /admin/tradable-assets response
-                                                setCfgAssetList((prev) => prev.map((a, j) => j === i ? { ...a, symbol: e.target.value, mint: selected?.mint, feed_id: selected?.feed_id } : a));
-                                            }} style={{ flex: 1 }}>
-                                            <option value="">— select asset —</option>
-                                            {cfgTradableAssets.map((tt) => (
-                                                // Phase 8.h: mint is optional.
-                                                // Phase 8.k: synthetic_custody_mint surfaced for commodities-pool RWAs (XAU/XAG/WTI).
-                                                //   Distinguished label "[synth: …]" so admin doesn't conflate with SPL token mints —
-                                                //   engines do NOT match against synthetic_custody_mint per D45 (RWA positions
-                                                //   return token_account_mint = "1111…" sentinel, not the synth PDA).
-                                                <option key={tt.symbol} value={tt.symbol}>
-                                                    {tt.symbol}
-                                                    {tt.mint ? ` (${tt.mint.slice(0, 4)}…${tt.mint.slice(-4)})` : ''}
-                                                    {tt.synthetic_custody_mint ? ` [synth: ${tt.synthetic_custody_mint.slice(0, 4)}…${tt.synthetic_custody_mint.slice(-4)}]` : ''}
-                                                </option>
-                                            ))}
-                                        </select>
-                                    ) : (
-                                        <input type="text" className="input input--mono" placeholder="SYMBOL (e.g., SOL)" value={asset.symbol}
-                                            onChange={(e) => {
-                                                const sym = e.target.value.toUpperCase();
-                                                // Phase 8.h: free-text path is degraded mode (backend tradable-assets unreachable).
-                                                // Clear feed_id on symbol change — admin types it manually in the feed_id input.
-                                                setCfgAssetList((prev) => prev.map((a, j) => j === i ? { ...a, symbol: sym, feed_id: undefined } : a));
-                                            }} style={{ flex: 1 }} />
-                                    )}
-                                    <input type="number" className="input input--mono"
-                                        placeholder="feed_id"
-                                        value={asset.feed_id ?? ''}
-                                        onChange={(e) => {
-                                            const v = e.target.value ? Number(e.target.value) : undefined;
-                                            setCfgAssetList((prev) => prev.map((a, j) => j === i ? { ...a, feed_id: v } : a));
-                                        }}
-                                        title="Pyth Lazer feed_id — auto-filled for known symbols; override if needed"
-                                        style={{ width: '90px', fontSize: '0.8125rem' }} />
-                                    <span className={styles.formHint} style={{ fontFamily: 'monospace', whiteSpace: 'nowrap' }}>joinedAt: {asset.joinedAt}</span>
-                                    {/* Phase 7.a: per-asset LM ladder config (lmSteps CSV + tolerance) */}
-                                    <input type="text" className="input input--mono"
-                                        placeholder="lmSteps CSV"
-                                        value={asset.lmSteps ?? ''}
-                                        onChange={(e) => setCfgAssetList((prev) => prev.map((a, j) => j === i ? { ...a, lmSteps: e.target.value } : a))}
-                                        title="Comma-separated step values (e.g. 10,20,30,40,50,60,70,80,90,100). Leave empty for crypto default."
-                                        style={{ width: '180px', fontSize: '0.8125rem' }} />
-                                    <input type="number" className="input input--mono"
-                                        placeholder="±tol"
-                                        value={asset.lmTolerance ?? ''}
-                                        onChange={(e) => setCfgAssetList((prev) => prev.map((a, j) => j === i ? { ...a, lmTolerance: e.target.value } : a))}
-                                        title="Tolerance window (default 2 for crypto; ~0.2 for sub-10x RWA ladders)"
-                                        step="0.01" min="0.01"
-                                        style={{ width: '70px', fontSize: '0.8125rem' }} />
-                                    <button type="button" className="btn btn--secondary"
+                                                const v = e.target.value ? Number(e.target.value) : undefined;
+                                                setCfgAssetList((prev) => prev.map((a, j) => j === i ? { ...a, feed_id: v } : a));
+                                            }}
+                                            title="Pyth Lazer feed_id — auto-filled for known symbols; override if needed" />
+                                    </div>
+                                    <span className={styles.assetRowJoinedAt}>joined: {asset.joinedAt}</span>
+                                    <div className={styles.assetRowField}>
+                                        <label className={styles.assetRowFieldLabel}>LM Steps (CSV)</label>
+                                        <input type="text" className="input input--mono"
+                                            placeholder="lmSteps CSV"
+                                            value={asset.lmSteps ?? ''}
+                                            onChange={(e) => setCfgAssetList((prev) => prev.map((a, j) => j === i ? { ...a, lmSteps: e.target.value } : a))}
+                                            title="Comma-separated step values (e.g. 10,20,30,40,50,60,70,80,90,100). Leave empty for crypto default." />
+                                    </div>
+                                    <div className={styles.assetRowField}>
+                                        <label className={styles.assetRowFieldLabel}>± Tol</label>
+                                        <input type="number" className="input input--mono"
+                                            placeholder="±tol"
+                                            value={asset.lmTolerance ?? ''}
+                                            onChange={(e) => setCfgAssetList((prev) => prev.map((a, j) => j === i ? { ...a, lmTolerance: e.target.value } : a))}
+                                            title="Tolerance window (default 2 for crypto; ~0.2 for sub-10x RWA ladders)"
+                                            step="0.01" min="0.01" />
+                                    </div>
+                                    <button type="button" className={`btn btn--secondary ${styles.assetRowRemove}`}
                                         onClick={() => setCfgAssetList((prev) => prev.filter((_, j) => j !== i))}
-                                        style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem' }}>Remove</button>
+                                        style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem' }}>×</button>
                                 </div>
                             ))}
                             <button type="button" className="btn btn--secondary"

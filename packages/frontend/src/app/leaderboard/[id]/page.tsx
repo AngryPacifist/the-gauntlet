@@ -1,5 +1,13 @@
 'use client';
 
+// ============================================================================
+// Per-Tournament Leaderboard
+// Phase 8.i.5.D.4.1: full inline-style + Slate-palette migration to module
+// classes from page.module.css. Logic untouched. All helpers preserved verbatim
+// including parseLeverageMasterSlug (Day 41 commit 399cbd7 — centralized LM
+// slug parser; do NOT inline the regex back).
+// ============================================================================
+
 import { useState, useEffect, use, useCallback, useMemo } from 'react';
 import {
     getForgeLeaderboard,
@@ -30,6 +38,7 @@ import {
     XCircle,
 } from 'lucide-react';
 import Link from 'next/link';
+import styles from './page.module.css';
 
 // --------------------------------------------------------------------------
 // Constants
@@ -79,10 +88,10 @@ function getQuestLabel(category: string): string {
 }
 
 const CPI_COMPONENTS = [
-    { key: 'pnlScore', label: 'PnL', color: '#22c55e' },
-    { key: 'riskScore', label: 'Risk', color: '#3b82f6' },
-    { key: 'consistencyScore', label: 'Consistency', color: '#a78bfa' },
-    { key: 'activityScore', label: 'Activity', color: '#f59e0b' },
+    { key: 'pnlScore', label: 'PnL', color: 'var(--status-success)' },
+    { key: 'riskScore', label: 'Risk', color: 'var(--accent-secondary)' },
+    { key: 'consistencyScore', label: 'Consistency', color: 'var(--accent-primary)' },
+    { key: 'activityScore', label: 'Activity', color: 'var(--status-warning)' },
 ] as const;
 
 type PageTab = 'general' | 'quests';
@@ -138,7 +147,6 @@ function todayUTC(): string {
 }
 
 function formatPrize(amount: number): string {
-    // Integer → "500"; split prize → "237.50"; larger → "1,234.56" (en-US thousands separator).
     return amount.toLocaleString('en-US', {
         minimumFractionDigits: 0,
         maximumFractionDigits: 2,
@@ -164,7 +172,6 @@ function extractQuestColumns(
             const avgRoi = scores && scores.length > 0
                 ? scores.reduce((s, a) => s + a.bestROI, 0) / scores.length
                 : 0;
-            // Phase 4 V8: denominator from assetList when populated, fallback 4 for legacy tournaments
             const denom = assetListLength ?? 4;
             return [
                 { label: 'Eligible Trades', value: `${count}/${denom}` },
@@ -193,8 +200,6 @@ function extractQuestColumns(
             ];
         }
         default: {
-            // Phase 4 item 30 + 7.a D25: LM slugs are per-asset.
-            // stepCount + stepCountTotal both in details — backend emits both for variable-length ladders.
             if (category.startsWith('leverage_master_')) {
                 const count = (d.stepCount as number) ?? 0;
                 const total = (d.stepCountTotal as number) ?? 10;
@@ -205,6 +210,13 @@ function extractQuestColumns(
             return [];
         }
     }
+}
+
+function rankBadgeClass(rank: number): string {
+    if (rank === 1) return styles.rankBadge1;
+    if (rank === 2) return styles.rankBadge2;
+    if (rank === 3) return styles.rankBadge3;
+    return '';
 }
 
 // --------------------------------------------------------------------------
@@ -221,8 +233,6 @@ export default function LeaderboardPage({ params }: { params: Promise<{ id: stri
     const [activeTab, setActiveTab] = useState<PageTab>('general');
 
     // General tab state
-    // Phase 6: cache breakdowns by wallet so re-expanding the same wallet is instant.
-    // The single `breakdown` value flowing to JSX is derived below from this map.
     const [expandedWallet, setExpandedWallet] = useState<string | null>(null);
     const [breakdownCache, setBreakdownCache] = useState<Map<string, WalletBreakdown>>(new Map());
     const [breakdownLoading, setBreakdownLoading] = useState(false);
@@ -257,7 +267,6 @@ export default function LeaderboardPage({ params }: { params: Promise<{ id: stri
 
     const loadQuestScores = useCallback(async (period: QuestPeriod, date: string) => {
         setQuestLoading(true);
-        // Phase 4 item 30: categories for weekly tab are per-asset from tournament.config.assetList
         const categories = getPeriodCategories(period, data?.tournament?.config?.assetList);
         const newScores = new Map<string, DailyCategoryScore[]>();
         try {
@@ -290,7 +299,6 @@ export default function LeaderboardPage({ params }: { params: Promise<{ id: stri
         }
         setExpandedWallet(wallet);
 
-        // Phase 6: cache hit → no fetch, no loading flicker.
         if (breakdownCache.has(wallet)) return;
 
         setBreakdownLoading(true);
@@ -338,7 +346,6 @@ export default function LeaderboardPage({ params }: { params: Promise<{ id: stri
             const result = await registerWallet(tournamentId, walletInput.trim());
             setRegResult(result);
             if (result.registered) {
-                // Fire-and-forget reload: a reload failure must NOT overwrite success state.
                 getForgeLeaderboard(tournamentId)
                     .then(setData)
                     .catch((err) => console.error('[Forge] leaderboard reload failed after registration:', err));
@@ -362,8 +369,6 @@ export default function LeaderboardPage({ params }: { params: Promise<{ id: stri
         searchQuery ? e.wallet.toLowerCase().includes(searchQuery.toLowerCase()) : true,
     ) ?? [];
 
-    // Resolve searchQuery to a specific wallet from the tournament roster.
-    // First-match wins for ambiguous substrings. Used by Quest Leaderboards for row 6.
     const searchedWallet = useMemo<string | null>(() => {
         if (!searchQuery || !data) return null;
         const match = data.entries.find((e) =>
@@ -372,64 +377,51 @@ export default function LeaderboardPage({ params }: { params: Promise<{ id: stri
         return match?.wallet ?? null;
     }, [searchQuery, data]);
 
-    // Phase 6: derive `breakdown` from cache + currently-expanded wallet so all
-    // downstream JSX (GeneralLeaderboard prop, ForgeRow prop, QuestBreakdownBars consumer)
-    // continue receiving the same `WalletBreakdown | null` shape — zero JSX/interface
-    // changes required.
     const breakdown = expandedWallet ? breakdownCache.get(expandedWallet) ?? null : null;
 
     if (loading) {
         return (
-            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}>
-                <div style={{ textAlign: 'center', color: '#94a3b8' }}>
-                    <Flame size={48} style={{ margin: '0 auto 16px', animation: 'pulse 2s infinite' }} />
-                    <p>Loading leaderboard...</p>
-                </div>
+            <div className="loading-state">
+                <Flame size={48} className={styles.flameIcon} style={{ animation: 'pulse 2s infinite' }} />
+                <p>Loading leaderboard...</p>
             </div>
         );
     }
 
     if (error) {
         return (
-            <div style={{ textAlign: 'center', padding: '3rem', color: '#ef4444' }}>
-                <p>{error}</p>
+            <div className="container">
+                <div className="card error-state">
+                    <p>{error}</p>
+                </div>
             </div>
         );
     }
 
     if (!data) return null;
 
-    // Determine page title based on tournament format
     const isForge = data.tournament.config?.format === 'rank_only';
     const pageTitle = isForge ? 'The Forge' : 'Leaderboard';
 
     return (
-        <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '2rem 1rem' }}>
-            {/* Header */}
-            <div style={{ marginBottom: '1.5rem' }}>
+        <div className={styles.page}>
+            <div className={styles.headerWrap}>
                 {!isForge && (
-                    <Link
-                        href={`/tournament/${tournamentId}`}
-                        style={{
-                            display: 'inline-flex', alignItems: 'center', gap: '0.5rem',
-                            color: '#94a3b8', fontSize: '0.875rem', marginBottom: '1rem',
-                            textDecoration: 'none',
-                        }}
-                    >
+                    <Link href={`/tournament/${tournamentId}`} className={styles.backLink}>
                         <ArrowLeft size={16} /> Back to Tournament
                     </Link>
                 )}
 
-                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
-                    <Flame size={32} color="#f59e0b" />
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                            <h1 style={{ fontSize: '1.75rem', fontWeight: 700, color: '#f1f5f9', margin: 0 }}>
+                <div className={styles.headerRow}>
+                    <Flame size={32} className={styles.flameIcon} />
+                    <div className={styles.titleBlock}>
+                        <div className={styles.titleRow}>
+                            <h1 className={styles.title}>
                                 {pageTitle}
                             </h1>
                             {isForge && <StatusBadge status={data.tournament.status} />}
                         </div>
-                        <p style={{ color: '#94a3b8', margin: '0.25rem 0 0', fontSize: '0.875rem' }}>
+                        <p className={styles.subtitle}>
                             {data.tournament.name} • {data.totalParticipants} participants • Top {data.top30Cutoff} earn skill prizes
                         </p>
                     </div>
@@ -441,18 +433,12 @@ export default function LeaderboardPage({ params }: { params: Promise<{ id: stri
             </div>
 
             {/* Page-level tabs */}
-            <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.5rem' }}>
+            <div className={styles.pageTabs}>
                 {(['general', 'quests'] as PageTab[]).map((tab) => (
                     <button
                         key={tab}
                         onClick={() => setActiveTab(tab)}
-                        style={{
-                            padding: '0.5rem 1.25rem', borderRadius: '9999px', border: 'none',
-                            fontSize: '0.8125rem', fontWeight: 600, cursor: 'pointer',
-                            background: activeTab === tab ? '#f59e0b' : '#1e293b',
-                            color: activeTab === tab ? '#0f172a' : '#94a3b8',
-                            transition: 'all 0.15s',
-                        }}
+                        className={`${styles.pageTab} ${activeTab === tab ? styles.pageTabActive : ''}`}
                     >
                         {tab === 'general' ? 'General Leaderboard' : 'Quest Leaderboards'}
                     </button>
@@ -461,19 +447,11 @@ export default function LeaderboardPage({ params }: { params: Promise<{ id: stri
 
             {/* Fallen Fighters info — shown for bracket tournaments */}
             {data.tournament.config?.format === 'bracket' && (
-                <div style={{
-                    marginBottom: '1rem', padding: '0.75rem 1rem', borderRadius: '0.5rem',
-                    background: 'rgba(245, 158, 11, 0.08)', border: '1px solid rgba(245, 158, 11, 0.2)',
-                    display: 'flex', alignItems: 'flex-start', gap: '0.75rem',
-                }}>
-                    <Info size={18} style={{ color: '#f59e0b', flexShrink: 0, marginTop: '2px' }} />
+                <div className={styles.ffCard}>
+                    <Info size={18} className={styles.ffCardIcon} />
                     <div>
-                        <p style={{ color: '#f59e0b', fontWeight: 600, fontSize: '0.8125rem', margin: 0 }}>
-                            {FF_DESCRIPTION.title}
-                        </p>
-                        <p style={{ color: '#94a3b8', fontSize: '0.75rem', margin: '0.25rem 0 0', lineHeight: 1.5 }}>
-                            {FF_DESCRIPTION.description}
-                        </p>
+                        <p className={styles.ffCardTitle}>{FF_DESCRIPTION.title}</p>
+                        <p className={styles.ffCardDesc}>{FF_DESCRIPTION.description}</p>
                     </div>
                 </div>
             )}
@@ -548,15 +526,13 @@ interface GeneralLeaderboardProps {
         skillPrizes: number[];
         rafflePrizes: number[];
     };
-    topPercentCutoff?: number;  // Phase 4 V9: dynamic TOP N% rendering
+    topPercentCutoff?: number;
 }
 
 function GeneralLeaderboard({
     entries, expandedWallet, breakdown, breakdownLoading,
     searchQuery, onSearch, onToggle, isForge, prizeTable, topPercentCutoff,
 }: GeneralLeaderboardProps) {
-    // Split-aware prize per rank (accounts for ties).
-    // Tied wallets at rank N share (sum of skillPrizes[N-1..N+K-2]) / K.
     const prizesByRank = useMemo<Map<number, number>>(() => {
         const map = new Map<number, number>();
         if (!prizeTable) return map;
@@ -578,37 +554,31 @@ function GeneralLeaderboard({
     return (
         <>
             <CPIExplanation />
-            <div style={{ marginBottom: '1rem' }}>
-                <input
-                    type="text"
-                    placeholder="Search by wallet address..."
-                    value={searchQuery}
-                    onChange={(e) => onSearch(e.target.value)}
-                    style={{
-                        width: '100%', maxWidth: '400px', padding: '0.625rem 1rem',
-                        background: '#1e293b', border: '1px solid #334155', borderRadius: '8px',
-                        color: '#f1f5f9', fontSize: '0.875rem', outline: 'none',
-                    }}
-                />
-            </div>
+            <input
+                type="text"
+                className={`input ${styles.searchInput}`}
+                placeholder="Search by wallet address..."
+                value={searchQuery}
+                onChange={(e) => onSearch(e.target.value)}
+            />
 
-            <div style={{ overflowX: 'auto', borderRadius: '12px', border: '1px solid #1e293b' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8125rem' }}>
+            <div className={styles.tableWrap}>
+                <table className={styles.table}>
                     <thead>
-                        <tr style={{ background: '#0f172a', borderBottom: '1px solid #1e293b' }}>
-                            <th style={thStyle}></th>
-                            <th style={{ ...thStyle, textAlign: 'left' }}>Rank</th>
-                            <th style={{ ...thStyle, textAlign: 'left' }}>Wallet</th>
-                            <th style={thStyle}>CPI</th>
-                            <th style={thStyle}>Quests</th>
-                            <th style={thStyle}>Final</th>
-                            <th style={thStyle}>Prize</th>
-                            <th style={thStyle}>
+                        <tr>
+                            <th></th>
+                            <th className={styles.thLeft}>Rank</th>
+                            <th className={styles.thLeft}>Wallet</th>
+                            <th>CPI</th>
+                            <th>Quests</th>
+                            <th>Final</th>
+                            <th>Prize</th>
+                            <th>
                                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
                                     <Ticket size={12} /> Tickets
                                 </span>
                             </th>
-                            <th style={thStyle}>Status</th>
+                            <th>Status</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -628,7 +598,7 @@ function GeneralLeaderboard({
                         ))}
                         {entries.length === 0 && (
                             <tr>
-                                <td colSpan={9} style={{ textAlign: 'center', padding: '2rem', color: '#64748b' }}>
+                                <td colSpan={9} className={styles.emptyRow}>
                                     {searchQuery ? 'No wallets match your search' : 'No participants yet'}
                                 </td>
                             </tr>
@@ -658,87 +628,59 @@ interface ForgeRowProps {
         rafflePrizes: number[];
     };
     prizesByRank: Map<number, number>;
-    topPercentCutoff?: number;  // Phase 4 V9
+    topPercentCutoff?: number;
 }
 
 function ForgeRow({ entry, isExpanded, onToggle, breakdown, breakdownLoading, isForge, prizeTable, prizesByRank, topPercentCutoff }: ForgeRowProps) {
-    const medalColors = ['#fbbf24', '#94a3b8', '#cd7f32'];
+    const rankClass = rankBadgeClass(entry.rank);
 
     return (
         <>
             <tr
                 onClick={onToggle}
-                style={{
-                    borderBottom: '1px solid #1e293b',
-                    background: isExpanded ? '#1e293b' : 'transparent',
-                    cursor: 'pointer',
-                    transition: 'background 0.15s',
-                }}
-                onMouseEnter={(e) => { if (!isExpanded) e.currentTarget.style.background = '#1a2332'; }}
-                onMouseLeave={(e) => { if (!isExpanded) e.currentTarget.style.background = 'transparent'; }}
+                className={`${styles.row} ${isExpanded ? styles.rowExpanded : ''}`}
             >
-                <td style={tdStyle}>
-                    {isExpanded ? <ChevronDown size={14} color="#94a3b8" /> : <ChevronRight size={14} color="#64748b" />}
+                <td>
+                    {isExpanded ? <ChevronDown size={14} className={styles.chevron} /> : <ChevronRight size={14} className={styles.chevron} />}
                 </td>
-                <td style={{ ...tdStyle, textAlign: 'left' }}>
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-                        {entry.rank <= 3 && <Trophy size={14} color={medalColors[entry.rank - 1]} />}
-                        <span style={{ fontWeight: entry.rank <= 3 ? 700 : 400, color: entry.rank <= 3 ? medalColors[entry.rank - 1] : '#e2e8f0' }}>
-                            #{entry.rank}
-                        </span>
+                <td className={styles.tdLeft}>
+                    <span className={`${styles.rankBadge} ${rankClass}`}>
+                        {entry.rank <= 3 && <Trophy size={14} />}
+                        #{entry.rank}
                     </span>
                 </td>
-                <td style={{ ...tdStyle, textAlign: 'left' }}>
+                <td className={styles.tdLeft}>
                     {isForge ? (
-                        <span
-                            style={{
-                                fontFamily: 'monospace', color: '#94a3b8',
-                                borderBottom: '1px dashed #475569',
-                            }}
-                        >
-                            {shortWallet(entry.wallet)}
-                        </span>
+                        <span className={styles.walletText}>{shortWallet(entry.wallet)}</span>
                     ) : (
                         <Link
                             href={`/trader/${entry.wallet}`}
                             onClick={(e) => e.stopPropagation()}
-                            style={{
-                                fontFamily: 'monospace', color: '#94a3b8', textDecoration: 'none',
-                                borderBottom: '1px dashed #475569',
-                            }}
+                            className={styles.walletLink}
                         >
                             {shortWallet(entry.wallet)}
                         </Link>
                     )}
                 </td>
-                <td style={tdStyle}>{entry.cpiScore.toFixed(1)}</td>
-                <td style={{ ...tdStyle, color: '#a78bfa' }}>
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                <td>{entry.cpiScore.toFixed(1)}</td>
+                <td>
+                    <span className={styles.questPoints}>
                         <Target size={12} /> {entry.questPoints.toFixed(2)}
                     </span>
                 </td>
-                <td style={{ ...tdStyle, fontWeight: 600, color: '#f1f5f9' }}>
+                <td className={styles.finalScore}>
                     {entry.finalScore.toFixed(2)}
                 </td>
-                <td style={{ ...tdStyle, color: '#22c55e' }}>
+                <td className={styles.prizeCol}>
                     {entry.isTopPercent && prizeTable
                         ? `${formatPrize(prizesByRank.get(entry.rank) ?? 0)} ${prizeTable.currency}`
                         : '—'}
                 </td>
-                <td style={{
-                    ...tdStyle,
-                    color: entry.isTopPercent ? '#64748b' : '#fbbf24',
-                    opacity: entry.isTopPercent ? 0.5 : 1,
-                }}>
+                <td className={entry.isTopPercent ? styles.ticketColTop : styles.ticketColRaffle}>
                     {entry.raffleTickets}
                 </td>
-                <td style={tdStyle}>
-                    <span style={{
-                        padding: '2px 8px', borderRadius: '9999px', fontSize: '0.6875rem',
-                        fontWeight: 600,
-                        background: entry.isTopPercent ? 'rgba(34, 197, 94, 0.15)' : 'rgba(251, 191, 36, 0.15)',
-                        color: entry.isTopPercent ? '#22c55e' : '#fbbf24',
-                    }}>
+                <td>
+                    <span className={`${styles.statusChip} ${entry.isTopPercent ? styles.statusChipTop : styles.statusChipRaffle}`}>
                         {entry.isTopPercent
                             ? `TOP ${Math.round((topPercentCutoff ?? 0.30) * 100)}%`
                             : 'RAFFLE'}
@@ -748,14 +690,14 @@ function ForgeRow({ entry, isExpanded, onToggle, breakdown, breakdownLoading, is
 
             {isExpanded && (
                 <tr>
-                    <td colSpan={9} style={{ padding: '0', background: '#0f172a' }}>
-                        <div style={{ padding: '1rem 1.5rem', borderBottom: '1px solid #1e293b' }}>
+                    <td colSpan={9} style={{ padding: 0 }}>
+                        <div className={styles.expandedRow}>
                             {breakdownLoading ? (
-                                <p style={{ color: '#64748b', fontSize: '0.8125rem' }}>Loading breakdown...</p>
+                                <p className={styles.breakdownEmpty}>Loading breakdown...</p>
                             ) : (
-                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
+                                <div className={styles.breakdownGrid}>
                                     <div>
-                                        <h4 style={breakdownHeadingStyle}>CPI Breakdown</h4>
+                                        <h4 className={styles.breakdownHeading}>CPI Breakdown</h4>
                                         {CPI_COMPONENTS.map(({ key, label, color }) => (
                                             <HorizontalBar
                                                 key={key}
@@ -767,11 +709,11 @@ function ForgeRow({ entry, isExpanded, onToggle, breakdown, breakdownLoading, is
                                         ))}
                                     </div>
                                     <div>
-                                        <h4 style={breakdownHeadingStyle}>Quest Breakdown</h4>
+                                        <h4 className={styles.breakdownHeading}>Quest Breakdown</h4>
                                         {breakdown ? (
                                             <QuestBreakdownBars breakdown={breakdown} />
                                         ) : (
-                                            <p style={{ color: '#64748b', fontSize: '0.8125rem' }}>No quest data available.</p>
+                                            <p className={styles.breakdownEmpty}>No quest data available.</p>
                                         )}
                                     </div>
                                 </div>
@@ -798,16 +740,13 @@ interface HorizontalBarProps {
 function HorizontalBar({ label, value, max, color }: HorizontalBarProps) {
     const pct = max > 0 ? Math.max(0, Math.min(100, (value / max) * 100)) : 0;
     return (
-        <div style={{ marginBottom: '0.5rem' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.6875rem', marginBottom: '2px' }}>
-                <span style={{ color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{label}</span>
-                <span style={{ color: '#e2e8f0', fontWeight: 600 }}>{value.toFixed(1)}</span>
+        <div className={styles.hbar}>
+            <div className={styles.hbarHeader}>
+                <span className={styles.hbarLabel}>{label}</span>
+                <span className={styles.hbarValue}>{value.toFixed(1)}</span>
             </div>
-            <div style={{ height: '6px', background: '#1e293b', borderRadius: '3px', overflow: 'hidden' }}>
-                <div style={{
-                    height: '100%', width: `${pct}%`, background: color,
-                    borderRadius: '3px', transition: 'width 0.3s ease',
-                }} />
+            <div className={styles.hbarTrack}>
+                <div className={styles.hbarFill} style={{ width: `${pct}%`, background: color }} />
             </div>
         </div>
     );
@@ -818,8 +757,6 @@ function HorizontalBar({ label, value, max, color }: HorizontalBarProps) {
 // --------------------------------------------------------------------------
 
 function QuestBreakdownBars({ breakdown }: { breakdown: WalletBreakdown }) {
-    // Phase 4 item 30: iterate actual breakdown keys (can include per-asset LM slugs),
-    // using getQuestLabel for human-readable display names.
     const entries = Object.entries(breakdown.breakdown).map(([key, data]) => ({
         key,
         label: getQuestLabel(key),
@@ -831,7 +768,7 @@ function QuestBreakdownBars({ breakdown }: { breakdown: WalletBreakdown }) {
     return (
         <>
             {entries.map(({ key, label, score }) => (
-                <HorizontalBar key={key} label={label} value={score} max={maxScore} color="#a78bfa" />
+                <HorizontalBar key={key} label={label} value={score} max={maxScore} color="var(--accent-primary)" />
             ))}
         </>
     );
@@ -847,7 +784,7 @@ interface QuestLeaderboardsProps {
     questScores: Map<string, DailyCategoryScore[]>;
     questLoading: boolean;
     expandedRules: Set<string>;
-    assetList?: Array<{ symbol: string; lmSteps?: number[]; lmTolerance?: number }>;  // Phase 4: per-asset LM slug; Phase 8 fix: lmSteps + lmTolerance fed into description
+    assetList?: Array<{ symbol: string; lmSteps?: number[]; lmTolerance?: number }>;
     onPeriodChange: (p: QuestPeriod) => void;
     onNavigateDate: (dir: number) => void;
     onToggleRules: (cat: string) => void;
@@ -867,76 +804,48 @@ function QuestLeaderboards({
         : questPeriod === '2day' ? `Window: ${questDate}`
         : `Week: ${questDate}`;
 
+    const isToday = questDate === todayUTC();
+
     return (
         <>
-            <div style={{ marginBottom: '1rem' }}>
-                <input
-                    type="text"
-                    placeholder="Search by wallet address..."
-                    value={searchQuery}
-                    onChange={(e) => onSearch(e.target.value)}
-                    style={{
-                        width: '100%', maxWidth: '400px', padding: '0.625rem 1rem',
-                        background: '#1e293b', border: '1px solid #334155', borderRadius: '8px',
-                        color: '#f1f5f9', fontSize: '0.875rem', outline: 'none',
-                    }}
-                />
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
+            <input
+                type="text"
+                className={`input ${styles.searchInput}`}
+                placeholder="Search by wallet address..."
+                value={searchQuery}
+                onChange={(e) => onSearch(e.target.value)}
+            />
+            <div className={styles.periodTabs}>
                 {(Object.keys(PERIOD_LABELS) as QuestPeriod[]).map((p) => (
                     <button
                         key={p}
                         onClick={() => onPeriodChange(p)}
-                        style={{
-                            padding: '0.375rem 1rem', borderRadius: '8px', border: '1px solid',
-                            fontSize: '0.8125rem', fontWeight: 600, cursor: 'pointer',
-                            borderColor: questPeriod === p ? '#f59e0b' : '#334155',
-                            background: questPeriod === p ? 'rgba(245, 158, 11, 0.1)' : 'transparent',
-                            color: questPeriod === p ? '#f59e0b' : '#94a3b8',
-                            transition: 'all 0.15s',
-                        }}
+                        className={`${styles.periodTab} ${questPeriod === p ? styles.periodTabActive : ''}`}
                     >
                         {PERIOD_LABELS[p]}
                     </button>
                 ))}
 
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginLeft: 'auto' }}>
-                    <button onClick={() => onNavigateDate(-1)} style={dateNavBtnStyle}>
+                <div className={styles.dateNav}>
+                    <button onClick={() => onNavigateDate(-1)} className={styles.dateNavBtn}>
                         <ChevronLeft size={16} />
                     </button>
-                    <span style={{ color: '#94a3b8', fontSize: '0.8125rem', minWidth: '180px', textAlign: 'center', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+                    <span className={styles.dateLabel}>
                         {periodLabel}
                         {questDate <= todayUTC() && (
-                        <span style={{
-                            padding: '2px 8px', borderRadius: '9999px',
-                            fontSize: '0.625rem', fontWeight: 700, letterSpacing: '0.05em',
-                            background: questDate === todayUTC() ? 'rgba(34, 197, 94, 0.15)' : 'rgba(100, 116, 139, 0.15)',
-                            color: questDate === todayUTC() ? '#22c55e' : '#64748b',
-                            ...(questDate === todayUTC() ? { animation: 'pulse 2s infinite' } : {}),
-                        }}>
-                            {questDate === todayUTC() ? 'LIVE' : 'FINAL'}
-                        </span>
-                    )}
+                            <span className={`${styles.dateChip} ${isToday ? styles.dateChipLive : styles.dateChipFinal}`}>
+                                {isToday ? 'LIVE' : 'FINAL'}
+                            </span>
+                        )}
                     </span>
-                    <button onClick={() => onNavigateDate(1)} style={dateNavBtnStyle}>
+                    <button onClick={() => onNavigateDate(1)} className={styles.dateNavBtn}>
                         <ChevronRight size={16} />
                     </button>
                     <button
                         onClick={onJumpToToday}
-                        disabled={questDate === todayUTC()}
-                        title={questDate === todayUTC() ? 'Already on today' : 'Jump to today'}
-                        style={{
-                            ...dateNavBtnStyle,
-                            width: 'auto',
-                            padding: '0 0.75rem',
-                            fontSize: '0.75rem',
-                            fontWeight: 600,
-                            opacity: questDate === todayUTC() ? 0.4 : 1,
-                            cursor: questDate === todayUTC() ? 'not-allowed' : 'pointer',
-                            color: questDate === todayUTC() ? '#94a3b8' : '#f59e0b',
-                            borderColor: questDate === todayUTC() ? '#334155' : 'rgba(245, 158, 11, 0.4)',
-                            background: questDate === todayUTC() ? '#1e293b' : 'rgba(245, 158, 11, 0.1)',
-                        }}
+                        disabled={isToday}
+                        title={isToday ? 'Already on today' : 'Jump to today'}
+                        className={styles.todayBtn}
                     >
                         Today
                     </button>
@@ -944,7 +853,7 @@ function QuestLeaderboards({
             </div>
 
             {questLoading ? (
-                <div style={{ textAlign: 'center', padding: '2rem', color: '#64748b' }}>
+                <div className={styles.noData}>
                     Loading quest data...
                 </div>
             ) : (
@@ -977,15 +886,12 @@ interface CategoryLeaderboardProps {
     onToggleRules: () => void;
     isForge: boolean;
     searchedWallet: string | null;
-    assetListLength?: number;  // Phase 4 V8: for extractQuestColumns denominator
-    assetList?: Array<{ symbol: string; lmSteps?: number[]; lmTolerance?: number }>;  // Phase 8 fix: per-asset LM description (lmSteps + lmTolerance)
+    assetListLength?: number;
+    assetList?: Array<{ symbol: string; lmSteps?: number[]; lmTolerance?: number }>;
 }
 
 function CategoryLeaderboard({ category, scores, isRulesExpanded, onToggleRules, isForge, searchedWallet, assetListLength, assetList }: CategoryLeaderboardProps) {
-    // Phase 4 item 30: LM descriptions are per-asset, rendered via helper.
-    // Phase 8 fix: slug parsing centralized via parseLeverageMasterSlug — replaces
-    // the prior buggy `(.+)?_?` regex that captured the trailing underscore into
-    // match[1] (e.g. 'XAU_' instead of 'XAU'), masking the per-asset config lookup.
+    // Phase 8 fix: slug parsing centralized via parseLeverageMasterSlug.
     const { side: lmSide, asset: lmAsset } = parseLeverageMasterSlug(category);
     const lmAssetConfig = lmAsset ? assetList?.find((a) => a.symbol === lmAsset) : undefined;
     const questInfo: QuestDescription | undefined = lmSide
@@ -993,13 +899,11 @@ function CategoryLeaderboard({ category, scores, isRulesExpanded, onToggleRules,
         : QUEST_DESCRIPTIONS[category];
     const label = getQuestLabel(category);
 
-    // Full sorted list (not sliced) — needed to compute the searched wallet's rank.
     const fullSorted = [...scores]
         .filter((s) => !s.wallet.startsWith('__'))
         .sort((a, b) => b.score - a.score);
     const sorted = fullSorted.slice(0, 5);
 
-    // Row 6 info: is the searched wallet in this category's scores, and where does it rank?
     const searchedEntry = searchedWallet
         ? fullSorted.find((s) => s.wallet === searchedWallet)
         : null;
@@ -1013,46 +917,25 @@ function CategoryLeaderboard({ category, scores, isRulesExpanded, onToggleRules,
         ? extractQuestColumns(category, sorted[0].details, assetListLength)
         : [];
 
-    const medalColors = ['#fbbf24', '#94a3b8', '#cd7f32'];
-
     return (
-        <div style={{
-            marginBottom: '1.5rem', borderRadius: '12px', border: '1px solid #1e293b',
-            background: '#0f172a', overflow: 'hidden',
-        }}>
-            <div style={{ padding: '0.75rem 1rem', borderBottom: '1px solid #1e293b' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    <h3 style={{ color: '#f1f5f9', fontSize: '0.9375rem', fontWeight: 600, margin: 0 }}>
-                        {label}
-                    </h3>
-                    <button
-                        onClick={onToggleRules}
-                        style={{
-                            display: 'inline-flex', alignItems: 'center', gap: '4px',
-                            background: 'none', border: 'none', cursor: 'pointer',
-                            color: '#64748b', fontSize: '0.6875rem',
-                        }}
-                    >
+        <div className={styles.categoryCard}>
+            <div className={styles.categoryHeader}>
+                <div className={styles.categoryTitleRow}>
+                    <h3 className={styles.categoryTitle}>{label}</h3>
+                    <button onClick={onToggleRules} className={styles.rulesToggle}>
                         <Info size={12} />
                         {isRulesExpanded ? 'Hide rules' : 'Show rules'}
                     </button>
                 </div>
                 {questInfo && (
-                    <p style={{ color: '#94a3b8', fontSize: '0.75rem', margin: '0.25rem 0 0', fontStyle: 'italic' }}>
-                        {questInfo.tagline}
-                    </p>
+                    <p className={styles.categoryTagline}>{questInfo.tagline}</p>
                 )}
             </div>
 
             {isRulesExpanded && questInfo && (
-                <div style={{
-                    padding: '0.75rem 1rem', borderBottom: '1px solid #1e293b',
-                    background: '#0c1220',
-                }}>
-                    <p style={{ color: '#cbd5e1', fontSize: '0.75rem', margin: '0 0 0.5rem', lineHeight: 1.5 }}>
-                        {questInfo.description}
-                    </p>
-                    <ul style={{ margin: 0, padding: '0 0 0 1.25rem', color: '#94a3b8', fontSize: '0.6875rem', lineHeight: 1.7 }}>
+                <div className={styles.rulesPanel}>
+                    <p className={styles.rulesDesc}>{questInfo.description}</p>
+                    <ul className={styles.rulesList}>
                         {questInfo.rules.map((rule, i) => (
                             <li key={i}>{rule}</li>
                         ))}
@@ -1061,114 +944,70 @@ function CategoryLeaderboard({ category, scores, isRulesExpanded, onToggleRules,
             )}
 
             {sorted.length > 0 ? (
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8125rem' }}>
+                <table className={styles.table}>
                     <thead>
-                        <tr style={{ borderBottom: '1px solid #1e293b' }}>
-                            <th style={{ ...thStyle, textAlign: 'left', width: '60px' }}>Rank</th>
-                            <th style={{ ...thStyle, textAlign: 'left' }}>Wallet</th>
+                        <tr>
+                            <th className={styles.thLeft} style={{ width: '60px' }}>Rank</th>
+                            <th className={styles.thLeft}>Wallet</th>
                             {sampleColumns.map((col) => (
-                                <th key={col.label} style={thStyle}>{col.label}</th>
+                                <th key={col.label}>{col.label}</th>
                             ))}
-                            <th style={thStyle}>Points</th>
+                            <th>Points</th>
                         </tr>
                     </thead>
                     <tbody>
                         {sorted.map((score, idx) => {
                             const cols = extractQuestColumns(category, score.details, assetListLength);
+                            const rowRankClass = rankBadgeClass(idx + 1);
                             return (
                                 <tr
                                     key={score.wallet}
-                                    style={{
-                                        borderBottom: '1px solid #1e293b',
-                                        background: score.wallet === searchedWallet ? 'rgba(245, 158, 11, 0.08)' : undefined,
-                                        borderLeft: score.wallet === searchedWallet ? '2px solid #f59e0b' : '2px solid transparent',
-                                    }}
+                                    className={score.wallet === searchedWallet ? styles.rowSearched : ''}
                                 >
-                                    <td style={{ ...tdStyle, textAlign: 'left' }}>
-                                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                                            {idx < 3 && <Trophy size={12} color={medalColors[idx]} />}
-                                            <span style={{
-                                                fontWeight: idx < 3 ? 700 : 400,
-                                                color: idx < 3 ? medalColors[idx] : '#e2e8f0',
-                                            }}>
-                                                #{idx + 1}
-                                            </span>
+                                    <td className={styles.tdLeft}>
+                                        <span className={`${styles.rankBadge} ${rowRankClass}`}>
+                                            {idx < 3 && <Trophy size={12} />}
+                                            #{idx + 1}
                                         </span>
                                     </td>
-                                    <td style={{ ...tdStyle, textAlign: 'left' }}>
+                                    <td className={styles.tdLeft}>
                                         {isForge ? (
-                                            <span
-                                                style={{
-                                                    fontFamily: 'monospace', color: '#94a3b8',
-                                                    borderBottom: '1px dashed #475569',
-                                                }}
-                                            >
-                                                {shortWallet(score.wallet)}
-                                            </span>
+                                            <span className={styles.walletText}>{shortWallet(score.wallet)}</span>
                                         ) : (
-                                            <Link
-                                                href={`/trader/${score.wallet}`}
-                                                style={{
-                                                    fontFamily: 'monospace', color: '#94a3b8',
-                                                    textDecoration: 'none', borderBottom: '1px dashed #475569',
-                                                }}
-                                            >
+                                            <Link href={`/trader/${score.wallet}`} className={styles.walletLink}>
                                                 {shortWallet(score.wallet)}
                                             </Link>
                                         )}
                                     </td>
                                     {cols.map((col) => (
-                                        <td key={col.label} style={tdStyle}>{col.value}</td>
+                                        <td key={col.label}>{col.value}</td>
                                     ))}
-                                    <td style={{ ...tdStyle, fontWeight: 600, color: '#f1f5f9' }}>
+                                    <td className={styles.finalScore}>
                                         {score.score.toFixed(2)}
                                     </td>
                                 </tr>
                             );
                         })}
                         {showRow6 && (
-                            <tr style={{
-                                borderBottom: '1px solid #1e293b',
-                                borderTop: '1px dashed #334155',
-                                background: 'rgba(245, 158, 11, 0.04)',
-                            }}>
+                            <tr className={styles.row6Border}>
                                 {searchedEntry ? (
                                     <>
-                                        <td style={{ ...tdStyle, textAlign: 'left' }}>
-                                            <span style={{ color: '#94a3b8', fontWeight: 400 }}>
-                                                #{searchedRank}
-                                            </span>
+                                        <td className={styles.tdLeft}>
+                                            <span className={styles.row6Rank}>#{searchedRank}</span>
                                         </td>
-                                        <td style={{ ...tdStyle, textAlign: 'left' }}>
-                                            <span
-                                                style={{
-                                                    fontFamily: 'monospace', color: '#94a3b8',
-                                                    borderBottom: '1px dashed #475569',
-                                                }}
-                                            >
-                                                {shortWallet(searchedWallet!)}
-                                            </span>
+                                        <td className={styles.tdLeft}>
+                                            <span className={styles.walletText}>{shortWallet(searchedWallet!)}</span>
                                         </td>
                                         {extractQuestColumns(category, searchedEntry.details, assetListLength).map((col) => (
-                                            <td key={col.label} style={tdStyle}>{col.value}</td>
+                                            <td key={col.label}>{col.value}</td>
                                         ))}
-                                        <td style={{ ...tdStyle, fontWeight: 600, color: '#f1f5f9' }}>
+                                        <td className={styles.finalScore}>
                                             {searchedEntry.score.toFixed(2)}
                                         </td>
                                     </>
                                 ) : (
-                                    <td
-                                        colSpan={2 + sampleColumns.length + 1}
-                                        style={{
-                                            ...tdStyle,
-                                            textAlign: 'center',
-                                            color: '#64748b',
-                                            fontStyle: 'italic',
-                                        }}
-                                    >
-                                        <span style={{ fontFamily: 'monospace', marginRight: '0.5rem', color: '#94a3b8' }}>
-                                            {shortWallet(searchedWallet!)}
-                                        </span>
+                                    <td colSpan={2 + sampleColumns.length + 1} className={styles.row6Empty}>
+                                        <span className={styles.row6EmptyWallet}>{shortWallet(searchedWallet!)}</span>
                                         — Not ranked in this category
                                     </td>
                                 )}
@@ -1177,9 +1016,7 @@ function CategoryLeaderboard({ category, scores, isRulesExpanded, onToggleRules,
                     </tbody>
                 </table>
             ) : (
-                <div style={{ padding: '1.5rem', textAlign: 'center', color: '#64748b', fontSize: '0.8125rem' }}>
-                    No data for this period.
-                </div>
+                <div className={styles.noData}>No data for this period.</div>
             )}
         </div>
     );
@@ -1191,25 +1028,16 @@ function CategoryLeaderboard({ category, scores, isRulesExpanded, onToggleRules,
 
 function StatusBadge({ status }: { status: string }) {
     const config = ({
-        registration: { bg: 'rgba(245, 158, 11, 0.15)', color: '#fbbf24', label: 'REGISTRATION' },
-        active:       { bg: 'rgba(34, 197, 94, 0.15)',  color: '#22c55e', label: 'ACTIVE' },
-        completed:    { bg: 'rgba(100, 116, 139, 0.15)', color: '#94a3b8', label: 'COMPLETED' },
-        cancelled:    { bg: 'rgba(239, 68, 68, 0.15)',   color: '#ef4444', label: 'CANCELLED' },
-    } as Record<string, { bg: string; color: string; label: string }>)[status];
+        registration: { className: styles.statusBadgeRegistration, label: 'REGISTRATION' },
+        active:       { className: styles.statusBadgeActive, label: 'ACTIVE' },
+        completed:    { className: styles.statusBadgeCompleted, label: 'COMPLETED' },
+        cancelled:    { className: styles.statusBadgeCancelled, label: 'CANCELLED' },
+    } as Record<string, { className: string; label: string }>)[status];
 
     if (!config) return null;
 
     return (
-        <span style={{
-            padding: '3px 10px',
-            borderRadius: '9999px',
-            fontSize: '0.6875rem',
-            fontWeight: 700,
-            letterSpacing: '0.05em',
-            background: config.bg,
-            color: config.color,
-            ...(status === 'active' ? { animation: 'pulse 2s infinite' } : {}),
-        }}>
+        <span className={`${styles.statusBadge} ${config.className}`}>
             {config.label}
         </span>
     );
@@ -1231,21 +1059,7 @@ function RegisterButton({ status, onClick }: {
             onClick={isOpen ? onClick : undefined}
             title={tooltip}
             disabled={!isOpen}
-            style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '6px',
-                padding: '8px 16px',
-                borderRadius: '8px',
-                border: 'none',
-                fontSize: '0.8125rem',
-                fontWeight: 600,
-                cursor: isOpen ? 'pointer' : 'not-allowed',
-                background: isOpen ? '#f59e0b' : '#334155',
-                color: isOpen ? '#0f172a' : '#64748b',
-                opacity: isOpen ? 1 : 0.7,
-                transition: 'all 0.15s',
-            }}
+            className={styles.registerBtn}
         >
             <UserPlus size={14} /> Register
         </button>
@@ -1267,32 +1081,17 @@ function RegisterModal({
     onClose: () => void;
 }) {
     return (
-        <div
-            onClick={onClose}
-            style={{
-                position: 'fixed', inset: 0, background: 'rgba(0, 0, 0, 0.7)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                zIndex: 300, padding: '1rem',
-            }}
-        >
-            <div
-                onClick={(e) => e.stopPropagation()}
-                style={{
-                    background: '#1e293b', border: '1px solid #334155', borderRadius: '12px',
-                    padding: '1.5rem', maxWidth: '480px', width: '100%',
-                }}
-            >
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
-                    <h2 style={{ color: '#f1f5f9', fontSize: '1.125rem', fontWeight: 700, margin: 0 }}>
-                        Register for The Forge
-                    </h2>
-                    <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', padding: 0 }}>
+        <div onClick={onClose} className={styles.modalOverlay}>
+            <div onClick={(e) => e.stopPropagation()} className={styles.modalCard}>
+                <div className={styles.modalHead}>
+                    <h2 className={styles.modalTitle}>Register for The Forge</h2>
+                    <button onClick={onClose} className={styles.modalCloseBtn}>
                         <CloseIcon size={20} />
                     </button>
                 </div>
 
                 <form onSubmit={onSubmit}>
-                    <label style={{ display: 'block', color: '#cbd5e1', fontSize: '0.8125rem', marginBottom: '0.5rem' }}>
+                    <label className={styles.modalLabel}>
                         Solana Wallet Address
                     </label>
                     <input
@@ -1301,36 +1100,22 @@ function RegisterModal({
                         onChange={(e) => onWalletChange(e.target.value)}
                         placeholder="Enter your wallet..."
                         disabled={registering}
-                        style={{
-                            width: '100%', padding: '0.625rem 1rem',
-                            background: '#0f172a', border: '1px solid #334155', borderRadius: '8px',
-                            color: '#f1f5f9', fontSize: '0.875rem', fontFamily: 'monospace',
-                            outline: 'none', marginBottom: '1rem',
-                        }}
+                        className={`input input--mono ${styles.modalInput}`}
                     />
 
-                    <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
+                    <div className={styles.modalActions}>
                         <button
                             type="button"
                             onClick={onClose}
                             disabled={registering}
-                            style={{
-                                padding: '0.5rem 1rem', borderRadius: '8px', border: '1px solid #334155',
-                                background: 'transparent', color: '#94a3b8', cursor: 'pointer', fontSize: '0.8125rem',
-                            }}
+                            className="btn btn--secondary"
                         >
                             Cancel
                         </button>
                         <button
                             type="submit"
                             disabled={registering || !walletInput.trim()}
-                            style={{
-                                padding: '0.5rem 1rem', borderRadius: '8px', border: 'none',
-                                background: walletInput.trim() && !registering ? '#f59e0b' : '#334155',
-                                color: walletInput.trim() && !registering ? '#0f172a' : '#64748b',
-                                cursor: walletInput.trim() && !registering ? 'pointer' : 'not-allowed',
-                                fontWeight: 600, fontSize: '0.8125rem',
-                            }}
+                            className="btn btn--primary"
                         >
                             {registering ? 'Registering...' : 'Register'}
                         </button>
@@ -1338,12 +1123,7 @@ function RegisterModal({
                 </form>
 
                 {regResult && (
-                    <div style={{
-                        marginTop: '1rem', padding: '0.75rem 1rem', borderRadius: '8px',
-                        background: regResult.registered ? 'rgba(34, 197, 94, 0.1)' : 'rgba(239, 68, 68, 0.1)',
-                        color: regResult.registered ? '#22c55e' : '#ef4444',
-                        display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.8125rem',
-                    }}>
+                    <div className={`${styles.regResult} ${regResult.registered ? styles.regResultOk : styles.regResultErr}`}>
                         {regResult.registered
                             ? <><CheckCircle size={16} /> Registered! You&apos;re in the Forge.</>
                             : <><XCircle size={16} /> {regResult.reason ?? 'Registration failed'}</>
@@ -1366,58 +1146,32 @@ function PrizeInfo({ prizeTable, topPercentCutoff }: {
         skillPrizes: number[];
         rafflePrizes: number[];
     };
-    topPercentCutoff?: number;  // Phase 4 V9
+    topPercentCutoff?: number;
 }) {
     const skillTotal = prizeTable.skillPrizes.reduce((sum, v) => sum + v, 0);
     const raffleTotal = prizeTable.rafflePrizes.reduce((sum, v) => sum + v, 0);
     const formatAmount = (n: number) => n.toLocaleString('en-US');
 
     return (
-        <div style={{
-            marginTop: '1rem',
-            padding: '1rem 1.25rem',
-            borderRadius: '12px',
-            background: 'rgba(245, 158, 11, 0.05)',
-            border: '1px solid rgba(245, 158, 11, 0.2)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: '1.5rem',
-            flexWrap: 'wrap',
-        }}>
-            <div>
-                <div style={{
-                    fontSize: '0.6875rem',
-                    color: '#94a3b8',
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.05em',
-                    marginBottom: '0.25rem',
-                }}>
-                    Total Prize Pool
-                </div>
-                <div style={{
-                    fontSize: '1.75rem',
-                    fontWeight: 700,
-                    color: '#fbbf24',
-                    fontFamily: 'monospace',
-                }}>
+        <div className={styles.prizeBanner}>
+            <div className={styles.prizeMain}>
+                <div className={styles.prizeLabel}>Total Prize Pool</div>
+                <div className={styles.prizeValue}>
                     {formatAmount(prizeTable.totalPool)} {prizeTable.currency}
                 </div>
             </div>
-            <div style={{ display: 'flex', gap: '2rem' }}>
-                <div>
-                    <div style={{ fontSize: '0.6875rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.25rem' }}>
+            <div className={styles.prizeSplits}>
+                <div className={styles.prizeSplit}>
+                    <div className={styles.prizeSplitLabel}>
                         Top {Math.round((topPercentCutoff ?? 0.30) * 100)}% Skill
                     </div>
-                    <div style={{ fontSize: '1rem', fontWeight: 600, color: '#22c55e', fontFamily: 'monospace' }}>
+                    <div className={styles.prizeSplitValueSkill}>
                         {formatAmount(skillTotal)} {prizeTable.currency}
                     </div>
                 </div>
-                <div>
-                    <div style={{ fontSize: '0.6875rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.25rem' }}>
-                        Raffle
-                    </div>
-                    <div style={{ fontSize: '1rem', fontWeight: 600, color: '#a78bfa', fontFamily: 'monospace' }}>
+                <div className={styles.prizeSplit}>
+                    <div className={styles.prizeSplitLabel}>Raffle</div>
+                    <div className={styles.prizeSplitValueRaffle}>
                         {formatAmount(raffleTotal)} {prizeTable.currency}
                     </div>
                 </div>
@@ -1434,100 +1188,39 @@ function CPIExplanation() {
     const [expanded, setExpanded] = useState(false);
 
     return (
-        <div style={{
-            marginBottom: '1rem',
-            borderRadius: '12px',
-            border: '1px solid #1e293b',
-            background: '#0f172a',
-            overflow: 'hidden',
-        }}>
+        <div className={styles.cpiPanel}>
             <button
                 onClick={() => setExpanded(!expanded)}
                 aria-expanded={expanded}
-                style={{
-                    width: '100%',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    padding: '0.75rem 1rem',
-                    background: 'none',
-                    border: 'none',
-                    color: '#f1f5f9',
-                    cursor: 'pointer',
-                    textAlign: 'left',
-                }}
+                className={styles.cpiToggle}
             >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', minWidth: 0 }}>
-                    <Info size={16} color="#f59e0b" style={{ flexShrink: 0 }} />
-                    <div style={{ minWidth: 0 }}>
-                        <div style={{ fontSize: '0.9375rem', fontWeight: 600 }}>
-                            {CPI_DESCRIPTION.title}
-                        </div>
+                <div className={styles.cpiToggleInner}>
+                    <Info size={16} className={styles.flameIcon} style={{ flexShrink: 0 }} />
+                    <div className={styles.cpiTextWrap}>
+                        <div className={styles.cpiTitle}>{CPI_DESCRIPTION.title}</div>
                         {!expanded && (
-                            <div style={{
-                                fontSize: '0.75rem',
-                                color: '#94a3b8',
-                                fontStyle: 'italic',
-                                marginTop: '0.125rem',
-                                overflow: 'hidden',
-                                textOverflow: 'ellipsis',
-                                whiteSpace: 'nowrap',
-                            }}>
-                                {CPI_DESCRIPTION.tagline}
-                            </div>
+                            <div className={styles.cpiTagline}>{CPI_DESCRIPTION.tagline}</div>
                         )}
                     </div>
                 </div>
                 {expanded
-                    ? <ChevronDown size={16} color="#94a3b8" style={{ flexShrink: 0 }} />
-                    : <ChevronRight size={16} color="#94a3b8" style={{ flexShrink: 0 }} />}
+                    ? <ChevronDown size={16} className={styles.chevron} style={{ flexShrink: 0 }} />
+                    : <ChevronRight size={16} className={styles.chevron} style={{ flexShrink: 0 }} />}
             </button>
 
             {expanded && (
-                <div style={{
-                    padding: '0 1rem 1rem',
-                    borderTop: '1px solid #1e293b',
-                }}>
-                    <p style={{
-                        color: '#cbd5e1',
-                        fontSize: '0.8125rem',
-                        margin: '0.75rem 0',
-                        lineHeight: 1.5,
-                    }}>
-                        {CPI_DESCRIPTION.tagline}
-                    </p>
+                <div className={styles.cpiBody}>
+                    <p className={styles.cpiPara}>{CPI_DESCRIPTION.tagline}</p>
                     {CPI_DESCRIPTION.sections.map((section) => (
-                        <div key={section.heading} style={{ marginBottom: '1rem' }}>
-                            <h4 style={{
-                                color: '#f1f5f9',
-                                fontSize: '0.75rem',
-                                fontWeight: 700,
-                                margin: '0 0 0.375rem',
-                                textTransform: 'uppercase',
-                                letterSpacing: '0.05em',
-                            }}>
-                                {section.heading}
-                            </h4>
+                        <div key={section.heading} className={styles.cpiSection}>
+                            <h4 className={styles.cpiSectionHead}>{section.heading}</h4>
                             {section.paragraph && (
-                                <p style={{
-                                    color: '#cbd5e1',
-                                    fontSize: '0.8125rem',
-                                    margin: '0 0 0.5rem',
-                                    lineHeight: 1.5,
-                                }}>
-                                    {section.paragraph}
-                                </p>
+                                <p className={styles.cpiPara}>{section.paragraph}</p>
                             )}
                             {section.items && (
-                                <ul style={{
-                                    margin: 0,
-                                    padding: '0 0 0 1.25rem',
-                                    color: '#94a3b8',
-                                    fontSize: '0.75rem',
-                                    lineHeight: 1.7,
-                                }}>
+                                <ul className={styles.cpiList}>
                                     {section.items.map((item, i) => (
-                                        <li key={i} style={{ marginBottom: '0.25rem' }}>{item}</li>
+                                        <li key={i} className={styles.cpiListItem}>{item}</li>
                                     ))}
                                 </ul>
                             )}
@@ -1538,36 +1231,3 @@ function CPIExplanation() {
         </div>
     );
 }
-
-// --------------------------------------------------------------------------
-// Shared styles
-// --------------------------------------------------------------------------
-
-const thStyle: React.CSSProperties = {
-    padding: '0.625rem 0.75rem',
-    textAlign: 'right',
-    color: '#64748b',
-    fontSize: '0.6875rem',
-    fontWeight: 600,
-    textTransform: 'uppercase',
-    letterSpacing: '0.05em',
-    whiteSpace: 'nowrap',
-};
-
-const tdStyle: React.CSSProperties = {
-    padding: '0.5rem 0.75rem',
-    textAlign: 'right',
-    color: '#cbd5e1',
-    whiteSpace: 'nowrap',
-};
-
-const breakdownHeadingStyle: React.CSSProperties = {
-    color: '#e2e8f0', margin: '0 0 0.75rem', fontSize: '0.8125rem', fontWeight: 600,
-};
-
-const dateNavBtnStyle: React.CSSProperties = {
-    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-    width: '28px', height: '28px', borderRadius: '6px',
-    background: '#1e293b', border: '1px solid #334155',
-    color: '#94a3b8', cursor: 'pointer',
-};

@@ -1,17 +1,8 @@
 'use client';
 
 // ============================================================================
-// Admin Registrations — Phase 5 item 19 sub-route (NEW per Section 3C gap)
-//
-// View registered wallets per tournament + admin-driven late registration form.
-// Phase 8 (2026-05-04): added Register Wallet form for late additions during
-// rank_only-active tournaments (per ZeDef T1 pre-launch Q3b). Form calls the
-// existing public /api/register endpoint — gating happens backend-side
-// (tournament-manager.ts:registerWallet status guards).
-//
-// Backend:
-//   GET  /api/register/:tournamentId — registration list (routes/registration.ts:62-83)
-//   POST /api/register               — register wallet (routes/registration.ts:20-59)
+// Admin Registrations — Phase 5 item 19 sub-route + Phase 8 late-reg form
+// + Phase 8.i Custom Select migration (Site 4) + class refactor
 // ============================================================================
 
 import { useEffect, useState } from 'react';
@@ -23,6 +14,8 @@ import {
     type Tournament,
 } from '@/lib/api';
 import { Users, ArrowLeft, Search, UserPlus } from 'lucide-react';
+import { Select } from '@/components/Select';
+import styles from '../page.module.css';
 
 interface Registration {
     id: number;
@@ -43,7 +36,6 @@ export default function AdminRegistrationsPage() {
     const [regsLoading, setRegsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [search, setSearch] = useState('');
-    // Phase 8: admin-driven late registration form
     const [walletInput, setWalletInput] = useState('');
     const [registering, setRegistering] = useState(false);
     const [regResult, setRegResult] = useState<{ registered: boolean; reason?: string } | null>(null);
@@ -66,7 +58,6 @@ export default function AdminRegistrationsPage() {
     }, []);
 
     useEffect(() => {
-        // Phase 8: clear stale form state when switching tournaments
         setWalletInput('');
         setRegResult(null);
 
@@ -105,7 +96,6 @@ export default function AdminRegistrationsPage() {
             const result = await registerWallet(selectedId, walletInput.trim());
             setRegResult(result);
             if (result.registered) {
-                // Refetch so the new wallet appears in the table immediately
                 const data = await getRegistrations(selectedId);
                 setRegistrations(data);
                 setWalletInput('');
@@ -120,18 +110,7 @@ export default function AdminRegistrationsPage() {
     return (
         <div className="container">
             <header className="page-header">
-                <Link
-                    href="/admin"
-                    style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '4px',
-                        color: 'var(--text-muted)',
-                        fontSize: '0.8125rem',
-                        textDecoration: 'none',
-                        marginBottom: 'var(--space-sm)',
-                    }}
-                >
+                <Link href="/admin" className={styles.adminHeaderLink}>
                     <ArrowLeft size={14} /> Back to Admin
                 </Link>
                 <h1 className="page-header__title">
@@ -149,49 +128,35 @@ export default function AdminRegistrationsPage() {
                 </div>
             )}
 
-            {/* Tournament selector */}
-            <section style={{ marginBottom: 'var(--space-lg)' }}>
-                <label style={{
-                    display: 'block',
-                    fontSize: '0.75rem',
-                    fontWeight: 600,
-                    color: 'var(--text-muted)',
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.05em',
-                    marginBottom: '0.5rem',
-                }}>
-                    Tournament
-                </label>
+            <section className={styles.regsSelectorRow}>
+                <label className={styles.regsLabel}>Tournament</label>
                 {loading ? (
                     <div style={{ color: 'var(--text-muted)', fontSize: '0.875rem' }}>Loading tournaments...</div>
                 ) : tournaments.length === 0 ? (
                     <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem' }}>No tournaments yet.</p>
                 ) : (
-                    <select
-                        className="input input--mono"
-                        value={selectedId ?? ''}
-                        onChange={(e) => setSelectedId(e.target.value ? parseInt(e.target.value, 10) : null)}
-                        style={{ minWidth: '320px' }}
-                    >
-                        <option value="">— pick a tournament —</option>
-                        {tournaments.map((t) => (
-                            <option key={t.id} value={t.id}>
-                                {t.name} (id:{t.id}, {t.status})
-                            </option>
-                        ))}
-                    </select>
+                    <div className={styles.regsSelector}>
+                        <Select
+                            ariaLabel="Pick a tournament"
+                            value={selectedId === null ? '' : String(selectedId)}
+                            onChange={(v) => setSelectedId(v ? parseInt(v, 10) : null)}
+                            placeholder="— pick a tournament —"
+                            options={tournaments.map((t) => ({
+                                value: String(t.id),
+                                label: t.name,
+                                hint: `id:${t.id}, ${t.status}`,
+                            }))}
+                        />
+                    </div>
                 )}
             </section>
 
-            {/* Selected tournament info + count */}
             {selectedTournament && (
-                <section className="card" style={{ padding: 'var(--space-md)', marginBottom: 'var(--space-md)' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 'var(--space-sm)' }}>
+                <section className={`card ${styles.regsContextCard}`}>
+                    <div className={styles.regsContextRow}>
                         <div>
-                            <h2 style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>
-                                {selectedTournament.name}
-                            </h2>
-                            <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: '0.25rem 0 0' }}>
+                            <h2 className={styles.regsContextName}>{selectedTournament.name}</h2>
+                            <p className={styles.regsContextSub}>
                                 {regsLoading
                                     ? 'Loading registrations...'
                                     : `${registrations.length} wallet${registrations.length === 1 ? '' : 's'} registered`}
@@ -202,32 +167,20 @@ export default function AdminRegistrationsPage() {
                 </section>
             )}
 
-            {/* Register Wallet form (Phase 8 — late additions for active rank_only) */}
             {selectedId !== null && !regsLoading && (
-                <section className="card" style={{ padding: 'var(--space-md)', marginBottom: 'var(--space-md)' }}>
-                    <h3 style={{
-                        fontSize: '0.75rem',
-                        fontWeight: 700,
-                        color: 'var(--text-muted)',
-                        textTransform: 'uppercase',
-                        letterSpacing: '0.05em',
-                        margin: '0 0 var(--space-sm)',
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '6px',
-                    }}>
+                <section className={`card ${styles.regsFormCard}`}>
+                    <h3 className={styles.regsFormHeading}>
                         <UserPlus size={14} />
                         Register Wallet
                     </h3>
-                    <form onSubmit={handleRegister} style={{ display: 'flex', gap: '0.5rem', alignItems: 'flex-start', flexWrap: 'wrap' }}>
+                    <form onSubmit={handleRegister} className={styles.regsForm}>
                         <input
                             type="text"
-                            className="input input--mono"
+                            className={`input input--mono ${styles.regsFormInput}`}
                             placeholder="Solana wallet address (32-44 chars)..."
                             value={walletInput}
                             onChange={(e) => setWalletInput(e.target.value)}
                             disabled={registering}
-                            style={{ flex: 1, minWidth: '320px' }}
                         />
                         <button
                             type="submit"
@@ -238,70 +191,64 @@ export default function AdminRegistrationsPage() {
                         </button>
                     </form>
                     {regResult && (
-                        <p style={{
-                            margin: 'var(--space-xs) 0 0',
-                            fontSize: '0.75rem',
-                            color: regResult.registered ? 'var(--status-success)' : 'var(--status-warning)',
-                        }}>
+                        <p className={`${styles.regsFormResult} ${regResult.registered ? styles.regsFormResultOk : styles.regsFormResultErr}`}>
                             {regResult.registered
                                 ? 'Registered. Table refreshed.'
                                 : `Not registered: ${regResult.reason ?? 'unknown reason'}`}
                         </p>
                     )}
-                    <p style={{ margin: 'var(--space-xs) 0 0', fontSize: '0.6875rem', color: 'var(--text-muted)' }}>
+                    <p className={styles.regsFormHint}>
                         Use for late additions during a <code>rank_only</code> active tournament. Backend gates: blocked if status is <code>completed</code>/<code>cancelled</code>; for <code>bracket</code> format, must still be in <code>registration</code>.
                     </p>
                 </section>
             )}
 
-            {/* Search + table */}
             {selectedId !== null && !regsLoading && registrations.length > 0 && (
                 <>
-                    <div style={{ marginBottom: 'var(--space-md)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <div className={styles.regsSearchRow}>
                         <Search size={14} style={{ color: 'var(--text-muted)' }} />
                         <input
                             type="text"
-                            className="input"
+                            className={`input ${styles.regsSearch}`}
                             placeholder="Filter by wallet substring..."
                             value={search}
                             onChange={(e) => setSearch(e.target.value)}
-                            style={{ maxWidth: '320px' }}
                         />
                         {search && (
-                            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                            <span className={styles.regsCount}>
                                 {filtered.length} match{filtered.length === 1 ? '' : 'es'}
                             </span>
                         )}
                     </div>
 
-                    <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8125rem' }}>
+                    <div className={`card ${styles.regsTableCard}`}>
+                        <table className={styles.regsTable}>
                             <thead>
-                                <tr style={{ background: 'var(--bg-secondary)', borderBottom: '1px solid var(--border-subtle)' }}>
-                                    <th style={thStyle}>#</th>
-                                    <th style={{ ...thStyle, textAlign: 'left' }}>Wallet</th>
-                                    <th style={{ ...thStyle, textAlign: 'left' }}>Full Address</th>
-                                    <th style={thStyle}>Registered At</th>
+                                <tr>
+                                    <th>#</th>
+                                    <th className={styles.regsThLeft}>Wallet</th>
+                                    <th className={styles.regsThLeft}>Full Address</th>
+                                    <th>Registered At</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {filtered.map((r, i) => (
-                                    <tr key={r.id} style={{ borderBottom: '1px solid var(--border-subtle)' }}>
-                                        <td style={tdStyle}>{i + 1}</td>
-                                        <td style={{ ...tdStyle, textAlign: 'left', fontFamily: 'var(--font-mono)' }}>
+                                    <tr key={r.id}>
+                                        <td>{i + 1}</td>
+                                        <td className={`${styles.regsTdLeft} ${styles.regsTdMono}`}>
                                             {shortWallet(r.wallet)}
                                         </td>
-                                        <td style={{ ...tdStyle, textAlign: 'left', fontFamily: 'var(--font-mono)', fontSize: '0.6875rem', color: 'var(--text-muted)' }}>
+                                        <td className={`${styles.regsTdLeft} ${styles.regsTdMono} ${styles.regsTdSmall}`}>
                                             {r.wallet}
                                         </td>
-                                        <td style={{ ...tdStyle, fontFamily: 'var(--font-mono)' }}>
+                                        <td className={styles.regsTdMono}>
                                             {new Date(r.registeredAt).toLocaleString()}
                                         </td>
                                     </tr>
                                 ))}
                                 {filtered.length === 0 && (
                                     <tr>
-                                        <td colSpan={4} style={{ ...tdStyle, textAlign: 'center', color: 'var(--text-muted)', padding: 'var(--space-lg)' }}>
+                                        <td colSpan={4} className={styles.regsNoMatch}>
                                             No matches for &quot;{search}&quot;.
                                         </td>
                                     </tr>
@@ -313,8 +260,8 @@ export default function AdminRegistrationsPage() {
             )}
 
             {selectedId !== null && !regsLoading && registrations.length === 0 && (
-                <div className="card" style={{ padding: 'var(--space-2xl)', textAlign: 'center' }}>
-                    <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem', margin: 0 }}>
+                <div className={`card ${styles.regsEmpty}`}>
+                    <p className={styles.regsEmptyText}>
                         No registrations for this tournament.
                     </p>
                 </div>
@@ -322,19 +269,3 @@ export default function AdminRegistrationsPage() {
         </div>
     );
 }
-
-const thStyle: React.CSSProperties = {
-    padding: '8px 12px',
-    textAlign: 'right',
-    color: 'var(--text-muted)',
-    fontWeight: 600,
-    fontSize: '0.6875rem',
-    textTransform: 'uppercase',
-    letterSpacing: '0.05em',
-};
-
-const tdStyle: React.CSSProperties = {
-    padding: '8px 12px',
-    textAlign: 'right',
-    color: 'var(--text-secondary)',
-};

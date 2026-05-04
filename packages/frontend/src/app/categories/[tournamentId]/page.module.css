@@ -1,0 +1,88 @@
+/* ============================================================================
+   Categories Per-Tournament — Module CSS (Phase 8.i.5.D.4.5)
+   ============================================================================ */
+
+.tabRow { display: flex; gap: var(--space-sm); margin-bottom: var(--space-lg); flex-wrap: wrap; }
+.tabBtn {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-xs);
+    padding: var(--space-sm) var(--space-md);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-md);
+    font-size: 0.875rem;
+    font-weight: 600;
+    cursor: pointer;
+    background: var(--bg-card);
+    color: var(--text-muted);
+    transition: all var(--transition-default);
+}
+/* Active state inline-styled with category accent color (per-tab tinted) */
+
+.descCard {
+    padding: var(--space-md) var(--space-lg);
+    margin-bottom: var(--space-lg);
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+    line-height: 1.6;
+}
+
+.section { margin-bottom: var(--space-2xl); }
+.sectionTitle {
+    font-size: 1.125rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: var(--space-md);
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+}
+
+.tableWrap { overflow-x: auto; }
+.table { width: 100%; border-collapse: collapse; }
+.table thead tr { border-bottom: 1px solid var(--border-default); }
+.table th { padding: 10px 12px; text-align: left; font-size: 0.75rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; }
+.thRight { text-align: right; }
+.table td { padding: 10px 12px; font-size: 0.875rem; color: var(--text-secondary); border-bottom: 1px solid var(--border-subtle); }
+.tdRight { text-align: right; }
+.tdMono { font-family: var(--font-mono); font-size: 0.8125rem; }
+
+.dateInputRow { display: flex; align-items: center; gap: var(--space-sm); margin-bottom: var(--space-md); }
+.dateInput { width: auto; }
+
+.lmCard { padding: var(--space-lg); }
+.lmIntro { font-size: 0.8125rem; color: var(--text-muted); margin-bottom: var(--space-md); }
+.lmInputRow { display: flex; gap: var(--space-sm); margin-bottom: var(--space-md); align-items: center; }
+.lmInput { flex: 1; font-size: 0.8125rem; }
+.lmBtn { font-size: 0.8125rem; padding: var(--space-sm) var(--space-md); white-space: nowrap; }
+.lmWalletHint { font-size: 0.75rem; color: var(--text-muted); margin-bottom: var(--space-sm); font-family: var(--font-mono); }
+
+.badgeGrid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: var(--space-sm);
+    margin-bottom: var(--space-md);
+}
+.lmBadge {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: var(--space-sm) var(--space-xs);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border-default);
+    background: var(--bg-card);
+    transition: all var(--transition-default);
+    min-height: 56px;
+}
+.badgeLabel { font-size: 1rem; font-weight: 700; color: var(--text-muted); }
+.badgeStatus { font-size: 0.6875rem; color: var(--text-muted); margin-top: 2px; }
+.badgeProgress { font-size: 0.8125rem; color: var(--text-muted); font-weight: 600; }
+
+@media (max-width: 768px) {
+    .tabRow { gap: var(--space-xs); }
+    .badgeGrid { grid-template-columns: repeat(4, 1fr); }
+}
+@media (max-width: 480px) {
+    .badgeGrid { grid-template-columns: repeat(3, 1fr); }
+}

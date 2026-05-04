@@ -53,6 +53,9 @@
   --status-info: #00d2ff;
   --status-info-bg: rgba(0, 210, 255, 0.1);
 
+  /* Phase 8.i.5.D.5.1: alias for tournament analytics CSS module */
+  --accent-danger: var(--status-danger);
+
   /* Gradients */
   --gradient-brand: linear-gradient(135deg, #6c5ce7 0%, #00d2ff 100%);
   --gradient-brand-text: linear-gradient(135deg, #a29bfe 0%, #74b9ff 100%);
@@ -112,6 +115,36 @@ body {
   color: var(--text-primary);
   line-height: 1.6;
   min-height: 100vh;
+}
+
+/* Phase 8.i: dark-theme scrollbars (Firefox + WebKit).
+ * Replaces browser-default white scrollbars that clash with the dark theme. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-default) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: var(--border-default);
+  border-radius: 4px;
+  transition: background var(--transition-fast);
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--border-strong);
+}
+
+*::-webkit-scrollbar-corner {
+  background: transparent;
 }
 
 a {
@@ -312,6 +345,18 @@ a:hover {
   box-shadow: var(--shadow-elevated);
 }
 
+/* Phase 8.i: explicit hoverable card variant. Was referenced via className="card card--hoverable"
+ * across admin/page.tsx, leaderboard/page.tsx, seasons/page.tsx — now codified. */
+.card--hoverable {
+  cursor: pointer;
+}
+
+.card--hoverable:hover {
+  border-color: var(--accent-primary);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-elevated), var(--shadow-glow-accent);
+}
+
 .badge {
   display: inline-flex;
   align-items: center;
@@ -368,6 +413,7 @@ a:hover {
   border: 1px solid transparent;
   transition: all var(--transition-default);
   white-space: nowrap;
+  min-height: 44px;  /* Phase 8.i.5.D.5.4: WCAG 2.5.5 touch target on mobile, harmless on desktop */
 }
 
 .btn:disabled {
@@ -407,6 +453,12 @@ a:hover {
   background: #e84141;
 }
 
+/* Phase 8.i.5.D.5.5: keyboard-focus accent ring (no mouse outline) */
+.btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--accent-primary-glow);
+}
+
 /* Inputs */
 .input {
   width: 100%;
@@ -433,6 +485,50 @@ a:hover {
 .input--mono {
   font-family: var(--font-mono);
   font-size: 0.8125rem;
+}
+
+/* Phase 8.i: native <select> styling reset + custom chevron.
+ * Without appearance:none, browser defaults can render selected-value text
+ * with native colors that ignore CSS color rules — caused the blank-text bug
+ * observed on admin Create Tournament asset symbol dropdown 2026-05-03. */
+select.input,
+select.form-select {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="%238b8b9e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>');
+  background-repeat: no-repeat;
+  background-position: right var(--space-md) center;
+  background-size: 14px;
+  padding-right: calc(var(--space-md) * 2 + 14px);
+  cursor: pointer;
+}
+
+select.input::-ms-expand,
+select.form-select::-ms-expand {
+  display: none;
+}
+
+select.input option,
+select.form-select option {
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+}
+
+select.input:disabled,
+select.form-select:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Phase 8.i: Number input spinner style — kill ugly browser arrows for cleaner monospace look */
+input[type="number"].input::-webkit-outer-spin-button,
+input[type="number"].input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type="number"].input {
+  -moz-appearance: textfield;
 }
 
 /* Score bar */
@@ -973,6 +1069,77 @@ a:hover {
   font-size: 0.9rem;
 }
 
+/* Phase 8.i: reusable loading/empty/centered patterns.
+ * Replaces inline-style duplication across dashboard, leaderboard, seasons, etc. */
+.loading-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-md);
+  padding: var(--space-3xl) 0;
+  color: var(--text-muted);
+  font-size: 0.875rem;
+}
+
+.empty-state {
+  text-align: center;
+  padding: var(--space-2xl);
+  color: var(--text-muted);
+}
+
+.empty-state__title {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: var(--space-sm);
+}
+
+.error-state {
+  margin-top: var(--space-2xl);
+  padding: var(--space-xl);
+  text-align: center;
+  border-color: var(--status-danger);
+  color: var(--status-danger);
+}
+
+/* Phase 8.i: tab strip pattern (used by leaderboard/page.tsx + others) */
+.tabs {
+  display: flex;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-lg);
+  border-bottom: 1px solid var(--border-subtle);
+  flex-wrap: wrap;
+}
+
+.tab {
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--text-muted);
+  padding: var(--space-sm) var(--space-md);
+  font-family: var(--font-sans);
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  margin-bottom: -1px;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.tab:hover {
+  color: var(--text-secondary);
+}
+
+.tab--active {
+  background: var(--bg-secondary);
+  border-bottom-color: var(--accent-primary);
+  color: var(--text-primary);
+  font-weight: 700;
+}
+
 /* Responsive */
 @media (max-width: 960px) {
   .stat-grid {
@@ -983,6 +1150,10 @@ a:hover {
 @media (max-width: 768px) {
   .container {
     padding: 0 var(--space-md);
+  }
+
+  .page-header {
+    padding: var(--space-xl) 0;
   }
 
   .page-header__title {
@@ -1009,6 +1180,33 @@ a:hover {
   .leaderboard-table-container {
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
+  }
+
+  /* Phase 8.i: tabs scroll horizontally on mobile if too many */
+  .tabs {
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    scrollbar-width: none;
+  }
+  .tabs::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* Phase 8.i: 600px breakpoint (between tablet portrait and phone) */
+@media (max-width: 600px) {
+  .stat-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .page-header__title {
+    font-size: 1.375rem;
+  }
+
+  .btn {
+    font-size: 0.8125rem;
+    padding: 12px 16px;  /* Phase 8.i.5.D.5.4: WCAG 2.5.5 touch target */
+    min-height: 44px;
   }
 }
 
@@ -1043,11 +1241,160 @@ a:hover {
 
   .btn {
     font-size: 0.8125rem;
-    padding: 8px 14px;
+    padding: 12px 16px;  /* Phase 8.i.5.D.5.4: WCAG 2.5.5 — was 8px 14px (too short) */
+    min-height: 44px;
   }
 
   .card {
     padding: var(--space-md);
     border-radius: var(--radius-sm);
+  }
+}
+
+/* Phase 8.i.5.D.6: Custom Select / Combobox component */
+.select {
+  position: relative;
+  width: 100%;
+}
+
+.select__trigger {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-md);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 0.875rem;
+  cursor: pointer;
+  text-align: left;
+  transition: border-color var(--transition-fast);
+  min-height: 44px;
+}
+
+.select__trigger:hover:not(:disabled) {
+  border-color: var(--border-strong);
+}
+
+.select__trigger[aria-expanded="true"],
+.select__trigger:focus-visible {
+  outline: none;
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 3px var(--accent-primary-glow);
+}
+
+.select__trigger:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.select__triggerLabel {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+}
+
+.select__placeholder {
+  color: var(--text-muted);
+  font-family: var(--font-sans);
+  font-style: italic;
+}
+
+.select__chevron {
+  flex-shrink: 0;
+  color: var(--text-muted);
+  transition: transform var(--transition-fast);
+}
+
+.select__chevron--open {
+  transform: rotate(180deg);
+}
+
+.select__listbox {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 100;
+  margin: 0;
+  padding: var(--space-xs);
+  list-style: none;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-elevated);
+  max-height: 280px;
+  overflow-y: auto;
+  animation: fadeInUp 0.15s ease-out;
+}
+
+.select__option {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-md);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  transition: all var(--transition-fast);
+}
+
+.select__option--highlighted {
+  background: var(--bg-card-hover);
+  color: var(--text-primary);
+}
+
+.select__option--selected {
+  color: var(--accent-primary);
+  font-weight: 600;
+}
+
+.select__option--disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.select__optionContent {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-sm);
+  flex: 1;
+  min-width: 0;
+}
+
+.select__optionLabel {
+  flex-shrink: 0;
+}
+
+.select__optionHint {
+  font-size: 0.6875rem;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.select__empty {
+  padding: var(--space-sm) var(--space-md);
+  color: var(--text-muted);
+  font-size: 0.8125rem;
+  font-style: italic;
+  text-align: center;
+}
+
+/* Mobile — full-width listbox + larger touch targets */
+@media (max-width: 768px) {
+  .select__option {
+    padding: var(--space-md);
+    min-height: 44px;
   }
 }

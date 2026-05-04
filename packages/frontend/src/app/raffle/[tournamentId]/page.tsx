@@ -9,6 +9,7 @@ import {
 } from '@/lib/api';
 import { Ticket, Trophy, Users, Hash, ArrowLeft, Search } from 'lucide-react';
 import Link from 'next/link';
+import styles from './page.module.css';
 
 export default function RafflePage({ params }: { params: Promise<{ tournamentId: string }> }) {
     const { tournamentId: rawId } = use(params);
@@ -19,7 +20,6 @@ export default function RafflePage({ params }: { params: Promise<{ tournamentId:
     const [error, setError] = useState<string | null>(null);
     const [walletSearch, setWalletSearch] = useState('');
     const [highlightedWallet, setHighlightedWallet] = useState<string | null>(null);
-    // Phase 4 D21: fetch tournament config for dynamic formula + threshold rendering.
     const [tournament, setTournament] = useState<TournamentState | null>(null);
 
     useEffect(() => {
@@ -48,7 +48,6 @@ export default function RafflePage({ params }: { params: Promise<{ tournamentId:
         const found = results.find(r => r.wallet.toLowerCase() === needle);
         if (found) {
             setHighlightedWallet(found.wallet);
-            // Scroll to the row
             const el = document.getElementById(`raffle-row-${found.wallet}`);
             if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
         } else {
@@ -57,10 +56,6 @@ export default function RafflePage({ params }: { params: Promise<{ tournamentId:
         }
     }
 
-    /**
-     * Standard competition ranking: tied entries share the same rank.
-     * For entry at index i, rank = index of first entry with the same score + 1.
-     */
     function computeRank(index: number): number {
         const score = results[index].finalScore;
         for (let j = 0; j < index; j++) {
@@ -71,7 +66,6 @@ export default function RafflePage({ params }: { params: Promise<{ tournamentId:
         return index + 1;
     }
 
-    // Computed stats
     const totalParticipants = results.length;
     const totalTickets = results.reduce((sum, r) => sum + r.ticketCount, 0);
     const eligibleCount = results.filter(r => !r.isTopPercent && r.ticketCount > 0 && r.closedPositionCount >= (tournament?.config.raffleMinClosedPositions ?? 10)).length;
@@ -81,35 +75,35 @@ export default function RafflePage({ params }: { params: Promise<{ tournamentId:
     if (isNaN(tournamentId)) {
         return (
             <div className="container">
-                <div className="card" style={{ marginTop: 'var(--space-2xl)', padding: 'var(--space-xl)', textAlign: 'center' }}>
-                    <p style={{ color: 'var(--status-danger)' }}>Invalid tournament ID</p>
+                <div className={`card ${styles.errorCard}`}>
+                    <p>Invalid tournament ID</p>
                 </div>
             </div>
         );
     }
 
+    function rankClassName(rank: number): string {
+        if (rank === 1) return 'rank-1';
+        if (rank === 2) return 'rank-2';
+        if (rank === 3) return 'rank-3';
+        return '';
+    }
+
     return (
         <div className="container">
-            {/* Header */}
             <header className="page-header">
-                <Link
-                    href={`/tournament/${tournamentId}`}
-                    style={{ color: 'var(--text-muted)', fontSize: '14px', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
-                >
+                <Link href={`/tournament/${tournamentId}`} className={styles.backLink}>
                     <ArrowLeft size={14} />
                     Back to Tournament
                 </Link>
-                <h1 className="page-header__title">
-                    Raffle
-                </h1>
+                <h1 className="page-header__title">Raffle</h1>
                 <p className="page-header__subtitle">
                     Tournament #{tournamentId} &mdash; Engagement-weighted draw
                 </p>
             </header>
 
-            {/* Summary Stats */}
             {!loading && !error && results.length > 0 && (
-                <div className="stat-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', marginBottom: 'var(--space-xl)' }}>
+                <div className={`stat-grid ${styles.statGrid}`}>
                     <div className="card stat-card">
                         <div className="stat-card__label">
                             <Users size={12} style={{ marginRight: 4, verticalAlign: 'middle' }} />
@@ -137,50 +131,36 @@ export default function RafflePage({ params }: { params: Promise<{ tournamentId:
                                 <Trophy size={12} style={{ marginRight: 4, verticalAlign: 'middle' }} />
                                 Winners
                             </div>
-                            <div className="stat-card__value" style={{ color: '#ffd700' }}>{winnerCount}</div>
+                            <div className="stat-card__value" style={{ color: 'var(--accent-gold)' }}>{winnerCount}</div>
                         </div>
                     )}
                 </div>
             )}
 
-            {/* Ticket Formula */}
-            <div className="card" style={{
-                padding: 'var(--space-md) var(--space-lg)',
-                marginBottom: 'var(--space-lg)',
-                fontSize: '14px',
-                color: 'var(--text-secondary)',
-                lineHeight: 1.6,
-            }}>
-                <strong style={{ color: 'var(--accent-primary)' }}>Ticket Formula</strong> &mdash;{' '}
-                <code style={{ fontSize: '13px', background: 'var(--bg-elevated)', padding: '2px 6px', borderRadius: '4px' }}>
+            <div className={`card ${styles.formulaCard}`}>
+                <strong className={styles.formulaTitle}>Ticket Formula</strong> &mdash;{' '}
+                <code className={styles.formulaCode}>
                     floor(CPI &times; {tournament?.config.cpiTicketMultiplier ?? 0.5}) + floor(Quest Points &times; {tournament?.config.questTicketMultiplier ?? 20})
                 </code>
-                <br />
-                <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                <span className={styles.formulaRules}>
                     Eligibility: {tournament?.config.raffleMinClosedPositions ?? 10}+ closed positions, not in top {Math.round((tournament?.config.topPercentCutoff ?? 0.30) * 100)}% by final score, tickets &gt; 0.
                     Top {Math.round((tournament?.config.topPercentCutoff ?? 0.30) * 100)}% are excluded from the raffle but compete for main prizes.
                 </span>
             </div>
 
-            {/* Wallet Search */}
-            <div className="card" style={{
-                padding: 'var(--space-md) var(--space-lg)',
-                marginBottom: 'var(--space-lg)',
-            }}>
-                <div style={{ display: 'flex', gap: 'var(--space-sm)', alignItems: 'center' }}>
+            <div className={`card ${styles.searchCard}`}>
+                <div className={styles.searchRow}>
                     <Search size={16} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
                     <input
                         type="text"
-                        className="input input--mono"
+                        className={`input input--mono ${styles.searchInput}`}
                         placeholder="Paste your wallet address to find your tickets..."
                         value={walletSearch}
                         onChange={(e) => setWalletSearch(e.target.value)}
                         onKeyDown={(e) => { if (e.key === 'Enter') handleWalletSearch(); }}
-                        style={{ flex: 1, fontSize: '13px' }}
                     />
                     <button
-                        className="btn btn--secondary"
-                        style={{ fontSize: '13px', padding: '8px 16px', whiteSpace: 'nowrap' }}
+                        className={`btn btn--secondary ${styles.searchBtn}`}
                         onClick={handleWalletSearch}
                         disabled={!walletSearch.trim()}
                     >
@@ -189,7 +169,6 @@ export default function RafflePage({ params }: { params: Promise<{ tournamentId:
                 </div>
             </div>
 
-            {/* Results Table */}
             {loading ? (
                 <p style={{ color: 'var(--text-muted)' }}>Loading...</p>
             ) : error ? (
@@ -201,16 +180,16 @@ export default function RafflePage({ params }: { params: Promise<{ tournamentId:
                     </p>
                 </div>
             ) : (
-                <div style={{ overflowX: 'auto' }}>
-                    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <div className={styles.tableWrap}>
+                    <table className={styles.table}>
                         <thead>
-                            <tr style={{ borderBottom: '1px solid var(--border-default)' }}>
-                                <th style={thStyle}>#</th>
-                                <th style={thStyle}>Wallet</th>
-                                <th style={{ ...thStyle, textAlign: 'right' }}>CPI</th>
-                                <th style={{ ...thStyle, textAlign: 'right' }}>Quest Pts</th>
-                                <th style={{ ...thStyle, textAlign: 'right' }}>Tickets</th>
-                                <th style={{ ...thStyle, textAlign: 'center' }}>Status</th>
+                            <tr>
+                                <th>#</th>
+                                <th>Wallet</th>
+                                <th className={styles.thRight}>CPI</th>
+                                <th className={styles.thRight}>Quest Pts</th>
+                                <th className={styles.thRight}>Tickets</th>
+                                <th className={styles.thCenter}>Status</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -222,59 +201,36 @@ export default function RafflePage({ params }: { params: Promise<{ tournamentId:
                                     <tr
                                         key={entry.wallet}
                                         id={`raffle-row-${entry.wallet}`}
-                                        style={{
-                                            borderBottom: '1px solid var(--border-subtle)',
-                                            background: isHighlighted ? 'rgba(108, 92, 231, 0.08)' : undefined,
-                                            transition: 'background 0.3s ease',
-                                        }}
+                                        className={isHighlighted ? styles.rowHighlighted : ''}
                                     >
-                                        <td style={tdStyle}>
-                                            <span style={getRankStyle(rank - 1)}>{rank}</span>
+                                        <td>
+                                            <span className={rankClassName(rank)}>{rank}</span>
                                         </td>
-                                        <td style={{ ...tdStyle, fontFamily: 'var(--font-mono)', fontSize: '13px' }}>
-                                            <Link
-                                                href={`/trader/${entry.wallet}`}
-                                                style={{ color: 'inherit', textDecoration: 'none' }}
-                                            >
+                                        <td className={styles.tdMono}>
+                                            <Link href={`/trader/${entry.wallet}`} style={{ color: 'inherit', textDecoration: 'none' }}>
                                                 {entry.wallet.slice(0, 4)}...{entry.wallet.slice(-4)}
                                             </Link>
                                         </td>
-                                        <td style={{ ...tdStyle, textAlign: 'right' }}>
-                                            {entry.cpiScore.toFixed(1)}
-                                        </td>
-                                        <td style={{ ...tdStyle, textAlign: 'right' }}>
-                                            {entry.questPoints.toFixed(2)}
-                                        </td>
-                                        <td style={{
-                                            ...tdStyle,
-                                            textAlign: 'right',
-                                            fontWeight: 700,
-                                            fontSize: '15px',
-                                            color: entry.ticketCount > 0 ? 'var(--accent-primary)' : 'var(--text-muted)',
-                                        }}>
+                                        <td className={styles.tdRight}>{entry.cpiScore.toFixed(1)}</td>
+                                        <td className={styles.tdRight}>{entry.questPoints.toFixed(2)}</td>
+                                        <td className={`${styles.tdRight} ${entry.ticketCount > 0 ? styles.ticketsHas : styles.ticketsZero}`}>
                                             {entry.ticketCount}
                                         </td>
-                                        <td style={{ ...tdStyle, textAlign: 'center' }}>
+                                        <td className={styles.tdCenter}>
                                             {entry.isWinner ? (
-                                                <span style={badgeStyle('#ffd700', 'rgba(255, 215, 0, 0.1)')}>
-                                                    WINNER
-                                                </span>
+                                                <span className={`${styles.statusBadge} ${styles.statusBadgeWinner}`}>WINNER</span>
                                             ) : entry.isTopPercent ? (
-                                                <span style={badgeStyle('#fdcb6e', 'rgba(253, 203, 110, 0.1)')}>
+                                                <span className={`${styles.statusBadge} ${styles.statusBadgeTop}`}>
                                                     TOP {Math.round((tournament?.config.topPercentCutoff ?? 0.30) * 100)}%
                                                 </span>
                                             ) : entry.closedPositionCount < (tournament?.config.raffleMinClosedPositions ?? 10) ? (
-                                                <span style={badgeStyle('var(--text-muted)', 'var(--bg-elevated)')}>
+                                                <span className={`${styles.statusBadge} ${styles.statusBadgeIneligible}`}>
                                                     &lt;{tournament?.config.raffleMinClosedPositions ?? 10} TRADES
                                                 </span>
                                             ) : entry.ticketCount > 0 ? (
-                                                <span style={badgeStyle('#00b894', 'rgba(0, 184, 148, 0.1)')}>
-                                                    ELIGIBLE
-                                                </span>
+                                                <span className={`${styles.statusBadge} ${styles.statusBadgeEligible}`}>ELIGIBLE</span>
                                             ) : (
-                                                <span style={badgeStyle('var(--text-muted)', 'var(--bg-elevated)')}>
-                                                    0 TICKETS
-                                                </span>
+                                                <span className={`${styles.statusBadge} ${styles.statusBadgeIneligible}`}>0 TICKETS</span>
                                             )}
                                         </td>
                                     </tr>
@@ -287,40 +243,3 @@ export default function RafflePage({ params }: { params: Promise<{ tournamentId:
         </div>
     );
 }
-
-function getRankStyle(index: number): React.CSSProperties {
-    if (index === 0) return { fontWeight: 700, color: '#ffd700' };
-    if (index === 1) return { fontWeight: 700, color: '#c0c0c0' };
-    if (index === 2) return { fontWeight: 700, color: '#cd7f32' };
-    return {};
-}
-
-function badgeStyle(color: string, bg: string): React.CSSProperties {
-    return {
-        display: 'inline-block',
-        padding: '3px 10px',
-        borderRadius: '12px',
-        fontSize: '11px',
-        fontWeight: 700,
-        letterSpacing: '0.04em',
-        color,
-        background: bg,
-        border: `1px solid ${color}30`,
-    };
-}
-
-const thStyle: React.CSSProperties = {
-    padding: '10px 12px',
-    textAlign: 'left',
-    fontSize: '12px',
-    fontWeight: 600,
-    color: 'var(--text-muted)',
-    textTransform: 'uppercase',
-    letterSpacing: '0.05em',
-};
-
-const tdStyle: React.CSSProperties = {
-    padding: '10px 12px',
-    fontSize: '14px',
-    color: 'var(--text-secondary)',
-};

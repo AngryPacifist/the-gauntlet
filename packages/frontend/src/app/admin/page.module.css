@@ -184,10 +184,10 @@
     background: var(--bg-primary);
     border: 1px solid var(--border-subtle);
     border-radius: var(--radius-lg);
-    width: 100%;
-    max-width: 560px;
+    width: min(100%, 800px);
     max-height: 90vh;
     overflow-y: auto;
+    overflow-x: hidden;
     box-shadow: 0 24px 64px rgba(0, 0, 0, 0.6);
 }
 
@@ -272,9 +272,106 @@
     border-top: 1px solid var(--border-subtle);
 }
 
+/* Phase 8.i: asset list row — labeled responsive grid replacing the cramped flex pattern */
+.assetRow {
+    display: grid;
+    grid-template-columns: minmax(120px, 1fr) 100px auto minmax(120px, 1fr) 80px auto;
+    gap: var(--space-sm);
+    align-items: end;
+    padding: var(--space-md);
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    margin-bottom: var(--space-sm);
+}
+
+.assetRowField {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.assetRowFieldLabel {
+    font-size: 0.625rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-muted);
+}
+
+.assetRowJoinedAt {
+    font-size: 0.6875rem;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    white-space: nowrap;
+    align-self: end;
+    padding-bottom: var(--space-sm);
+}
+
+.assetRowRemove {
+    align-self: end;
+    padding-bottom: 2px;
+}
+
+@media (max-width: 768px) {
+    .assetRow {
+        grid-template-columns: 1fr 1fr;
+        gap: var(--space-sm);
+    }
+
+    .assetRowJoinedAt {
+        grid-column: 1 / -1;
+        text-align: left;
+        align-self: start;
+        padding-bottom: 0;
+        order: 99;
+    }
+
+    .assetRowRemove {
+        grid-column: 1 / -1;
+        align-self: stretch;
+    }
+}
+
 @keyframes fadeIn {
     from { opacity: 0; }
     to { opacity: 1; }
+}
+
+/* Phase 8.i: modal mobile responsiveness — collapse formGrid + tighten padding */
+@media (max-width: 768px) {
+    .modal {
+        width: 100%;
+        max-width: 100%;
+        max-height: 100vh;
+        height: 100vh;
+        border-radius: 0;
+        border: none;
+    }
+
+    .modalHeader {
+        padding: var(--space-md) var(--space-lg);
+    }
+
+    .modalForm {
+        padding: var(--space-lg);
+    }
+
+    .formGrid {
+        grid-template-columns: 1fr;
+        gap: var(--space-md);
+    }
+
+    .modalActions {
+        position: sticky;
+        bottom: 0;
+        background: var(--bg-primary);
+        margin: var(--space-xl) calc(var(--space-lg) * -1) calc(var(--space-lg) * -1);
+        padding: var(--space-md) var(--space-lg);
+        border-top: 1px solid var(--border-subtle);
+        flex-wrap: wrap;
+    }
 }
 
 @media (max-width: 480px) {
@@ -295,4 +392,178 @@
     .controlActions .btn {
         width: 100%;
     }
+
+    .modalHeader,
+    .modalForm {
+        padding: var(--space-md);
+    }
+
+    .modalActions {
+        margin: var(--space-lg) calc(var(--space-md) * -1) calc(var(--space-md) * -1);
+        padding: var(--space-sm) var(--space-md);
+    }
+
+    .modalActions .btn {
+        flex: 1;
+    }
 }
+
+/* Phase 8.i.5.D.4.8: admin landing sub-route grid */
+.subRouteGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: var(--space-md);
+}
+.subRouteCard {
+  padding: var(--space-lg);
+  text-decoration: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+.subRouteHead { display: flex; align-items: center; gap: var(--space-sm); }
+.subRouteIcon { color: var(--accent-primary); display: inline-flex; }
+.subRouteLabel { font-size: 1rem; font-weight: 700; color: var(--text-primary); margin: 0; }
+.subRouteArrow { margin-left: auto; color: var(--text-muted); }
+.subRouteDesc { font-size: 0.8125rem; color: var(--text-secondary); margin: 0; line-height: 1.5; }
+
+.adminHeaderLink {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  color: var(--text-muted);
+  font-size: 0.8125rem;
+  text-decoration: none;
+  margin-bottom: var(--space-sm);
+}
+.adminHeaderLink:hover { color: var(--accent-primary); }
+
+/* Phase 8.i.5.D.4.9: admin registrations table + selector */
+.regsLabel {
+    display: block;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: var(--space-xs);
+}
+.regsSelectorRow { margin-bottom: var(--space-lg); }
+.regsSelector { min-width: 320px; max-width: 480px; }
+.regsContextCard { padding: var(--space-md); margin-bottom: var(--space-md); }
+.regsContextRow {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: var(--space-sm);
+}
+.regsContextName { font-size: 1rem; font-weight: 700; color: var(--text-primary); margin: 0; }
+.regsContextSub { font-size: 0.75rem; color: var(--text-muted); margin: var(--space-xs) 0 0; }
+.regsSearchRow { margin-bottom: var(--space-md); display: flex; align-items: center; gap: var(--space-xs); }
+.regsSearch { max-width: 320px; }
+.regsCount { font-size: 0.75rem; color: var(--text-muted); }
+.regsTableCard { padding: 0; overflow: hidden; }
+.regsTable { width: 100%; border-collapse: collapse; font-size: 0.8125rem; }
+.regsTable thead tr { background: var(--bg-secondary); border-bottom: 1px solid var(--border-subtle); }
+.regsTable th { padding: var(--space-xs) var(--space-sm); text-align: right; color: var(--text-muted); font-weight: 600; font-size: 0.6875rem; text-transform: uppercase; letter-spacing: 0.05em; }
+.regsThLeft { text-align: left; }
+.regsTable td { padding: var(--space-xs) var(--space-sm); text-align: right; color: var(--text-secondary); border-bottom: 1px solid var(--border-subtle); }
+.regsTdLeft { text-align: left; }
+.regsTdMono { font-family: var(--font-mono); }
+.regsTdSmall { font-size: 0.6875rem; color: var(--text-muted); }
+.regsEmpty { padding: var(--space-2xl); text-align: center; }
+.regsEmptyText { color: var(--text-muted); font-size: 0.875rem; margin: 0; }
+.regsNoMatch { text-align: center; color: var(--text-muted); padding: var(--space-lg); }
+
+/* Phase 8.i.5.D.4.9 (Day-41 amendment): Register Wallet form section. */
+.regsFormCard { padding: var(--space-md); margin-bottom: var(--space-md); }
+.regsFormHeading {
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin: 0 0 var(--space-sm);
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+.regsForm {
+    display: flex;
+    gap: var(--space-sm);
+    align-items: flex-start;
+    flex-wrap: wrap;
+}
+.regsFormInput { flex: 1; min-width: 320px; }
+.regsFormResult { margin: var(--space-xs) 0 0; font-size: 0.75rem; }
+.regsFormResultOk { color: var(--status-success); }
+.regsFormResultErr { color: var(--status-warning); }
+.regsFormHint { margin: var(--space-xs) 0 0; font-size: 0.6875rem; color: var(--text-muted); }
+
+/* Phase 8.i.5.D.4.2: admin analytics panel + table styles */
+.analyticsPanel {
+    margin-top: var(--space-md);
+    padding: var(--space-md);
+    background: var(--bg-secondary);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border-subtle);
+}
+.analyticsLoading { text-align: center; padding: var(--space-md); color: var(--text-muted); }
+.analyticsStatRow { display: flex; gap: var(--space-lg); margin-bottom: var(--space-md); flex-wrap: wrap; }
+.analyticsStat { font-size: 0.8125rem; color: var(--text-secondary); }
+.analyticsStat strong { color: var(--text-primary); }
+.analyticsHead { font-size: 0.8125rem; font-weight: 700; color: var(--text-primary); margin: 0 0 var(--space-sm); }
+.analyticsTableWrap { overflow-x: auto; margin-bottom: var(--space-md); }
+.analyticsTable { width: 100%; font-size: 0.75rem; border-collapse: collapse; }
+.analyticsTable thead tr { border-bottom: 1px solid var(--border-subtle); }
+.analyticsTable th { padding: 6px 8px; text-align: left; color: var(--text-muted); font-weight: 600; }
+.analyticsTable td { padding: 6px 8px; color: var(--text-primary); border-bottom: 1px solid var(--border-subtle); }
+/* Modifiers scoped under .analyticsTable so they beat the defaults' (0,1,1) specificity. */
+.analyticsTable th.analyticsThRight,
+.analyticsTable td.analyticsTdRight { text-align: right; }
+.analyticsTable td.analyticsTdMuted { color: var(--text-secondary); }
+.analyticsTable td.analyticsTdMono { font-family: var(--font-mono); color: var(--text-secondary); }
+.analyticsTable td.analyticsTdSuccess { color: var(--status-success); }
+.analyticsTable td.analyticsTdDanger { color: var(--status-danger); }
+.analyticsTable td.analyticsTdWarning { color: var(--status-warning); font-family: var(--font-mono); }
+
+.componentInsightGrid { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--space-sm); margin-bottom: var(--space-md); }
+.insightTile { padding: var(--space-sm); background: var(--bg-primary); border-radius: var(--radius-sm); text-align: center; }
+.insightLabel { font-size: 0.6875rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: var(--space-xs); }
+.insightAdvanced { font-size: 0.8125rem; font-weight: 700; color: var(--status-success); font-family: var(--font-mono); }
+.insightVs { font-size: 0.6875rem; color: var(--text-muted); }
+.insightEliminated { font-size: 0.8125rem; font-weight: 700; color: var(--status-danger); font-family: var(--font-mono); }
+
+.performersList { display: flex; flex-direction: column; gap: var(--space-xs); }
+.performerRow { display: flex; align-items: center; gap: var(--space-sm); padding: var(--space-xs) var(--space-sm); font-size: 0.75rem; }
+.performerRank { font-weight: 700; width: 20px; }
+.performerRankFirst { color: var(--accent-gold); }
+.performerRankOther { color: var(--text-muted); }
+.performerWallet { font-family: var(--font-mono); color: var(--text-secondary); }
+.performerCpi { font-family: var(--font-mono); color: var(--accent-primary); font-weight: 600; }
+.performerRound { color: var(--text-muted); }
+
+.dailyMetricsHead { display: flex; align-items: center; gap: var(--space-md); margin-bottom: var(--space-md); flex-wrap: wrap; }
+.dailyMetricsTitle { font-size: 0.8125rem; font-weight: 700; color: var(--text-primary); margin: 0; }
+.dailyMetricsDate { max-width: 180px; font-size: 0.75rem; }
+.dailyMetricsBtn { font-size: 0.75rem; padding: 4px 12px; }
+.dailyEmpty { text-align: center; padding: var(--space-md); color: var(--text-muted); font-size: 0.8125rem; }
+.dailyStatGrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: var(--space-sm); margin-bottom: var(--space-md); }
+.dailyStatTile { padding: var(--space-sm); background: var(--bg-primary); border-radius: var(--radius-sm); text-align: center; }
+.dailyStatLabel { font-size: 0.6875rem; color: var(--text-muted); text-transform: uppercase; }
+.dailyStatValue { font-size: 1rem; font-weight: 700; color: var(--text-primary); }
+.dailyStatValueWarning { color: var(--status-warning); }
+.dailyMetricsLine { margin-bottom: var(--space-xs); font-size: 0.75rem; color: var(--text-secondary); }
+.dailyMetricsLine strong { color: var(--text-primary); }
+
+.anomalyHead { font-size: 0.8125rem; color: var(--text-secondary); margin-bottom: var(--space-md); }
+.anomalyHead strong { color: var(--text-primary); }
+.anomalyHeadCount { font-weight: 700; }
+.anomalyHeadCountSafe { color: var(--status-success); }
+.anomalyHeadCountWarn { color: var(--status-warning); }
+.anomalyEmpty { text-align: center; padding: var(--space-md); color: var(--status-success); font-size: 0.8125rem; }
+/* Anomaly cell modifiers scoped under .analyticsTable td to beat (0,1,1) default. */
+.analyticsTable td.anomalyStreakModerate { color: var(--status-warning); font-weight: 700; }
+.analyticsTable td.anomalyStreakSevere { color: var(--status-danger); font-weight: 700; }
+.analyticsTable td.anomalyDates { font-family: var(--font-mono); font-size: 0.6875rem; color: var(--text-muted); }

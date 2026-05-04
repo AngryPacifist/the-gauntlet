@@ -113,34 +113,21 @@ export default function AdminLandingPage() {
             {/* Sub-route grid */}
             <section className={styles.section}>
                 <h2 className={styles.sectionTitle}>Sections</h2>
-                <div style={{
-                    display: 'grid',
-                    gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
-                    gap: 'var(--space-md)',
-                }}>
+                <div className={styles.subRouteGrid}>
                     {SUB_ROUTES.map((route) => (
                         <Link
                             key={route.href}
                             href={route.href}
-                            className="card card--hoverable"
-                            style={{
-                                padding: 'var(--space-lg)',
-                                textDecoration: 'none',
-                                display: 'flex',
-                                flexDirection: 'column',
-                                gap: 'var(--space-sm)',
-                            }}
+                            className={`card card--hoverable ${styles.subRouteCard}`}
                         >
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-sm)' }}>
-                                <span style={{ color: 'var(--accent-primary, #f59e0b)' }}>{route.icon}</span>
-                                <h3 style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>
-                                    {route.label}
-                                </h3>
-                                <span style={{ marginLeft: 'auto', color: 'var(--text-muted)' }}>
+                            <div className={styles.subRouteHead}>
+                                <span className={styles.subRouteIcon}>{route.icon}</span>
+                                <h3 className={styles.subRouteLabel}>{route.label}</h3>
+                                <span className={styles.subRouteArrow}>
                                     <ChevronRight size={16} />
                                 </span>
                             </div>
-                            <p style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)', margin: 0, lineHeight: 1.5 }}>
+                            <p className={styles.subRouteDesc}>
                                 {route.description}
                             </p>
                         </Link>
