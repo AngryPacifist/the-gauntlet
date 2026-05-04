@@ -78,27 +78,52 @@ export const ADRENA_SESSIONED: Record<string, boolean> = {
 // CRITICAL: these are SPL token mint pubkeys, NOT custody account PDAs.
 // Engines match `position.token_account_mint === asset.mint`, so the value
 // stored in our `mint` field MUST be the SPL token mint of the underlying
-// custody token (not the on-chain Custody account address).
-//
-// Verified 2026-05-04 via empirical curl:
-//   curl -s 'https://datapi.adrena.trade/liquidity-info?pool_name=main-pool'
-// returns these exact mints under data.custodies[].mint.
+// custody token.
 //
 // Sourced from src/lib.rs constants (USDC_MINT, BONK_MINT, JITO_MINT,
 // WBTC_MINT) — NOT from pools_manifest.custodies[] which is custody PDAs.
 //
-// SOL and BTC have NO entry: main-pool has no SOL or BTC custody. Trades
-// on those symbols use the jitoSOL and WBTC custodies respectively, but
-// adding SOL→JITO_MINT or BTC→WBTC_MINT here would over-match the JITOSOL
-// and WBTC scoring slots (since position.token_account_mint = custody-token
-// mint regardless of position.symbol). Keeping mint=undefined for SOL and
-// BTC preserves existing engine symbol-fallback semantics — exactly what
-// the live /liquidity-info endpoint returns today (4 entries, not 6).
+// ----------------------------------------------------------------------------
+// EMPIRICAL VERIFICATION (T-30min audit before T1 launch, 2026-05-04):
+// curl https://datapi.adrena.trade/position?user_wallet=<ZeDef_wallet>&limit=1000
+// across 732 real positions covering all 6 T1 assets. Findings:
+//
+//   position.symbol           position.token_account_mint
+//   ───────────────           ─────────────────────────────────────────────
+//   "Bonk"          (mixed)   DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263
+//   "JitoSOL"       (mixed)   J1toso1uCk3RLmjorhTtrVwY9HJ7X8V9yYac6Y7kGCPn
+//   "WBTC"          (upper)   3NZ9JMVBmGAqocybic2c7LQCJScmgsAZ6vQqTDzcqmJh
+//   "XAU"|"XAG"|"WTI"         11111111111111111111111111111111  (sentinel)
+//   (no "SOL" or "BTC" symbol ever appears in /position data)
+//
+// IMPLICATIONS:
+// 1. SOL/BTC trading on Adrena post-Apr-29 routes through jitoSOL/WBTC
+//    custodies. /position records position.token_account_mint = JITO_MINT
+//    (for SOL trades) and WBTC_MINT (for BTC trades). To capture SOL trades
+//    in scoring, asset.mint MUST be set to JITO_MINT. Same for BTC.
+// 2. RWA positions use a SENTINEL system-program mint (11111…), confirming
+//    D45 — they have no real SPL token mint, so engine matching CANNOT use
+//    `mint`. Symbol fallback is the only viable path. Since /position
+//    returns "XAU"/"XAG"/"WTI" (uppercase), our uppercase asset symbols
+//    match exactly.
+// 3. /position symbol casing is INCONSISTENT with /liquidity-info and
+//    /last-trading-prices (which use uppercase). Engine matching by symbol
+//    fallback is case-sensitive — so any asset relying on symbol fallback
+//    (RWAs) needs case-exact match against /position output.
+//
+// ALIAS WARNING for admin: SOL and JITOSOL share the same mint (JITO_MINT)
+// because they're the same custody. Admin must NOT add both to one
+// tournament's assetList — engine would double-count every JitoSOL position
+// once per asset entry. Same for BTC and WBTC. The frontend dropdown could
+// flag this in a follow-up; for now, admin discretion.
+// ----------------------------------------------------------------------------
 const MAIN_POOL_TOKEN_MINT_BY_SYMBOL: Record<string, string> = {
-    USDC: 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v',  // src/lib.rs USDC_MINT
-    BONK: 'DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263',  // src/lib.rs BONK_MINT
-    JITOSOL: 'J1toso1uCk3RLmjorhTtrVwY9HJ7X8V9yYac6Y7kGCPn',  // src/lib.rs JITO_MINT
-    WBTC: '3NZ9JMVBmGAqocybic2c7LQCJScmgsAZ6vQqTDzcqmJh',   // src/lib.rs WBTC_MINT
+    SOL: 'J1toso1uCk3RLmjorhTtrVwY9HJ7X8V9yYac6Y7kGCPn',     // JITO_MINT — SOL trades use jitoSOL custody (alias of JITOSOL below)
+    JITOSOL: 'J1toso1uCk3RLmjorhTtrVwY9HJ7X8V9yYac6Y7kGCPn', // src/lib.rs JITO_MINT (same mint as SOL — admin pick one or the other)
+    BTC: '3NZ9JMVBmGAqocybic2c7LQCJScmgsAZ6vQqTDzcqmJh',     // WBTC_MINT — BTC trades use WBTC custody (alias of WBTC below)
+    WBTC: '3NZ9JMVBmGAqocybic2c7LQCJScmgsAZ6vQqTDzcqmJh',    // src/lib.rs WBTC_MINT (same mint as BTC — admin pick one or the other)
+    BONK: 'DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263',    // src/lib.rs BONK_MINT
+    USDC: 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v',    // src/lib.rs USDC_MINT (collateral; rarely scored as a tradable asset)
 };
 
 // --- commodities-pool synthetic-custody PDAs per symbol (pools_manifest.json) ---
@@ -114,9 +139,14 @@ const MAIN_POOL_TOKEN_MINT_BY_SYMBOL: Record<string, string> = {
 //
 // EXPOSURE NOTE: surfaced under separate `synthetic_custody_mint` field per
 // D45 — informational only. Engines do NOT match against this (they fall
-// back to symbol matching for RWAs since `mint` stays undefined). Promote
-// to `mint` post-T1 only if empirical T1 RWA positions confirm
-// position.token_account_mint == synthetic-custody-PDA.
+// back to symbol matching for RWAs since `mint` stays undefined).
+//
+// D45 EMPIRICALLY RATIFIED 2026-05-04: ZeDef wallet RWA positions confirmed
+// position.token_account_mint == "11111111111111111111111111111111" (system
+// program sentinel) — definitively NOT the synthetic-custody PDA. Engine
+// matching against the synth PDA would fail for every RWA position. Symbol
+// fallback ('XAU' === 'XAU' etc) is the only viable path. D45 is structurally
+// correct; the synth PDA stays informational for admin UI display only.
 const COMMODITIES_POOL_SYNTHETIC_CUSTODY_BY_SYMBOL: Record<string, string> = {
     XAU: 'JB86ouHXGYgF4UbPs8yxYdaHudrdsintf5EbBfMydzYt',
     WTI: 'De21TFyUPHkvFsWAt6xJLBBXGp636VuL5cKk2DvfbHiR',
@@ -126,17 +156,14 @@ const COMMODITIES_POOL_SYNTHETIC_CUSTODY_BY_SYMBOL: Record<string, string> = {
 // ----------------------------------------------------------------------------
 // Tradable assets — pre-computed for /admin/tradable-assets
 //
-// API shape decision (D45): RWA synthetic-custody mints surface under a
-// SEPARATE optional field `synthetic_custody_mint` rather than the existing
-// `mint` field. Reason: scoring engines match positions by
-// `token_account_mint === asset.mint` when `mint` is present
-// (scoring-engine.ts:51-53). For RWA positions on commodities-pool, we don't
-// have empirical confirmation that `position.token_account_mint` equals the
-// synthetic-custody pubkey — that confirmation comes post-T1 launch when
-// actual RWA positions accumulate. Until then, keeping `mint: undefined` for
-// RWAs preserves the current symbol-fallback matching path (no scoring
-// regression). Frontend admin UI can display `synthetic_custody_mint` for
-// visibility without engaging engine matching semantics.
+// API shape decision (D45, empirically ratified 2026-05-04): RWA synthetic-
+// custody mints surface under a SEPARATE optional field `synthetic_custody_mint`
+// rather than the existing `mint` field. Empirical: RWA positions return
+// position.token_account_mint = "11111111111111111111111111111111" (system
+// program sentinel), NOT the synthetic-custody PDA. Engine matching against
+// the synth PDA would fail every RWA position. Symbol fallback is the only
+// viable path. The synth PDA stays in `synthetic_custody_mint` for admin UI
+// display only.
 // ----------------------------------------------------------------------------
 export interface TradableAsset {
     symbol: string;
@@ -155,13 +182,16 @@ export interface TradableAsset {
 export function getTradableAssets(): TradableAsset[] {
     const assets: TradableAsset[] = [];
 
-    // main-pool: 6 crypto symbols
+    // main-pool: 6 crypto symbols. All have mints set (post-2026-05-04 fix-it):
+    //   SOL/JITOSOL share JITO_MINT (jitoSOL custody — admin picks one);
+    //   BTC/WBTC share WBTC_MINT (WBTC custody — admin picks one);
+    //   BONK/USDC have their own mints.
     for (const symbol of ['SOL', 'JITOSOL', 'BTC', 'WBTC', 'BONK', 'USDC']) {
         assets.push({
             symbol,
             feed_id: ADRENA_TO_LAZER_FEED_ID[symbol],
             sessioned: ADRENA_SESSIONED[symbol],
-            mint: MAIN_POOL_TOKEN_MINT_BY_SYMBOL[symbol], // undefined for SOL + BTC (no custody)
+            mint: MAIN_POOL_TOKEN_MINT_BY_SYMBOL[symbol],
             pool_name: 'main-pool',
         });
     }

@@ -149,7 +149,17 @@ export default function AdminTournamentsPage() {
     const [cfgSkillCurve, setCfgSkillCurve] = useState<string>(PRIZE_TEMPLATES[0].skillCurve.join(', '));
     const [cfgRaffleCurve, setCfgRaffleCurve] = useState<string>(PRIZE_TEMPLATES[0].raffleCurve.join(', '));
     const [cfgAssetList, setCfgAssetList] = useState<Array<{ symbol: string; mint?: string; joinedAt: string; feed_id?: number; lmSteps?: string; lmTolerance?: string }>>([]);
-    const [cfgTradableAssets, setCfgTradableAssets] = useState<Array<{ symbol: string; mint?: string; feed_id?: number }>>([]);
+    // Phase 8.k state type matches /admin/tradable-assets enriched response.
+    // mint = main-pool SPL token mint (set for SOL/JITOSOL/BTC/WBTC/BONK/USDC; undefined for RWAs).
+    // synthetic_custody_mint = commodities-pool RWA synthetic-custody PDA (XAU/XAG/WTI only — informational).
+    const [cfgTradableAssets, setCfgTradableAssets] = useState<Array<{
+        symbol: string;
+        feed_id: number;
+        sessioned: boolean;
+        mint?: string;
+        synthetic_custody_mint?: string;
+        pool_name: 'main-pool' | 'commodities-pool';
+    }>>([]);
     const [cfgTradableAssetsError, setCfgTradableAssetsError] = useState<string | null>(null);
 
     // Raffle draw modal
@@ -1154,10 +1164,15 @@ export default function AdminTournamentsPage() {
                                             }} style={{ flex: 1 }}>
                                             <option value="">— select asset —</option>
                                             {cfgTradableAssets.map((tt) => (
-                                                // Phase 8.h: mint is optional (RWAs/SOL/BTC have no custody mint).
-                                                // Use symbol as key (unique per response). Show mint hint only when present.
+                                                // Phase 8.h: mint is optional.
+                                                // Phase 8.k: synthetic_custody_mint surfaced for commodities-pool RWAs (XAU/XAG/WTI).
+                                                //   Distinguished label "[synth: …]" so admin doesn't conflate with SPL token mints —
+                                                //   engines do NOT match against synthetic_custody_mint per D45 (RWA positions
+                                                //   return token_account_mint = "1111…" sentinel, not the synth PDA).
                                                 <option key={tt.symbol} value={tt.symbol}>
-                                                    {tt.symbol}{tt.mint ? ` (${tt.mint.slice(0, 4)}…${tt.mint.slice(-4)})` : ''}
+                                                    {tt.symbol}
+                                                    {tt.mint ? ` (${tt.mint.slice(0, 4)}…${tt.mint.slice(-4)})` : ''}
+                                                    {tt.synthetic_custody_mint ? ` [synth: ${tt.synthetic_custody_mint.slice(0, 4)}…${tt.synthetic_custody_mint.slice(-4)}]` : ''}
                                                 </option>
                                             ))}
                                         </select>
