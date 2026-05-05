@@ -158,7 +158,10 @@ router.post('/score', async (req, res) => {
             [...allAroundRows, ...topTickRows, ...bottomFisherRows],
         );
 
-        // Determine if this is a 2-day window scoring day
+        // Phase 8.o: 2-day window scoring inputs. Always scores when tournament
+        // has started (dayNumber >= 1). windowStart = requested date on odd days
+        // (provisional), requested date - 1 on even days (authoritative). scoreDate
+        // = windowStart so authoritative writes upsert provisional via shared key.
         const [firstRound] = await db
             .select({ startTime: rounds.startTime })
             .from(rounds)
@@ -172,14 +175,16 @@ router.post('/score', async (req, res) => {
         if (firstRound) {
             const tradingStartDate = new Date(firstRound.startTime);
             tradingStartDate.setUTCHours(0, 0, 0, 0);
-            const yesterday = new Date(date + 'T00:00:00Z');
+            const requestedDate = new Date(date + 'T00:00:00Z');
             const daysSinceStart = Math.floor(
-                (yesterday.getTime() - tradingStartDate.getTime()) / (24 * 60 * 60 * 1000),
+                (requestedDate.getTime() - tradingStartDate.getTime()) / (24 * 60 * 60 * 1000),
             );
             const dayNumber = daysSinceStart + 1;
 
-            if (dayNumber >= 2 && dayNumber % 2 === 0) {
-                const windowStartDate = new Date(yesterday.getTime() - 24 * 60 * 60 * 1000);
+            if (dayNumber >= 1) {
+                const windowStartDate = dayNumber % 2 === 0
+                    ? new Date(requestedDate.getTime() - 24 * 60 * 60 * 1000)
+                    : requestedDate;
                 const windowStartStr = windowStartDate.toISOString().slice(0, 10);
 
                 const riskManagerResults = computeRiskManagerScores(
@@ -209,7 +214,7 @@ router.post('/score', async (req, res) => {
                 }
 
                 await saveDailyCategoryScores(
-                    tournamentId, seasonId, date, engagementRows,
+                    tournamentId, seasonId, windowStartStr, engagementRows,
                 );
             }
         }
@@ -432,6 +437,35 @@ router.get('/:tournamentId/:category/:date', async (req, res) => {
             return;
         }
 
+        // Phase 8.o: 2-day categories store rows at windowStart (odd-day anchor).
+        // Map any requested date inside a 2-day window to that window's windowStart
+        // so the frontend's date picker behaves transparently across odd/even days.
+        let lookupDate = dateStr;
+        if (category === 'risk_manager' || category === 'humble_one') {
+            const [firstRound] = await db
+                .select({ startTime: rounds.startTime })
+                .from(rounds)
+                .where(and(
+                    eq(rounds.tournamentId, tournamentId),
+                    eq(rounds.type, 'main'),
+                ))
+                .orderBy(asc(rounds.startTime))
+                .limit(1);
+            if (firstRound) {
+                const tradingStartDate = new Date(firstRound.startTime);
+                tradingStartDate.setUTCHours(0, 0, 0, 0);
+                const requestedDate = new Date(dateStr + 'T00:00:00Z');
+                const daysSinceStart = Math.floor(
+                    (requestedDate.getTime() - tradingStartDate.getTime()) / (24 * 60 * 60 * 1000),
+                );
+                const dayNumber = daysSinceStart + 1;
+                if (dayNumber >= 2 && dayNumber % 2 === 0) {
+                    const windowStartDate = new Date(requestedDate.getTime() - 24 * 60 * 60 * 1000);
+                    lookupDate = windowStartDate.toISOString().slice(0, 10);
+                }
+            }
+        }
+
         const scores = await db
             .select()
             .from(dailyCategoryScores)
@@ -439,7 +473,7 @@ router.get('/:tournamentId/:category/:date', async (req, res) => {
                 and(
                     eq(dailyCategoryScores.tournamentId, tournamentId),
                     eq(dailyCategoryScores.category, category),
-                    eq(dailyCategoryScores.scoreDate, dateStr),
+                    eq(dailyCategoryScores.scoreDate, lookupDate),
                 ),
             )
             .orderBy(desc(dailyCategoryScores.score), asc(dailyCategoryScores.wallet));

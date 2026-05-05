@@ -271,56 +271,12 @@ async function scoreDailyCategories(): Promise<void> {
                 .limit(1);
 
             if (firstRound) {
-                const tradingStartDate = new Date(firstRound.startTime);
-                tradingStartDate.setUTCHours(0, 0, 0, 0); // normalize to midnight UTC
-
-                const daysSinceStart = Math.floor(
-                    (yesterday.getTime() - tradingStartDate.getTime()) / (24 * 60 * 60 * 1000),
-                );
-                const dayNumber = daysSinceStart + 1; // 1-indexed
-
-                if (dayNumber >= 2 && dayNumber % 2 === 0) {
-                    const windowStartDate = new Date(yesterday.getTime() - 24 * 60 * 60 * 1000);
-                    const windowStartStr = windowStartDate.toISOString().slice(0, 10);
-
-                    console.log(
-                        `[Scheduler] 2-day window [${windowStartStr} - ${dateStr}] ` +
-                        `(day ${dayNumber}) for tournament ${tournament.id}`,
-                    );
-
-                    const riskManagerResults = computeRiskManagerScores(
-                        walletPositions, windowStartStr, dateStr, config,
-                    );
-                    const humbleOneResults = computeHumbleOneScores(
-                        walletPositions, windowStartStr, dateStr, config,
-                    );
-
-                    const engagementRows: CategoryScoreRow[] = [];
-
-                    for (const [wallet, details] of riskManagerResults) {
-                        // Phase 4 item 11: inversion fix. Score = (1 - |roi|) × 100 —
-                        // "tightest controlled loss wins" (smaller |roi| → higher score).
-                        // Old Math.abs(roi) × 100 had the opposite semantic (bigger loss = higher score).
-                        engagementRows.push({
-                            wallet, category: 'risk_manager',
-                            score: details.bestTrade
-                                ? (1 - Math.abs(details.bestTrade.roi)) * 100
-                                : 0,
-                            details,
-                        });
-                    }
-                    for (const [wallet, details] of humbleOneResults) {
-                        engagementRows.push({
-                            wallet, category: 'humble_one',
-                            score: details.bestTrade ? details.bestTrade.roi * 100 : 0,
-                            details,
-                        });
-                    }
-
-                    await saveDailyCategoryScores(
-                        tournament.id, seasonId, dateStr, engagementRows,
-                    );
-                }
+                // Phase 8.o: 2-day scoring (Risk Manager + Humble One) moved to
+                // hourly job exclusively. Eliminates midnight/hourly race at 00:00
+                // UTC and lets provisional odd-day rows surface trader actions
+                // every day. Authoritative even-day writes upsert provisional
+                // odd-day rows via shared scoreDate=windowStart. Daily categories
+                // (All Around, Fisher) keep midnight scoring with finalized OHLC.
 
                 // --- Leverage Master Quest Progress ---
                 // Evaluate quest progress for each wallet (runs daily, updates cumulative steps)
@@ -349,10 +305,24 @@ async function scoreDailyCategories(): Promise<void> {
                 await awardDailyFisherPoints(tournament.id, seasonId, dateStr);
                 await awardDailyAllAroundPoints(tournament.id, seasonId, dateStr);
 
-                // 2-day category season points (Risk Manager + Humble One) — gated by config flag
+                // Phase 8.o: 2-day season points key on windowStart (odd-day anchor)
+                // and only fire on even-day window completion. Reads humble_one /
+                // risk_manager rows that the hourly job authoritatively wrote during
+                // the day that just ended (yesterday=even). dateStr=yesterday;
+                // windowStart=yesterday-1 (the odd-day windowStart).
                 const tournamentConfig = tournament.config as Record<string, unknown>;
-                if (tournamentConfig?.award2DayCategorySeasonPoints) {
-                    await awardDaily2DayCategoryPoints(tournament.id, seasonId, dateStr);
+                if (tournamentConfig?.award2DayCategorySeasonPoints && firstRound) {
+                    const tradingStartDate = new Date(firstRound.startTime);
+                    tradingStartDate.setUTCHours(0, 0, 0, 0);
+                    const daysSinceStart = Math.floor(
+                        (yesterday.getTime() - tradingStartDate.getTime()) / (24 * 60 * 60 * 1000),
+                    );
+                    const dayNumber = daysSinceStart + 1;
+                    if (dayNumber >= 2 && dayNumber % 2 === 0) {
+                        const windowStartDate = new Date(yesterday.getTime() - 24 * 60 * 60 * 1000);
+                        const windowStartStr = windowStartDate.toISOString().slice(0, 10);
+                        await awardDaily2DayCategoryPoints(tournament.id, seasonId, windowStartStr);
+                    }
                 }
             }
 
@@ -469,8 +439,9 @@ async function scoreHourlyCategories(): Promise<void> {
             );
 
             // --- 2-Day Engagement Categories: Risk Manager + Humble One ---
-            // Only on even-numbered days (day 2 of each 2-day window),
-            // same gate as midnight to prevent orphaned data on day 1.
+            // Phase 8.o: scored every day. Hourly job is the sole writer for these
+            // categories (midnight job no longer scores them). Convention details
+            // in the inner comment block below.
 
             const [firstRound] = await db
                 .select({ startTime: rounds.startTime })
@@ -492,13 +463,23 @@ async function scoreHourlyCategories(): Promise<void> {
                 );
                 const dayNumber = daysSinceStart + 1;
 
-                if (dayNumber >= 2 && dayNumber % 2 === 0) {
-                    const windowStartDate = new Date(today.getTime() - 24 * 60 * 60 * 1000);
+                // Phase 8.o: always score 2-day categories. windowStart = today on
+                // odd days (provisional, partial window [today, today]), yesterday
+                // on even days (authoritative, full window [yesterday, today]).
+                // Both writes share scoreDate=windowStart → authoritative upserts
+                // provisional via PK (tournamentId, wallet, category, scoreDate).
+                // Conservation: 1 row per window per wallet, identical to old
+                // even-day-only logic in final state.
+                if (dayNumber >= 1) {
+                    const windowStartDate = dayNumber % 2 === 0
+                        ? new Date(today.getTime() - 24 * 60 * 60 * 1000)
+                        : today;
                     const windowStartStr = windowStartDate.toISOString().slice(0, 10);
 
                     console.log(
                         `[Scheduler] Hourly 2-day window [${windowStartStr} - ${dateStr}] ` +
-                        `(day ${dayNumber}) for tournament ${tournament.id}`,
+                        `(day ${dayNumber}, ${dayNumber % 2 === 0 ? 'authoritative' : 'provisional'}) ` +
+                        `for tournament ${tournament.id}`,
                     );
 
                     const riskManagerResults = computeRiskManagerScores(
@@ -529,7 +510,7 @@ async function scoreHourlyCategories(): Promise<void> {
                     }
 
                     await saveDailyCategoryScores(
-                        tournament.id, seasonId, dateStr, engagementRows,
+                        tournament.id, seasonId, windowStartStr, engagementRows,
                     );
                 }
 
