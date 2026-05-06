@@ -492,6 +492,7 @@ export default function LeaderboardPage({ params }: { params: Promise<{ id: stri
                     isForge={isForge}
                     prizeTable={data.tournament.config.prizeTable}
                     topPercentCutoff={data.tournament.config.topPercentCutoff}
+                    assetList={data?.tournament?.config?.assetList}
                 />
             ) : (
                 <QuestLeaderboards
@@ -550,11 +551,12 @@ interface GeneralLeaderboardProps {
         rafflePrizes: number[];
     };
     topPercentCutoff?: number;
+    assetList?: Array<{ symbol: string; lmSteps?: number[]; lmTolerance?: number }>;
 }
 
 function GeneralLeaderboard({
     entries, expandedWallet, breakdown, breakdownLoading,
-    searchQuery, onSearch, onToggle, isForge, prizeTable, topPercentCutoff,
+    searchQuery, onSearch, onToggle, isForge, prizeTable, topPercentCutoff, assetList,
 }: GeneralLeaderboardProps) {
     const prizesByRank = useMemo<Map<number, number>>(() => {
         const map = new Map<number, number>();
@@ -632,6 +634,7 @@ function GeneralLeaderboard({
                                 prizeTable={prizeTable}
                                 prizesByRank={prizesByRank}
                                 topPercentCutoff={topPercentCutoff}
+                                assetList={assetList}
                             />
                         ))}
                         {entries.length === 0 && (
@@ -667,9 +670,10 @@ interface ForgeRowProps {
     };
     prizesByRank: Map<number, number>;
     topPercentCutoff?: number;
+    assetList?: Array<{ symbol: string; lmSteps?: number[]; lmTolerance?: number }>;
 }
 
-function ForgeRow({ entry, isExpanded, onToggle, breakdown, breakdownLoading, isForge, prizeTable, prizesByRank, topPercentCutoff }: ForgeRowProps) {
+function ForgeRow({ entry, isExpanded, onToggle, breakdown, breakdownLoading, isForge, prizeTable, prizesByRank, topPercentCutoff, assetList }: ForgeRowProps) {
     const rankClass = rankBadgeClass(entry.rank);
 
     return (
@@ -748,9 +752,9 @@ function ForgeRow({ entry, isExpanded, onToggle, breakdown, breakdownLoading, is
                                         ))}
                                     </div>
                                     <div>
-                                        <h4 className={styles.breakdownHeading}>Quest Breakdown</h4>
+                                        <h4 className={styles.breakdownHeading}>Category Scores</h4>
                                         {breakdown ? (
-                                            <QuestBreakdownBars breakdown={breakdown} />
+                                            <QuestBreakdownBars breakdown={breakdown} assetList={assetList} />
                                         ) : (
                                             <p className={styles.breakdownEmpty}>No quest data available.</p>
                                         )}
@@ -856,20 +860,73 @@ function CPIBarWithDetails({ componentKey, label, value, color, cpiDetails }: CP
 // Quest Breakdown Bars (inside expanded row)
 // --------------------------------------------------------------------------
 
-function QuestBreakdownBars({ breakdown }: { breakdown: WalletBreakdown }) {
-    const entries = Object.entries(breakdown.breakdown).map(([key, data]) => ({
+function QuestBreakdownBars({
+    breakdown, assetList,
+}: {
+    breakdown: WalletBreakdown;
+    assetList?: Array<{ symbol: string; lmSteps?: number[]; lmTolerance?: number }>;
+}) {
+    // Phase 8 item (c.5)+(a.2): split LM categories from non-LM. Non-LM render
+    // as horizontal bars (existing). LM categories aggregate by asset and
+    // render compact step-count rows (current-week step progress, not
+    // leaderboard score which is 0.0 mid-week).
+    const allEntries = Object.entries(breakdown.breakdown).map(([key, data]) => ({
         key,
         label: getQuestLabel(key),
         score: data?.totalScore ?? 0,
     }));
+    const nonLmEntries = allEntries.filter((e) => !e.key.startsWith('leverage_master_'));
+    const maxScore = Math.max(...nonLmEntries.map((e) => Math.abs(e.score)), 1);
 
-    const maxScore = Math.max(...entries.map((e) => Math.abs(e.score)), 1);
+    // Group LM step counts by asset using the questProgress payload.
+    // Asset-keyed step counts come from questProgress.byAsset; fall back to 0/0
+    // when no progress data is available (legacy or fetch failure).
+    const lmAssets: Array<{
+        symbol: string;
+        longCount: number;
+        shortCount: number;
+        stepTotal: number;
+    }> = [];
+    if (assetList?.length) {
+        for (const asset of assetList) {
+            const progress = breakdown.questProgress?.byAsset?.[asset.symbol];
+            const stepTotal = asset.lmSteps?.length ?? 10;
+            lmAssets.push({
+                symbol: asset.symbol,
+                longCount: progress?.longCount ?? 0,
+                shortCount: progress?.shortCount ?? 0,
+                stepTotal,
+            });
+        }
+    }
 
     return (
         <>
-            {entries.map(({ key, label, score }) => (
+            {nonLmEntries.map(({ key, label, score }) => (
                 <HorizontalBar key={key} label={label} value={score} max={maxScore} color="var(--accent-primary)" />
             ))}
+            {lmAssets.length > 0 && (
+                <div className={styles.lmCompactGroup}>
+                    <div className={styles.lmCompactHeading}>Leverage Master (current week)</div>
+                    {lmAssets.map(({ symbol, longCount, shortCount, stepTotal }) => (
+                        <div key={symbol} className={styles.lmCompactRow}>
+                            <span className={styles.lmCompactSymbol}>{symbol}</span>
+                            <span className={styles.lmCompactSide}>
+                                L:{' '}
+                                <span className={longCount > 0 ? styles.lmCompactCountActive : styles.lmCompactCount}>
+                                    {longCount}/{stepTotal}
+                                </span>
+                            </span>
+                            <span className={styles.lmCompactSide}>
+                                S:{' '}
+                                <span className={shortCount > 0 ? styles.lmCompactCountActive : styles.lmCompactCount}>
+                                    {shortCount}/{stepTotal}
+                                </span>
+                            </span>
+                        </div>
+                    ))}
+                </div>
+            )}
         </>
     );
 }

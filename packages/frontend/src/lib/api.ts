@@ -759,6 +759,7 @@ export interface WalletBreakdown {
     totalQuestPoints: number;
     breakdown: Record<string, { totalScore: number; daysScored: number }>;
     cpiDetails: CPIDetails | null;
+    questProgress: QuestProgressDetails | null;
 }
 
 export async function getWalletBreakdown(

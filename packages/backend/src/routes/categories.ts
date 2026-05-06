@@ -39,6 +39,7 @@ interface WalletBreakdownData {
     totalQuestPoints: number;
     breakdown: Record<string, { totalScore: number; daysScored: number }>;
     cpiDetails: import('../types.js').CPIDetails | null;
+    questProgress: import('../types.js').QuestProgressDetails | null;
 }
 const walletBreakdownCache = createCache<WalletBreakdownData>();
 
@@ -367,12 +368,28 @@ router.get('/:tournamentId/wallet/:wallet', async (req, res) => {
             );
         }
 
+        // Phase 8 item (a.2)+(c.5): fetch latest-week LM step progress so the
+        // expanded row can show "L: 3/10  S: 2/10" per asset (instead of just
+        // showing leaderboard score 0.0 mid-week). One DB query per wallet
+        // expansion; fast.
+        let questProgress: import('../types.js').QuestProgressDetails | null = null;
+        try {
+            const { getQuestProgress } = await import('../services/quest-engine.js');
+            questProgress = await getQuestProgress(tournamentId, wallet);
+        } catch (err) {
+            console.warn(
+                `[Categories] Failed to fetch quest progress for ${wallet}:`,
+                err instanceof Error ? err.message : err,
+            );
+        }
+
         const data: WalletBreakdownData = {
             wallet,
             tournamentId,
             totalQuestPoints,
             breakdown,
             cpiDetails,
+            questProgress,
         };
 
         // Phase 6: write-through cache.

@@ -448,6 +448,54 @@
     font-variant-numeric: tabular-nums;
 }
 
+/* Phase 8 item (c.5)+(a.2): aggregated LM compact rows in expanded breakdown */
+.lmCompactGroup {
+    margin-top: var(--space-sm);
+    padding: var(--space-sm) var(--space-md);
+    background: var(--bg-elevated);
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border-default);
+}
+
+.lmCompactHeading {
+    font-size: 0.6875rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: var(--space-xs);
+}
+
+.lmCompactRow {
+    display: grid;
+    grid-template-columns: 1fr auto auto;
+    gap: var(--space-sm);
+    align-items: center;
+    padding: 4px 0;
+    font-size: 0.8125rem;
+}
+
+.lmCompactSymbol {
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.lmCompactSide {
+    color: var(--text-muted);
+    font-size: 0.75rem;
+}
+
+.lmCompactCount {
+    color: var(--text-secondary);
+    font-variant-numeric: tabular-nums;
+}
+
+.lmCompactCountActive {
+    color: var(--accent-primary);
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+
 .hbarHeader {
     display: flex;
     justify-content: space-between;
