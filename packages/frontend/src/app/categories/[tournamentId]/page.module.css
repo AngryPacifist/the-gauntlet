@@ -86,3 +86,68 @@
 @media (max-width: 480px) {
     .badgeGrid { grid-template-columns: repeat(3, 1fr); }
 }
+
+/* Phase 8 item (c.5c): aggregated per-asset LM tab — stacked Long+Short layout */
+.lmAggregatedSplit {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-md);
+}
+
+@media (max-width: 720px) {
+    .lmAggregatedSplit {
+        grid-template-columns: 1fr;
+    }
+}
+
+.lmAggregatedHalf {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+}
+
+.lmAggregatedHeader {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-top: var(--space-xs);
+}
+
+.lmBadgeGroupHeading {
+    font-size: 0.6875rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-top: var(--space-md);
+    margin-bottom: var(--space-xs);
+}
+
+.lmSideToggleRow {
+    display: flex;
+    gap: var(--space-sm);
+    margin-bottom: var(--space-md);
+}
+
+.lmSideToggle {
+    padding: var(--space-xs) var(--space-md);
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border-default);
+    background: transparent;
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    cursor: pointer;
+    transition: all var(--transition-default);
+}
+
+.lmSideToggle:hover {
+    color: var(--text-primary);
+}
+
+.lmSideToggleActive {
+    background: var(--accent-primary);
+    color: white;
+    border-color: var(--accent-primary);
+}

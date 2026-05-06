@@ -77,6 +77,18 @@ const BASE_CATEGORY_TABS: CategoryTab[] = [
     },
 ];
 
+// Phase 8 item (c.5c): normalize URL tab slug. With aggregated LM tabs, old
+// bookmarks like ?tab=leverage_master_SOL_long no longer match any tab in the
+// new categoryTabs array (which uses leverage_master_SOL). Map legacy per-side
+// slugs to aggregated form + capture the side for the in-tab toggle's default.
+function normalizeLmTab(raw: string): { tab: string; initialSide: 'long' | 'short' } {
+    const m = raw.match(/^leverage_master_(.+)_(long|short)$/);
+    if (m && m[1] !== 'long' && m[1] !== 'short') {
+        return { tab: `leverage_master_${m[1]}`, initialSide: m[2] as 'long' | 'short' };
+    }
+    return { tab: raw, initialSide: 'long' };
+}
+
 export default function CategoriesPage({ params }: { params: Promise<{ tournamentId: string }> }) {
     const { tournamentId: rawId } = use(params);
     const searchParams = useSearchParams();
@@ -85,18 +97,25 @@ export default function CategoriesPage({ params }: { params: Promise<{ tournamen
     const [tournament, setTournament] = useState<TournamentState | null>(null);
 
     // Phase 4: compute tabs dynamically from tournament config.
+    // Phase 8 item (c.5c): LM tabs aggregated per-asset (one tab per asset
+    // showing both Long and Short ladders inside) instead of per-(asset,side).
+    // Reduces LM tab count from 12 → 6 for assetList of length 6.
     const categoryTabs = useMemo<CategoryTab[]>(() => {
         const tabs: CategoryTab[] = [...BASE_CATEGORY_TABS];
         const assetList = tournament?.config?.assetList;
         if (assetList?.length) {
             for (const asset of assetList) {
-                tabs.push(
-                    { slug: `leverage_master_${asset.symbol}_long` as CategorySlug, label: `LM ${asset.symbol} (Long)`, icon: Zap, color: '#e84393', colorBg: 'rgba(232, 67, 147, 0.1)', description: `Leverage ladders for ${asset.symbol} long positions.` },
-                    { slug: `leverage_master_${asset.symbol}_short` as CategorySlug, label: `LM ${asset.symbol} (Short)`, icon: Zap, color: '#0984e3', colorBg: 'rgba(9, 132, 227, 0.1)', description: `Leverage ladders for ${asset.symbol} short positions.` },
-                );
+                tabs.push({
+                    slug: `leverage_master_${asset.symbol}` as CategorySlug,
+                    label: `LM ${asset.symbol}`,
+                    icon: Zap,
+                    color: '#a29bfe',
+                    colorBg: 'rgba(162, 155, 254, 0.1)',
+                    description: `Leverage ladders for ${asset.symbol} (long + short combined).`,
+                });
             }
         } else {
-            // Legacy fallback: 2-tab static layout for pre-Phase-4 tournaments
+            // Legacy fallback: pre-Phase-4 tournaments still use 2-tab per-side layout
             tabs.push(
                 { slug: 'leverage_master_long' as CategorySlug, label: 'Leverage (Long)', icon: Zap, color: '#e84393', colorBg: 'rgba(232, 67, 147, 0.1)', description: 'Leverage ladders for long positions.' },
                 { slug: 'leverage_master_short' as CategorySlug, label: 'Leverage (Short)', icon: Zap, color: '#0984e3', colorBg: 'rgba(9, 132, 227, 0.1)', description: 'Leverage ladders for short positions.' },
@@ -105,9 +124,16 @@ export default function CategoriesPage({ params }: { params: Promise<{ tournamen
         return tabs;
     }, [tournament?.config?.assetList]);
 
-    const initialTab = (searchParams.get('tab') as CategorySlug) || 'all_around';
-    const [tab, setTab] = useState<CategorySlug>(initialTab);
+    // Phase 8 item (c.5c): normalize legacy per-side URLs to aggregated form
+    const rawInitialTab = searchParams.get('tab') || 'all_around';
+    const { tab: normalizedInitialTab, initialSide: normalizedInitialSide } = normalizeLmTab(rawInitialTab);
+    const [tab, setTab] = useState<CategorySlug>(normalizedInitialTab as CategorySlug);
     const [leaderboard, setLeaderboard] = useState<CategoryLeaderboardEntry[]>([]);
+    // Phase 8 item (c.5c): aggregated LM tabs need TWO leaderboards (long + short).
+    // Track them separately; non-LM tabs continue to use single `leaderboard` state.
+    const [longLeaderboard, setLongLeaderboard] = useState<CategoryLeaderboardEntry[]>([]);
+    const [shortLeaderboard, setShortLeaderboard] = useState<CategoryLeaderboardEntry[]>([]);
+    const [leverageActiveSide, setLeverageActiveSide] = useState<'long' | 'short'>(normalizedInitialSide);
     const [dailyDate, setDailyDate] = useState<string>('');
     const [dailyScores, setDailyScores] = useState<DailyCategoryScore[]>([]);
     const [loading, setLoading] = useState(true);
@@ -120,17 +146,27 @@ export default function CategoriesPage({ params }: { params: Promise<{ tournamen
     const [questData, setQuestData] = useState<QuestProgressDetails | null>(null);
 
     const activeTab = categoryTabs.find(t => t.slug === tab) ?? categoryTabs[0];
-    // Phase 4 item 30: leverage tabs now include per-asset slugs (leverage_master_SYMBOL_long/_short)
+    // Phase 4 item 30 + Phase 8 item (c.5c): leverage tabs are aggregated
+    // per-asset (`leverage_master_SOL`) via tab generation; legacy per-side
+    // URLs are normalized to aggregated form via `normalizeLmTab` above so
+    // old bookmarks still land on the right tab.
     const isLeverageTab = tab.startsWith('leverage_master_');
-    // Extract asset from tab slug: leverage_master_SOL_long → 'SOL'
-    // Legacy slugs (leverage_master_long / _short) have no asset → undefined
     const leverageTabAsset = isLeverageTab
         ? (() => {
-            const match = tab.match(/^leverage_master_(.+)_(long|short)$/);
-            return match?.[1] && match[1] !== 'long' && match[1] !== 'short' ? match[1] : undefined;
+            // Aggregated form (current): leverage_master_<asset>
+            const aggMatch = tab.match(/^leverage_master_([A-Z0-9_]+)$/);
+            if (aggMatch && aggMatch[1] !== 'long' && aggMatch[1] !== 'short') {
+                return aggMatch[1];
+            }
+            // Legacy per-side (defensive — should be normalized away by normalizeLmTab,
+            // but keep for in-flight state during refactor)
+            const sideMatch = tab.match(/^leverage_master_(.+)_(long|short)$/);
+            if (sideMatch && sideMatch[1] !== 'long' && sideMatch[1] !== 'short') {
+                return sideMatch[1];
+            }
+            return undefined;
         })()
         : undefined;
-    const leverageTabSide: 'long' | 'short' = tab.endsWith('_long') ? 'long' : 'short';
 
     useEffect(() => {
         if (!isNaN(tournamentId)) {
@@ -149,7 +185,7 @@ export default function CategoriesPage({ params }: { params: Promise<{ tournamen
         if (dailyDate && !isNaN(tournamentId)) {
             loadDailyScores();
         }
-    }, [dailyDate, tab]);
+    }, [dailyDate, tab, leverageActiveSide]);
 
     // Fetch quest progress when wallet param is present and a leverage tab is active
     useEffect(() => {
@@ -165,8 +201,21 @@ export default function CategoriesPage({ params }: { params: Promise<{ tournamen
     async function loadLeaderboard() {
         try {
             setLoading(true);
-            const data = await getCategoryLeaderboard(tournamentId, tab);
-            setLeaderboard(data);
+            // Phase 8 item (c.5c): aggregated LM tabs need TWO leaderboards.
+            if (isLeverageTab && leverageTabAsset) {
+                const [longData, shortData] = await Promise.all([
+                    getCategoryLeaderboard(tournamentId, `leverage_master_${leverageTabAsset}_long` as CategorySlug),
+                    getCategoryLeaderboard(tournamentId, `leverage_master_${leverageTabAsset}_short` as CategorySlug),
+                ]);
+                setLongLeaderboard(longData);
+                setShortLeaderboard(shortData);
+                setLeaderboard([]);
+            } else {
+                const data = await getCategoryLeaderboard(tournamentId, tab);
+                setLeaderboard(data);
+                setLongLeaderboard([]);
+                setShortLeaderboard([]);
+            }
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Failed to load leaderboard');
         } finally {
@@ -176,7 +225,12 @@ export default function CategoriesPage({ params }: { params: Promise<{ tournamen
 
     async function loadDailyScores() {
         try {
-            const data = await getDailyScores(tournamentId, tab, dailyDate);
+            // Phase 8 item (c.5c): for aggregated LM tab, daily-breakdown reads
+            // the side selected via the in-tab toggle (`leverageActiveSide`).
+            const effectiveSlug: CategorySlug = isLeverageTab && leverageTabAsset
+                ? (`leverage_master_${leverageTabAsset}_${leverageActiveSide}` as CategorySlug)
+                : tab;
+            const data = await getDailyScores(tournamentId, effectiveSlug, dailyDate);
             setDailyScores(data);
         } catch (err) {
             console.error('Failed to load daily scores:', err);
@@ -250,6 +304,12 @@ export default function CategoriesPage({ params }: { params: Promise<{ tournamen
                     <p style={{ color: 'var(--text-muted)' }}>Loading...</p>
                 ) : error ? (
                     <p style={{ color: 'var(--status-danger)' }}>{error}</p>
+                ) : isLeverageTab && leverageTabAsset ? (
+                    // Phase 8 item (c.5c): aggregated per-asset display — Long + Short stacked
+                    <div className={styles.lmAggregatedSplit}>
+                        <LeverageSubLeaderboard sideLabel="Long" entries={longLeaderboard} accentColor={activeTab.color} />
+                        <LeverageSubLeaderboard sideLabel="Short" entries={shortLeaderboard} accentColor={activeTab.color} />
+                    </div>
                 ) : leaderboard.length === 0 ? (
                     <p style={{ color: 'var(--text-muted)' }}>No scores yet for this category.</p>
                 ) : (
@@ -330,23 +390,38 @@ export default function CategoriesPage({ params }: { params: Promise<{ tournamen
                             </p>
                         )}
 
+                        {/* Phase 8 item (c.5c): show BOTH long + short badge grids */}
+                        <div className={styles.lmBadgeGroupHeading}>Long ladder</div>
                         <LeverageBadgeGrid
                             steps={(() => {
-                                // Phase 4 item 30: read per-asset ladder from byAsset map.
-                                // Legacy slugs (no asset) use '__legacy__' key.
                                 const assetKey = leverageTabAsset ?? '__legacy__';
                                 const asset = questData?.byAsset?.[assetKey];
-                                // Phase 7.a: derive default step count from tournament config when no asset data yet
                                 const configEntry = tournament?.config?.assetList?.find(a => a.symbol === leverageTabAsset);
                                 const defaultLen = configEntry?.lmSteps?.length ?? 10;
                                 if (!asset) return Array(defaultLen).fill(false);
-                                return leverageTabSide === 'long' ? asset.long : asset.short;
+                                return asset.long;
                             })()}
                             stepValues={(() => {
                                 const configEntry = tournament?.config?.assetList?.find(a => a.symbol === leverageTabAsset);
                                 return configEntry?.lmSteps;
                             })()}
-                            color={activeTab.color}
+                            color="#e84393"
+                        />
+                        <div className={styles.lmBadgeGroupHeading}>Short ladder</div>
+                        <LeverageBadgeGrid
+                            steps={(() => {
+                                const assetKey = leverageTabAsset ?? '__legacy__';
+                                const asset = questData?.byAsset?.[assetKey];
+                                const configEntry = tournament?.config?.assetList?.find(a => a.symbol === leverageTabAsset);
+                                const defaultLen = configEntry?.lmSteps?.length ?? 10;
+                                if (!asset) return Array(defaultLen).fill(false);
+                                return asset.short;
+                            })()}
+                            stepValues={(() => {
+                                const configEntry = tournament?.config?.assetList?.find(a => a.symbol === leverageTabAsset);
+                                return configEntry?.lmSteps;
+                            })()}
+                            color="#0984e3"
                         />
                     </div>
                 </section>
@@ -358,6 +433,23 @@ export default function CategoriesPage({ params }: { params: Promise<{ tournamen
                     <Calendar size={18} />
                     Daily Breakdown
                 </h2>
+                {/* Phase 8 item (c.5c): for aggregated LM tab, side toggle */}
+                {isLeverageTab && leverageTabAsset && (
+                    <div className={styles.lmSideToggleRow}>
+                        <button
+                            onClick={() => setLeverageActiveSide('long')}
+                            className={`${styles.lmSideToggle} ${leverageActiveSide === 'long' ? styles.lmSideToggleActive : ''}`}
+                        >
+                            Long
+                        </button>
+                        <button
+                            onClick={() => setLeverageActiveSide('short')}
+                            className={`${styles.lmSideToggle} ${leverageActiveSide === 'short' ? styles.lmSideToggleActive : ''}`}
+                        >
+                            Short
+                        </button>
+                    </div>
+                )}
                 <div className={styles.dateInputRow}>
                     <input
                         type="date"
@@ -421,6 +513,57 @@ function getRankStyle(index: number): React.CSSProperties {
     if (index === 1) return { fontWeight: 700, color: 'var(--accent-silver)' };
     if (index === 2) return { fontWeight: 700, color: 'var(--accent-bronze)' };
     return {};
+}
+
+// ---- Phase 8 item (c.5c): Aggregated per-side leaderboard inside an LM tab ----
+function LeverageSubLeaderboard({
+    sideLabel, entries, accentColor,
+}: {
+    sideLabel: 'Long' | 'Short';
+    entries: CategoryLeaderboardEntry[];
+    accentColor: string;
+}) {
+    return (
+        <div className={styles.lmAggregatedHalf}>
+            <div className={styles.lmAggregatedHeader}>{sideLabel}</div>
+            {entries.length === 0 ? (
+                <p style={{ color: 'var(--text-muted)' }}>No scores yet for {sideLabel.toLowerCase()}.</p>
+            ) : (
+                <div className={styles.tableWrap}>
+                    <table className={styles.table}>
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>Wallet</th>
+                                <th className={styles.thRight}>Total Score</th>
+                                <th className={styles.thRight}>Days Active</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {entries.map((entry, i) => (
+                                <tr key={entry.wallet}>
+                                    <td>
+                                        <span style={getRankStyle(computeCompetitionRank(entries, i) - 1)}>
+                                            {computeCompetitionRank(entries, i)}
+                                        </span>
+                                    </td>
+                                    <td className={styles.tdMono}>
+                                        {entry.wallet.slice(0, 4)}...{entry.wallet.slice(-4)}
+                                    </td>
+                                    <td className={styles.tdRight} style={{ fontWeight: 600, color: accentColor }}>
+                                        {typeof entry.totalScore === 'number' ? entry.totalScore.toFixed(1) : entry.totalScore}
+                                    </td>
+                                    <td className={styles.tdRight}>
+                                        {entry.daysScored}
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            )}
+        </div>
+    );
 }
 
 // ---- Leverage Master Badge Grid ----
