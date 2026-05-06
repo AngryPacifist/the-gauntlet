@@ -88,14 +88,26 @@ function filterByAssetList(
     config: TournamentConfig,
 ): AdrenaPosition[] {
     if (!config.assetList?.length) return positions;
-    return positions.filter((p) => {
+    // Phase 8.p: canonicalize position.symbol to the matched assetList entry's
+    // symbol. Adrena returns raw token symbols (JitoSOL, WBTC, Bonk), but T1's
+    // config maps SOL→JitoSOL.mint, BTC→WBTC.mint, BONK→Bonk.mint (Phase 8.k.1).
+    // Without canonicalization, downstream OHLC lookup `ohlcData.get(p.symbol)`
+    // fails (cache is keyed by config.symbol) and Bottom Fisher / Top-Tick
+    // silently skip these positions. Non-mutating: clone via spread when symbol
+    // differs; pass through when already canonical.
+    const canonicalized: AdrenaPosition[] = [];
+    for (const p of positions) {
         const match = config.assetList!.find((a) =>
             a.mint ? p.token_account_mint === a.mint : p.symbol === a.symbol,
         );
-        if (!match) return false;
+        if (!match) continue;
         const entryDate = p.entry_date.slice(0, 10); // YYYY-MM-DD
-        return entryDate >= match.joinedAt;
-    });
+        if (entryDate < match.joinedAt) continue;
+        canonicalized.push(
+            p.symbol === match.symbol ? p : { ...p, symbol: match.symbol },
+        );
+    }
+    return canonicalized;
 }
 
 /**

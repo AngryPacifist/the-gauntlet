@@ -46,16 +46,27 @@ export function computeCPI(
     // Phase 4 item 29-engine: filter by assetList when populated.
     // D5 fallback — undefined/empty = permissive (all symbols observed).
     // D16 matching — prefer mint when present, fall back to symbol.
-    const filtered = config?.assetList?.length
-        ? positions.filter((p) => {
+    // Phase 8.p: canonicalize position.symbol to the matched config entry's
+    // symbol so the variety count below (line ~324) treats e.g. JitoSOL+SOL
+    // as a single asset for the tournament's purposes. Mirrors the
+    // category-engine.ts:filterByAssetList canonicalization.
+    let filtered: AdrenaPosition[];
+    if (config?.assetList?.length) {
+        filtered = [];
+        for (const p of positions) {
             const match = config.assetList!.find((a) =>
                 a.mint ? p.token_account_mint === a.mint : p.symbol === a.symbol,
             );
-            if (!match) return false;
+            if (!match) continue;
             const entryDate = p.entry_date.slice(0, 10); // YYYY-MM-DD
-            return entryDate >= match.joinedAt;
-        })
-        : positions;
+            if (entryDate < match.joinedAt) continue;
+            filtered.push(
+                p.symbol === match.symbol ? p : { ...p, symbol: match.symbol },
+            );
+        }
+    } else {
+        filtered = positions;
+    }
 
     // If trader has zero valid positions (post-filter), all scores are 0
     if (filtered.length === 0) {
