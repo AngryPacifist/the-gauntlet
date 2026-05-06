@@ -38,6 +38,7 @@ interface WalletBreakdownData {
     tournamentId: number;
     totalQuestPoints: number;
     breakdown: Record<string, { totalScore: number; daysScored: number }>;
+    cpiDetails: import('../types.js').CPIDetails | null;
 }
 const walletBreakdownCache = createCache<WalletBreakdownData>();
 
@@ -343,11 +344,35 @@ router.get('/:tournamentId/wallet/:wallet', async (req, res) => {
         const allPoints = await computeAllQuestPoints(tournamentId, config);
         const totalQuestPoints = allPoints.get(wallet) ?? 0;
 
+        // Phase 8 item (c.1-4): compute CPI granular details on-demand for the
+        // expanded row's CPI breakdown panel. Re-fetches positions (5-min
+        // AdrenaClient cache) and runs computeCPIWithDetails. ~negligible
+        // cost relative to the existing per-row breakdown query work.
+        let cpiDetails: import('../types.js').CPIDetails | null = null;
+        try {
+            const positions = await adrenaClient.getPositions(wallet);
+            const { computeCPIWithDetails } = await import('../services/scoring-engine.js');
+            const { details } = computeCPIWithDetails(
+                positions,
+                new Date(0),
+                new Date(),
+                undefined,
+                config,
+            );
+            cpiDetails = details;
+        } catch (err) {
+            console.warn(
+                `[Categories] Failed to compute CPI details for ${wallet}:`,
+                err instanceof Error ? err.message : err,
+            );
+        }
+
         const data: WalletBreakdownData = {
             wallet,
             tournamentId,
             totalQuestPoints,
             breakdown,
+            cpiDetails,
         };
 
         // Phase 6: write-through cache.

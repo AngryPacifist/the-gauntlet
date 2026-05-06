@@ -440,6 +440,14 @@
     margin-bottom: var(--space-sm);
 }
 
+/* Phase 8 item (c.1-4): granular CPI sub-bar text (ROI / Liq% / etc.) */
+.cpiSubText {
+    font-size: 0.6875rem;
+    color: var(--text-muted);
+    margin: 2px 0 var(--space-sm) 2px;
+    font-variant-numeric: tabular-nums;
+}
+
 .hbarHeader {
     display: flex;
     justify-content: space-between;

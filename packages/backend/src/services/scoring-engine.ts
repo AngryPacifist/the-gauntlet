@@ -28,6 +28,7 @@
 import type {
     AdrenaPosition,
     CPIScores,
+    CPIDetails,
     CPIWeights,
     TournamentConfig,
 } from '../types.js';
@@ -336,6 +337,224 @@ function computeActivityScore(
     const varietyScore = Math.min(uniqueSymbols.size / supportedAssetCount, 1) * 40;
 
     return clamp(tradeCountScore + volumeScore + varietyScore, 0, 100);
+}
+
+// ============================================================================
+// Phase 8 item (c.1-4): granular CPI details for wallet-breakdown UI
+//
+// Surfaces the underlying inputs used to compute each CPI sub-score, so the
+// expanded leaderboard row can show "ROI: X%" / "Liquidations: N/M · Max DD:
+// X%" / "Profitable days: P/T · Win rate: X%" / "Trades: N · Volume: $X"
+// alongside each 0-100 bar.
+//
+// Implementation note: detail helpers and existing computeXScore wrappers
+// re-run a few of the same filters/reductions. Acceptable duplication —
+// these are called at most once per wallet expansion (cached 5min in the
+// breakdown endpoint), and keeping computeCPI unchanged minimises blast
+// radius for this additive feature. Refactor to DRY if call frequency rises.
+// ============================================================================
+
+function computePnlDetails(positions: AdrenaPosition[]): {
+    totalPnl: number;
+    totalExposureUsd: number;
+    roi: number;
+} {
+    const closed = positions.filter(
+        (p) => p.status === 'close' || p.status === 'liquidate',
+    );
+    if (closed.length === 0) {
+        return { totalPnl: 0, totalExposureUsd: 0, roi: 0 };
+    }
+    const totalPnl = closed.reduce((sum, p) => sum + (p.pnl ?? 0), 0);
+    const totalExposureUsd = closed.reduce(
+        (sum, p) => sum + (p.exit_size ?? p.entry_size),
+        0,
+    );
+    const roi = totalExposureUsd > 0 ? totalPnl / totalExposureUsd : 0;
+    return { totalPnl, totalExposureUsd, roi };
+}
+
+function computeRiskDetails(positions: AdrenaPosition[]): {
+    liquidatedCount: number;
+    totalCount: number;
+    maxDrawdownUsd: number;
+    drawdownRatio: number;
+} {
+    const liquidatedCount = positions.filter((p) => p.status === 'liquidate').length;
+    const totalCount = positions.length;
+
+    const closedWithExit = positions.filter(
+        (p) => (p.status === 'close' || p.status === 'liquidate') && p.exit_date !== null,
+    );
+
+    if (closedWithExit.length === 0) {
+        return { liquidatedCount, totalCount, maxDrawdownUsd: 0, drawdownRatio: 0 };
+    }
+
+    closedWithExit.sort((a, b) => {
+        const dateA = new Date(a.exit_date!).getTime();
+        const dateB = new Date(b.exit_date!).getTime();
+        if (dateA !== dateB) return dateA - dateB;
+        return a.position_id - b.position_id;
+    });
+
+    let cumPnL = 0;
+    let peak = 0;
+    let maxDrawdown = 0;
+    for (const p of closedWithExit) {
+        cumPnL += p.pnl ?? 0;
+        if (cumPnL > peak) peak = cumPnL;
+        const drawdown = peak - cumPnL;
+        if (drawdown > maxDrawdown) maxDrawdown = drawdown;
+    }
+
+    const totalExposure = closedWithExit.reduce(
+        (sum, p) => sum + (p.exit_size ?? p.entry_size), 0,
+    );
+    const drawdownRatio = totalExposure > 0 ? maxDrawdown / totalExposure : 0;
+    return { liquidatedCount, totalCount, maxDrawdownUsd: maxDrawdown, drawdownRatio };
+}
+
+function computeConsistencyDetails(positions: AdrenaPosition[]): {
+    profitableDays: number;
+    totalTradingDays: number;
+    winningTrades: number;
+    totalClosedTrades: number;
+} {
+    const closed = positions.filter(
+        (p) => (p.status === 'close' || p.status === 'liquidate') && p.exit_date,
+    );
+    if (closed.length === 0) {
+        return { profitableDays: 0, totalTradingDays: 0, winningTrades: 0, totalClosedTrades: 0 };
+    }
+
+    const dailyGroups = new Map<string, AdrenaPosition[]>();
+    for (const p of closed) {
+        const exitDay = new Date(p.exit_date!).toISOString().split('T')[0];
+        const group = dailyGroups.get(exitDay) ?? [];
+        group.push(p);
+        dailyGroups.set(exitDay, group);
+    }
+
+    let profitableDays = 0;
+    for (const [, dayPositions] of dailyGroups) {
+        const dayPnl = dayPositions.reduce((sum, p) => sum + (p.pnl ?? 0), 0);
+        if (dayPnl > 0) profitableDays++;
+    }
+
+    const winningTrades = closed.filter((p) => (p.pnl ?? 0) > 0).length;
+    return {
+        profitableDays,
+        totalTradingDays: dailyGroups.size,
+        winningTrades,
+        totalClosedTrades: closed.length,
+    };
+}
+
+function computeActivityDetails(positions: AdrenaPosition[]): {
+    tradeCount: number;
+    totalVolume: number;
+    uniqueSymbols: number;
+} {
+    const totalVolume = positions.reduce(
+        (sum, p) => sum + (p.volume ?? p.entry_size),
+        0,
+    );
+    const uniqueSymbols = new Set(positions.map((p) => p.symbol)).size;
+    return {
+        tradeCount: positions.length,
+        totalVolume,
+        uniqueSymbols,
+    };
+}
+
+/**
+ * Phase 8 item (c.1-4): compute CPI scores AND granular details.
+ *
+ * Returns both the 0-100 sub-scores (CPIScores) and the underlying granular
+ * inputs (CPIDetails). Used by the wallet-breakdown endpoint to surface
+ * granular details under each CPI sub-bar in the expanded leaderboard row.
+ *
+ * Re-runs the same asset-list + joinedAt filter as computeCPI (with
+ * Phase 8.p canonicalization). Internally calls the existing
+ * computeXScore functions for sub-scores AND the new computeXDetails
+ * helpers for granular fields. Slight duplication accepted for low-risk
+ * minimal-touch.
+ */
+export function computeCPIWithDetails(
+    positions: AdrenaPosition[],
+    roundStart: Date,
+    roundEnd: Date,
+    weights: CPIWeights = DEFAULT_CPI_WEIGHTS,
+    config?: Partial<TournamentConfig>,
+): { scores: CPIScores; details: CPIDetails } {
+    // Phase 8.p: canonicalize symbols (mirror of computeCPI's filter)
+    let filtered: AdrenaPosition[];
+    if (config?.assetList?.length) {
+        filtered = [];
+        for (const p of positions) {
+            const match = config.assetList!.find((a) =>
+                a.mint ? p.token_account_mint === a.mint : p.symbol === a.symbol,
+            );
+            if (!match) continue;
+            const entryDate = p.entry_date.slice(0, 10);
+            if (entryDate < match.joinedAt) continue;
+            filtered.push(
+                p.symbol === match.symbol ? p : { ...p, symbol: match.symbol },
+            );
+        }
+    } else {
+        filtered = positions;
+    }
+
+    if (filtered.length === 0) {
+        return {
+            scores: { pnlScore: 0, riskScore: 0, consistencyScore: 0, activityScore: 0, cpiScore: 0 },
+            details: {
+                totalPnl: 0, totalExposureUsd: 0, roi: 0,
+                liquidatedCount: 0, totalCount: 0, maxDrawdownUsd: 0, drawdownRatio: 0,
+                profitableDays: 0, totalTradingDays: 0, winningTrades: 0, totalClosedTrades: 0,
+                tradeCount: 0, totalVolume: 0, uniqueSymbols: 0,
+            },
+        };
+    }
+
+    const assetCount = Math.max(
+        config?.assetList?.length ?? config?.supportedAssetCount ?? 4,
+        1,
+    );
+
+    const pnlScore = computePnlScore(filtered);
+    const riskScore = computeRiskScore(filtered);
+    const consistencyScore = computeConsistencyScore(filtered);
+    const activityScore = computeActivityScore(filtered, assetCount);
+
+    const cpiScore =
+        weights.pnl * pnlScore +
+        weights.risk * riskScore +
+        weights.consistency * consistencyScore +
+        weights.activity * activityScore;
+
+    const pnlD = computePnlDetails(filtered);
+    const riskD = computeRiskDetails(filtered);
+    const consD = computeConsistencyDetails(filtered);
+    const actD = computeActivityDetails(filtered);
+
+    return {
+        scores: {
+            pnlScore: round2(pnlScore),
+            riskScore: round2(riskScore),
+            consistencyScore: round2(consistencyScore),
+            activityScore: round2(activityScore),
+            cpiScore: round2(cpiScore),
+        },
+        details: {
+            ...pnlD,
+            ...riskD,
+            ...consD,
+            ...actD,
+        },
+    };
 }
 
 // --------------------------------------------------------------------------

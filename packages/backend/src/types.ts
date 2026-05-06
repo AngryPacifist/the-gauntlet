@@ -157,6 +157,33 @@ export interface CPIScores {
     cpiScore: number;
 }
 
+// Phase 8 item (c.1-4): granular CPI inputs surfaced in expanded leaderboard
+// row to give traders insight into why their sub-scores are what they are.
+// Computed on-demand by computeCPIWithDetails; not persisted.
+export interface CPIDetails {
+    // PnL granular (under PNL bar)
+    totalPnl: number;
+    totalExposureUsd: number;
+    roi: number;  // fraction; frontend formats × 100
+
+    // Risk granular (under RISK bar)
+    liquidatedCount: number;
+    totalCount: number;
+    maxDrawdownUsd: number;
+    drawdownRatio: number;  // fraction
+
+    // Consistency granular (under CONSISTENCY bar)
+    profitableDays: number;
+    totalTradingDays: number;
+    winningTrades: number;
+    totalClosedTrades: number;
+
+    // Activity granular (under ACTIVITY bar)
+    tradeCount: number;
+    totalVolume: number;
+    uniqueSymbols: number;
+}
+
 // --- Adrena API Types ---
 
 export interface AdrenaPosition {

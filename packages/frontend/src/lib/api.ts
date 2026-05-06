@@ -734,11 +734,31 @@ export async function getForgeLeaderboard(
 // Per-Wallet Quest Breakdown
 // --------------------------------------------------------------------------
 
+// Phase 8 item (c.1-4): mirrors backend CPIDetails for the expanded row's
+// CPI Breakdown panel. Granular inputs displayed under each sub-bar.
+export interface CPIDetails {
+    totalPnl: number;
+    totalExposureUsd: number;
+    roi: number;
+    liquidatedCount: number;
+    totalCount: number;
+    maxDrawdownUsd: number;
+    drawdownRatio: number;
+    profitableDays: number;
+    totalTradingDays: number;
+    winningTrades: number;
+    totalClosedTrades: number;
+    tradeCount: number;
+    totalVolume: number;
+    uniqueSymbols: number;
+}
+
 export interface WalletBreakdown {
     wallet: string;
     tournamentId: number;
     totalQuestPoints: number;
     breakdown: Record<string, { totalScore: number; daysScored: number }>;
+    cpiDetails: CPIDetails | null;
 }
 
 export async function getWalletBreakdown(

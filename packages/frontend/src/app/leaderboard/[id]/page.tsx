@@ -737,12 +737,13 @@ function ForgeRow({ entry, isExpanded, onToggle, breakdown, breakdownLoading, is
                                     <div>
                                         <h4 className={styles.breakdownHeading}>CPI Breakdown</h4>
                                         {CPI_COMPONENTS.map(({ key, label, color }) => (
-                                            <HorizontalBar
+                                            <CPIBarWithDetails
                                                 key={key}
+                                                componentKey={key}
                                                 label={label}
                                                 value={entry[key as keyof ForgeEntry] as number}
-                                                max={100}
                                                 color={color}
+                                                cpiDetails={breakdown?.cpiDetails ?? null}
                                             />
                                         ))}
                                     </div>
@@ -786,6 +787,67 @@ function HorizontalBar({ label, value, max, color }: HorizontalBarProps) {
             <div className={styles.hbarTrack}>
                 <div className={styles.hbarFill} style={{ width: `${pct}%`, background: color }} />
             </div>
+        </div>
+    );
+}
+
+// --------------------------------------------------------------------------
+// CPI Bar with granular details (Phase 8 item c.1-4)
+//
+// Wraps HorizontalBar and renders the underlying inputs (ROI / Liq% /
+// Max DD% / Profitable Days / Win Rate / Trade Count / Volume) below
+// each CPI sub-bar. cpiDetails comes from the wallet-breakdown endpoint;
+// null = recompute failed (rare), gracefully renders just the bar.
+// --------------------------------------------------------------------------
+
+interface CPIBarWithDetailsProps {
+    componentKey: string;
+    label: string;
+    value: number;
+    color: string;
+    cpiDetails: WalletBreakdown['cpiDetails'];
+}
+
+function formatVolume(v: number): string {
+    if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(2)}M`;
+    if (v >= 1_000) return `${(v / 1_000).toFixed(1)}K`;
+    return v.toFixed(0);
+}
+
+function CPIBarWithDetails({ componentKey, label, value, color, cpiDetails }: CPIBarWithDetailsProps) {
+    return (
+        <div>
+            <HorizontalBar label={label} value={value} max={100} color={color} />
+            {cpiDetails && (
+                <div className={styles.cpiSubText}>
+                    {componentKey === 'pnlScore' && (
+                        <>ROI: {(cpiDetails.roi * 100).toFixed(2)}%</>
+                    )}
+                    {componentKey === 'riskScore' && (
+                        <>
+                            Liquidations: {cpiDetails.liquidatedCount}/{cpiDetails.totalCount}
+                            {' · '}
+                            Max DD: {(cpiDetails.drawdownRatio * 100).toFixed(2)}%
+                        </>
+                    )}
+                    {componentKey === 'consistencyScore' && (
+                        <>
+                            Profitable days: {cpiDetails.profitableDays}/{cpiDetails.totalTradingDays}
+                            {' · '}
+                            Win rate: {cpiDetails.totalClosedTrades > 0
+                                ? `${((cpiDetails.winningTrades / cpiDetails.totalClosedTrades) * 100).toFixed(0)}%`
+                                : '—'}
+                        </>
+                    )}
+                    {componentKey === 'activityScore' && (
+                        <>
+                            Trades: {cpiDetails.tradeCount}
+                            {' · '}
+                            Volume: ${formatVolume(cpiDetails.totalVolume)}
+                        </>
+                    )}
+                </div>
+            )}
         </div>
     );
 }
