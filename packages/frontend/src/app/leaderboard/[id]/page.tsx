@@ -1013,6 +1013,24 @@ function QuestLeaderboards({
                 <div className={styles.noData}>
                     Loading quest data...
                 </div>
+            ) : questPeriod === 'weekly' && assetList?.length ? (
+                // Phase 8 item (c.5b): for the Weekly period, aggregate per-asset
+                // (LM Long + Short combined into one card per asset). Replaces
+                // the previous 12 cards (6 assets × 2 sides) with 6 cards.
+                assetList.map((asset) => (
+                    <LeverageMasterAssetCard
+                        key={asset.symbol}
+                        assetSymbol={asset.symbol}
+                        longScores={questScores.get(`leverage_master_${asset.symbol}_long` as CategorySlug) ?? []}
+                        shortScores={questScores.get(`leverage_master_${asset.symbol}_short` as CategorySlug) ?? []}
+                        isRulesExpanded={expandedRules.has(`leverage_master_${asset.symbol}`)}
+                        onToggleRules={() => onToggleRules(`leverage_master_${asset.symbol}`)}
+                        isForge={isForge}
+                        searchedWallet={searchedWallet}
+                        lmSteps={asset.lmSteps}
+                        lmTolerance={asset.lmTolerance}
+                    />
+                ))
             ) : (
                 getPeriodCategories(questPeriod, assetList).map((cat) => (
                     <CategoryLeaderboard
@@ -1174,6 +1192,161 @@ function CategoryLeaderboard({ category, scores, isRulesExpanded, onToggleRules,
                 </table>
             ) : (
                 <div className={styles.noData}>No data for this period.</div>
+            )}
+        </div>
+    );
+}
+
+// --------------------------------------------------------------------------
+// Leverage Master — Aggregated per-asset card (Phase 8 item c.5b)
+//
+// Shows both Long and Short ladders for one asset, side-by-side (stacks
+// vertically on narrow screens). Replaces the 2 separate `CategoryLeaderboard`
+// cards (one per side) per asset with a single combined card. Reduces the
+// Weekly period card count from 12 (6 assets × 2 sides) to 6 (one per asset).
+// --------------------------------------------------------------------------
+
+interface LeverageMasterAssetCardProps {
+    assetSymbol: string;
+    longScores: DailyCategoryScore[];
+    shortScores: DailyCategoryScore[];
+    isRulesExpanded: boolean;
+    onToggleRules: () => void;
+    isForge: boolean;
+    searchedWallet: string | null;
+    lmSteps?: number[];
+    lmTolerance?: number;
+}
+
+function LeverageMasterAssetCard({
+    assetSymbol, longScores, shortScores,
+    isRulesExpanded, onToggleRules, isForge, searchedWallet,
+    lmSteps, lmTolerance,
+}: LeverageMasterAssetCardProps) {
+    const questInfo = getLeverageMasterDescription('long', assetSymbol, lmSteps, lmTolerance);
+
+    return (
+        <div className={styles.categoryCard}>
+            <div className={styles.categoryHeader}>
+                <div className={styles.categoryTitleRow}>
+                    <h3 className={styles.categoryTitle}>Leverage Master {assetSymbol}</h3>
+                    <button onClick={onToggleRules} className={styles.rulesToggle}>
+                        <Info size={12} />
+                        {isRulesExpanded ? 'Hide rules' : 'Show rules'}
+                    </button>
+                </div>
+                {questInfo && (
+                    <p className={styles.categoryTagline}>{questInfo.tagline}</p>
+                )}
+            </div>
+
+            {isRulesExpanded && questInfo && (
+                <div className={styles.rulesPanel}>
+                    <p className={styles.rulesDesc}>{questInfo.description}</p>
+                </div>
+            )}
+
+            <div className={styles.lmAssetSplitGrid}>
+                <LeverageMasterSubLeaderboard
+                    sideLabel="Long"
+                    scores={longScores}
+                    isForge={isForge}
+                    searchedWallet={searchedWallet}
+                />
+                <LeverageMasterSubLeaderboard
+                    sideLabel="Short"
+                    scores={shortScores}
+                    isForge={isForge}
+                    searchedWallet={searchedWallet}
+                />
+            </div>
+        </div>
+    );
+}
+
+interface LeverageMasterSubLeaderboardProps {
+    sideLabel: 'Long' | 'Short';
+    scores: DailyCategoryScore[];
+    isForge: boolean;
+    searchedWallet: string | null;
+}
+
+function LeverageMasterSubLeaderboard({
+    sideLabel, scores, isForge, searchedWallet,
+}: LeverageMasterSubLeaderboardProps) {
+    const fullSorted = [...scores]
+        .filter((s) => !s.wallet.startsWith('__'))
+        .sort((a, b) => b.score - a.score);
+    const sorted = fullSorted.slice(0, 5);
+
+    const searchedEntry = searchedWallet
+        ? fullSorted.find((s) => s.wallet === searchedWallet)
+        : null;
+    const searchedRank = searchedEntry ? fullSorted.indexOf(searchedEntry) + 1 : null;
+    const searchedInTop5 = searchedRank !== null && searchedRank <= 5;
+    const showRow6 = searchedWallet !== null && !searchedInTop5;
+
+    // CSS strategy: scoped to `.lmAssetSubTable` parent — th/td alignment
+    // controlled by `:last-child` selector in CSS, not per-cell classes.
+    // Wallet column uses existing `.walletLink` for mono-font + dashed underline.
+    return (
+        <div className={styles.lmAssetSubBoard}>
+            <div className={styles.lmAssetSubHeader}>{sideLabel}</div>
+            {sorted.length === 0 ? (
+                <p className={styles.noScoresText}>No scores yet</p>
+            ) : (
+                <table className={styles.lmAssetSubTable}>
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>Wallet</th>
+                            <th>Steps</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {sorted.map((s, i) => {
+                            const detailsObj = s.details as { stepCount?: number; stepCountTotal?: number } | null;
+                            const stepCount = detailsObj?.stepCount ?? Math.round(s.score);
+                            const stepTotal = detailsObj?.stepCountTotal ?? '—';
+                            const isSearched = searchedWallet && s.wallet === searchedWallet;
+                            return (
+                                <tr key={s.wallet} className={isSearched ? styles.rowSearched : undefined}>
+                                    <td>{i + 1}</td>
+                                    <td>
+                                        {isForge ? (
+                                            <span className={styles.walletLink}>{shortWallet(s.wallet)}</span>
+                                        ) : (
+                                            <Link href={`/trader/${s.wallet}`} className={styles.walletLink}>
+                                                {shortWallet(s.wallet)}
+                                            </Link>
+                                        )}
+                                    </td>
+                                    <td>{stepCount}/{stepTotal}</td>
+                                </tr>
+                            );
+                        })}
+                        {showRow6 && searchedEntry && (
+                            <tr className={styles.rowSearched}>
+                                <td>{searchedRank}</td>
+                                <td>
+                                    {isForge ? (
+                                        <span className={styles.walletLink}>{shortWallet(searchedEntry.wallet)}</span>
+                                    ) : (
+                                        <Link href={`/trader/${searchedEntry.wallet}`} className={styles.walletLink}>
+                                            {shortWallet(searchedEntry.wallet)}
+                                        </Link>
+                                    )}
+                                </td>
+                                <td>
+                                    {(() => {
+                                        const d = searchedEntry.details as { stepCount?: number; stepCountTotal?: number } | null;
+                                        return `${d?.stepCount ?? Math.round(searchedEntry.score)}/${d?.stepCountTotal ?? '—'}`;
+                                    })()}
+                                </td>
+                            </tr>
+                        )}
+                    </tbody>
+                </table>
             )}
         </div>
     );

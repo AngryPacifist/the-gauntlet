@@ -496,6 +496,67 @@
     font-variant-numeric: tabular-nums;
 }
 
+/* Phase 8 item (c.5b): aggregated per-asset card in Quest Leaderboards Weekly tab */
+.lmAssetSplitGrid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-md);
+    padding: var(--space-md);
+}
+
+@media (max-width: 720px) {
+    .lmAssetSplitGrid {
+        grid-template-columns: 1fr;
+    }
+}
+
+.lmAssetSubBoard {
+    background: var(--bg-elevated);
+    border-radius: var(--radius-sm);
+    padding: var(--space-sm) var(--space-md);
+    border: 1px solid var(--border-default);
+}
+
+.lmAssetSubHeader {
+    font-size: 0.6875rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: var(--space-xs);
+}
+
+.lmAssetSubTable {
+    width: 100%;
+    font-size: 0.75rem;
+    border-collapse: collapse;
+}
+
+.lmAssetSubTable th {
+    text-align: left;
+    color: var(--text-muted);
+    font-weight: 500;
+    padding: 4px 6px;
+    border-bottom: 1px solid var(--border-default);
+}
+
+.lmAssetSubTable th:last-child,
+.lmAssetSubTable td:last-child {
+    text-align: right;
+}
+
+.lmAssetSubTable td {
+    padding: 4px 6px;
+    color: var(--text-secondary);
+}
+
+.noScoresText {
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    font-style: italic;
+    padding: var(--space-xs) 0;
+}
+
 .hbarHeader {
     display: flex;
     justify-content: space-between;
