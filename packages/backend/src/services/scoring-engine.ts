@@ -33,6 +33,9 @@ import type {
     TournamentConfig,
 } from '../types.js';
 import { DEFAULT_CPI_WEIGHTS } from '../types.js';
+// Round 2: single-source filter applied uniformly across all engines.
+// See services/scoring-filters.ts for full rationale.
+import { filterPositionsForScoring } from './scoring-filters.js';
 
 // --------------------------------------------------------------------------
 // Main entry point: compute CPI for one trader in one round
@@ -44,30 +47,11 @@ export function computeCPI(
     weights: CPIWeights = DEFAULT_CPI_WEIGHTS,
     config?: Partial<TournamentConfig>,
 ): CPIScores {
-    // Phase 4 item 29-engine: filter by assetList when populated.
-    // D5 fallback — undefined/empty = permissive (all symbols observed).
-    // D16 matching — prefer mint when present, fall back to symbol.
-    // Phase 8.p: canonicalize position.symbol to the matched config entry's
-    // symbol so the variety count below (line ~324) treats e.g. JitoSOL+SOL
-    // as a single asset for the tournament's purposes. Mirrors the
-    // category-engine.ts:filterByAssetList canonicalization.
-    let filtered: AdrenaPosition[];
-    if (config?.assetList?.length) {
-        filtered = [];
-        for (const p of positions) {
-            const match = config.assetList!.find((a) =>
-                a.mint ? p.token_account_mint === a.mint : p.symbol === a.symbol,
-            );
-            if (!match) continue;
-            const entryDate = p.entry_date.slice(0, 10); // YYYY-MM-DD
-            if (entryDate < match.joinedAt) continue;
-            filtered.push(
-                p.symbol === match.symbol ? p : { ...p, symbol: match.symbol },
-            );
-        }
-    } else {
-        filtered = positions;
-    }
+    // Round 2: single-source filter — assetList match + joinedAt + canonicalization
+    // + minPositionCollateral floor + minTradeDurationSec floor. Idempotent with
+    // tournament-manager.ts:469's filterValidPositions call (same coll+dur excluded
+    // by both layers).
+    const filtered = filterPositionsForScoring(positions, (config ?? {}) as TournamentConfig);
 
     // If trader has zero valid positions (post-filter), all scores are 0
     if (filtered.length === 0) {
@@ -488,24 +472,8 @@ export function computeCPIWithDetails(
     weights: CPIWeights = DEFAULT_CPI_WEIGHTS,
     config?: Partial<TournamentConfig>,
 ): { scores: CPIScores; details: CPIDetails } {
-    // Phase 8.p: canonicalize symbols (mirror of computeCPI's filter)
-    let filtered: AdrenaPosition[];
-    if (config?.assetList?.length) {
-        filtered = [];
-        for (const p of positions) {
-            const match = config.assetList!.find((a) =>
-                a.mint ? p.token_account_mint === a.mint : p.symbol === a.symbol,
-            );
-            if (!match) continue;
-            const entryDate = p.entry_date.slice(0, 10);
-            if (entryDate < match.joinedAt) continue;
-            filtered.push(
-                p.symbol === match.symbol ? p : { ...p, symbol: match.symbol },
-            );
-        }
-    } else {
-        filtered = positions;
-    }
+    // Round 2: single-source filter (mirror of computeCPI). See top of file.
+    const filtered = filterPositionsForScoring(positions, (config ?? {}) as TournamentConfig);
 
     if (filtered.length === 0) {
         return {

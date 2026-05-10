@@ -28,6 +28,12 @@ import type {
     TournamentConfig,
 } from '../types.js';
 import { DEFAULT_TOURNAMENT_CONFIG } from '../types.js';
+// Round 2: filter logic centralized in services/scoring-filters.ts.
+// `filterByAssetList` retained as a name for minimal callsite churn but
+// now delegates to the single-source helper which also applies
+// minPositionCollateral + minTradeDurationSec floors (closes the previous
+// asymmetry where category engines accepted positions that CPI rejected).
+import { filterPositionsForScoring as filterByAssetList } from './scoring-filters.js';
 
 // --------------------------------------------------------------------------
 // Constants: migrated to TournamentConfig (Phase 3 item 13 + item 17, 2026-04-22).
@@ -73,41 +79,6 @@ function filterPositionsForWindow(
         const entryDate = new Date(p.entry_date);
         return entryDate >= windowStart && entryDate <= windowEnd;
     });
-}
-
-/**
- * Phase 4 item 29-engine: filter positions by config.assetList.
- * D5 — undefined/empty assetList = permissive (unchanged behavior).
- * D16 — prefer mint match when present, fall back to symbol.
- *
- * Also applies per-asset joinedAt filter: a position is kept only if it was
- * opened on or after the asset's joinedAt date.
- */
-function filterByAssetList(
-    positions: AdrenaPosition[],
-    config: TournamentConfig,
-): AdrenaPosition[] {
-    if (!config.assetList?.length) return positions;
-    // Phase 8.p: canonicalize position.symbol to the matched assetList entry's
-    // symbol. Adrena returns raw token symbols (JitoSOL, WBTC, Bonk), but T1's
-    // config maps SOL→JitoSOL.mint, BTC→WBTC.mint, BONK→Bonk.mint (Phase 8.k.1).
-    // Without canonicalization, downstream OHLC lookup `ohlcData.get(p.symbol)`
-    // fails (cache is keyed by config.symbol) and Bottom Fisher / Top-Tick
-    // silently skip these positions. Non-mutating: clone via spread when symbol
-    // differs; pass through when already canonical.
-    const canonicalized: AdrenaPosition[] = [];
-    for (const p of positions) {
-        const match = config.assetList!.find((a) =>
-            a.mint ? p.token_account_mint === a.mint : p.symbol === a.symbol,
-        );
-        if (!match) continue;
-        const entryDate = p.entry_date.slice(0, 10); // YYYY-MM-DD
-        if (entryDate < match.joinedAt) continue;
-        canonicalized.push(
-            p.symbol === match.symbol ? p : { ...p, symbol: match.symbol },
-        );
-    }
-    return canonicalized;
 }
 
 /**
