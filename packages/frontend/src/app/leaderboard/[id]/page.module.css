@@ -1004,3 +1004,37 @@
         font-size: 1.25rem;
     }
 }
+
+/* ----------------------------------------------------------------------------
+   Round 2 (LM-2 + LM-3): compact badge cells per row in LM sub-leaderboard.
+   Gray-dominant by default (ZeDef's "what they are missing" preference);
+   completed cells get accent fill + color.
+   ---------------------------------------------------------------------------- */
+
+.lmBadgeRow {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 2px;
+}
+
+.lmBadgeCell {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 28px;
+    padding: 2px 5px;
+    border-radius: 3px;
+    border: 1px solid var(--border-default);
+    background: transparent;
+    color: var(--text-muted);
+    font-size: 0.6875rem;
+    font-family: var(--font-mono);
+    line-height: 1;
+}
+
+.lmBadgeCellDone {
+    border-color: #e84393;
+    background: rgba(232, 67, 147, 0.12);
+    color: #e84393;
+    font-weight: 600;
+}

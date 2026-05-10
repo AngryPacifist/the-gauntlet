@@ -13,12 +13,15 @@ import {
     getForgeLeaderboard,
     getWalletBreakdown,
     getDailyScores,
+    getLeverageMasterLeaderboard,
     registerWallet,
     type ForgeLeaderboard,
     type ForgeEntry,
     type WalletBreakdown,
     type DailyCategoryScore,
     type CategorySlug,
+    type LeverageMasterLeaderboard,
+    type LeverageMasterLeaderboardEntry,
 } from '@/lib/api';
 import { QUEST_DESCRIPTIONS, FF_DESCRIPTION, getLeverageMasterDescription, type QuestDescription } from '@/lib/quest-descriptions';
 import { CPI_DESCRIPTION } from '@/lib/cpi-description';
@@ -267,6 +270,10 @@ export default function LeaderboardPage({ params }: { params: Promise<{ id: stri
     const [questScores, setQuestScores] = useState<Map<string, DailyCategoryScore[]>>(new Map());
     const [questLoading, setQuestLoading] = useState(false);
     const [expandedRules, setExpandedRules] = useState<Set<string>>(new Set());
+    // Round 2 (LM-2 + LM-3): live LM leaderboard from quest_progress (not week-boundary).
+    // Replaces dailyCategoryScores dependency for the Quest Leaderboards Weekly tab so
+    // step progress shows mid-week — matches the c.5+a.2 expanded-row LM display.
+    const [lmLeaderboard, setLmLeaderboard] = useState<LeverageMasterLeaderboard | null>(null);
 
     // Registration modal state (Item 3)
     const [showRegModal, setShowRegModal] = useState(false);
@@ -309,11 +316,27 @@ export default function LeaderboardPage({ params }: { params: Promise<{ id: stri
         setQuestLoading(false);
     }, [tournamentId]);
 
+    // Round 2 (LM-2 + LM-3): fetch live LM leaderboard for the Weekly tab.
+    // Passes questDate so backend resolves the displayed week (supports the
+    // Weekly date navigator).
+    const loadLmLeaderboard = useCallback(async (date: string) => {
+        try {
+            const data = await getLeverageMasterLeaderboard(tournamentId, undefined, date);
+            setLmLeaderboard(data);
+        } catch {
+            setLmLeaderboard(null);
+        }
+    }, [tournamentId]);
+
     useEffect(() => {
         if (activeTab === 'quests') {
             loadQuestScores(questPeriod, questDate);
+            // Round 2: also fetch live LM leaderboard when Weekly tab is active.
+            if (questPeriod === 'weekly') {
+                loadLmLeaderboard(questDate);
+            }
         }
-    }, [activeTab, questPeriod, questDate, loadQuestScores]);
+    }, [activeTab, questPeriod, questDate, loadQuestScores, loadLmLeaderboard]);
 
     async function toggleExpand(wallet: string) {
         if (expandedWallet === wallet) {
@@ -510,6 +533,7 @@ export default function LeaderboardPage({ params }: { params: Promise<{ id: stri
                     onSearch={setSearchQuery}
                     searchedWallet={searchedWallet}
                     isForge={isForge}
+                    lmLeaderboard={lmLeaderboard}
                 />
             )}
 
@@ -950,12 +974,13 @@ interface QuestLeaderboardsProps {
     onSearch: (q: string) => void;
     searchedWallet: string | null;
     isForge: boolean;
+    lmLeaderboard: LeverageMasterLeaderboard | null;
 }
 
 function QuestLeaderboards({
     questPeriod, questDate, questScores, questLoading,
     expandedRules, assetList, onPeriodChange, onNavigateDate, onToggleRules, onJumpToToday,
-    searchQuery, onSearch, searchedWallet, isForge,
+    searchQuery, onSearch, searchedWallet, isForge, lmLeaderboard,
 }: QuestLeaderboardsProps) {
     const periodLabel = questPeriod === 'daily' ? `Day: ${questDate}`
         : questPeriod === '2day' ? `Window: ${questDate}`
@@ -1014,23 +1039,27 @@ function QuestLeaderboards({
                     Loading quest data...
                 </div>
             ) : questPeriod === 'weekly' && assetList?.length ? (
-                // Phase 8 item (c.5b): for the Weekly period, aggregate per-asset
-                // (LM Long + Short combined into one card per asset). Replaces
-                // the previous 12 cards (6 assets × 2 sides) with 6 cards.
-                assetList.map((asset) => (
-                    <LeverageMasterAssetCard
-                        key={asset.symbol}
-                        assetSymbol={asset.symbol}
-                        longScores={questScores.get(`leverage_master_${asset.symbol}_long` as CategorySlug) ?? []}
-                        shortScores={questScores.get(`leverage_master_${asset.symbol}_short` as CategorySlug) ?? []}
-                        isRulesExpanded={expandedRules.has(`leverage_master_${asset.symbol}`)}
-                        onToggleRules={() => onToggleRules(`leverage_master_${asset.symbol}`)}
-                        isForge={isForge}
-                        searchedWallet={searchedWallet}
-                        lmSteps={asset.lmSteps}
-                        lmTolerance={asset.lmTolerance}
-                    />
-                ))
+                // Phase 8 item (c.5b) + Round 2 (LM-2 + LM-3): aggregate per-asset
+                // cards. Round 2: data sourced from /api/quests/:tournamentId/leaderboard
+                // (live quest_progress) instead of getDailyScores (week-boundary
+                // dailyCategoryScores rows). Mid-week step progress now visible.
+                assetList.map((asset) => {
+                    const assetData = lmLeaderboard?.byAssetSide[asset.symbol];
+                    return (
+                        <LeverageMasterAssetCard
+                            key={asset.symbol}
+                            assetSymbol={asset.symbol}
+                            longEntries={assetData?.long ?? []}
+                            shortEntries={assetData?.short ?? []}
+                            isRulesExpanded={expandedRules.has(`leverage_master_${asset.symbol}`)}
+                            onToggleRules={() => onToggleRules(`leverage_master_${asset.symbol}`)}
+                            isForge={isForge}
+                            searchedWallet={searchedWallet}
+                            lmSteps={asset.lmSteps}
+                            lmTolerance={asset.lmTolerance}
+                        />
+                    );
+                })
             ) : (
                 getPeriodCategories(questPeriod, assetList).map((cat) => (
                     <CategoryLeaderboard
@@ -1208,8 +1237,8 @@ function CategoryLeaderboard({ category, scores, isRulesExpanded, onToggleRules,
 
 interface LeverageMasterAssetCardProps {
     assetSymbol: string;
-    longScores: DailyCategoryScore[];
-    shortScores: DailyCategoryScore[];
+    longEntries: LeverageMasterLeaderboardEntry[];
+    shortEntries: LeverageMasterLeaderboardEntry[];
     isRulesExpanded: boolean;
     onToggleRules: () => void;
     isForge: boolean;
@@ -1219,7 +1248,7 @@ interface LeverageMasterAssetCardProps {
 }
 
 function LeverageMasterAssetCard({
-    assetSymbol, longScores, shortScores,
+    assetSymbol, longEntries, shortEntries,
     isRulesExpanded, onToggleRules, isForge, searchedWallet,
     lmSteps, lmTolerance,
 }: LeverageMasterAssetCardProps) {
@@ -1249,13 +1278,15 @@ function LeverageMasterAssetCard({
             <div className={styles.lmAssetSplitGrid}>
                 <LeverageMasterSubLeaderboard
                     sideLabel="Long"
-                    scores={longScores}
+                    entries={longEntries}
+                    lmSteps={lmSteps}
                     isForge={isForge}
                     searchedWallet={searchedWallet}
                 />
                 <LeverageMasterSubLeaderboard
                     sideLabel="Short"
-                    scores={shortScores}
+                    entries={shortEntries}
+                    lmSteps={lmSteps}
                     isForge={isForge}
                     searchedWallet={searchedWallet}
                 />
@@ -1266,33 +1297,37 @@ function LeverageMasterAssetCard({
 
 interface LeverageMasterSubLeaderboardProps {
     sideLabel: 'Long' | 'Short';
-    scores: DailyCategoryScore[];
+    entries: LeverageMasterLeaderboardEntry[];
+    lmSteps?: number[];
     isForge: boolean;
     searchedWallet: string | null;
 }
 
+// Round 2 (LM-2 + LM-3): rewritten to consume LeverageMasterLeaderboardEntry
+// from /api/quests/:tournamentId/leaderboard. Adds Progress column with
+// gray-dominant badge cells per ZeDef's "what they are MISSING" preference
+// (un-completed steps visually emphasized; completed pop in accent color).
+// Plus Steps + Points columns matching ZeDef's mockup (B2-4).
 function LeverageMasterSubLeaderboard({
-    sideLabel, scores, isForge, searchedWallet,
+    sideLabel, entries, lmSteps, isForge, searchedWallet,
 }: LeverageMasterSubLeaderboardProps) {
-    const fullSorted = [...scores]
-        .filter((s) => !s.wallet.startsWith('__'))
-        .sort((a, b) => b.score - a.score);
-    const sorted = fullSorted.slice(0, 5);
-
+    const top5 = entries.slice(0, 5);
     const searchedEntry = searchedWallet
-        ? fullSorted.find((s) => s.wallet === searchedWallet)
+        ? entries.find((e) => e.wallet === searchedWallet) ?? null
         : null;
-    const searchedRank = searchedEntry ? fullSorted.indexOf(searchedEntry) + 1 : null;
-    const searchedInTop5 = searchedRank !== null && searchedRank <= 5;
-    const showRow6 = searchedWallet !== null && !searchedInTop5;
+    const searchedInTop5 = !!(searchedEntry && top5.some((e) => e.wallet === searchedEntry.wallet));
+    const showRow6 = searchedEntry !== null && !searchedInTop5;
 
-    // CSS strategy: scoped to `.lmAssetSubTable` parent — th/td alignment
-    // controlled by `:last-child` selector in CSS, not per-cell classes.
-    // Wallet column uses existing `.walletLink` for mono-font + dashed underline.
+    // Per-asset step labels (e.g., [10, 20, ..., 100] for crypto, [1.5, 2, ..., 4.5]
+    // for RWAs). Fallback to default crypto labels if lmSteps undefined (legacy).
+    const stepLabels = lmSteps && lmSteps.length > 0
+        ? lmSteps.map((v) => `${v}x`)
+        : Array.from({ length: 10 }, (_, i) => `${(i + 1) * 10}x`);
+
     return (
         <div className={styles.lmAssetSubBoard}>
             <div className={styles.lmAssetSubHeader}>{sideLabel}</div>
-            {sorted.length === 0 ? (
+            {top5.length === 0 ? (
                 <p className={styles.noScoresText}>No scores yet</p>
             ) : (
                 <table className={styles.lmAssetSubTable}>
@@ -1300,55 +1335,76 @@ function LeverageMasterSubLeaderboard({
                         <tr>
                             <th>#</th>
                             <th>Wallet</th>
+                            <th>Progress</th>
                             <th>Steps</th>
+                            <th>Points</th>
                         </tr>
                     </thead>
                     <tbody>
-                        {sorted.map((s, i) => {
-                            const detailsObj = s.details as { stepCount?: number; stepCountTotal?: number } | null;
-                            const stepCount = detailsObj?.stepCount ?? Math.round(s.score);
-                            const stepTotal = detailsObj?.stepCountTotal ?? '—';
-                            const isSearched = searchedWallet && s.wallet === searchedWallet;
-                            return (
-                                <tr key={s.wallet} className={isSearched ? styles.rowSearched : undefined}>
-                                    <td>{i + 1}</td>
-                                    <td>
-                                        {isForge ? (
-                                            <span className={styles.walletLink}>{shortWallet(s.wallet)}</span>
-                                        ) : (
-                                            <Link href={`/trader/${s.wallet}`} className={styles.walletLink}>
-                                                {shortWallet(s.wallet)}
-                                            </Link>
-                                        )}
-                                    </td>
-                                    <td>{stepCount}/{stepTotal}</td>
-                                </tr>
-                            );
-                        })}
+                        {top5.map((e) => (
+                            <LMRow
+                                key={e.wallet}
+                                entry={e}
+                                stepLabels={stepLabels}
+                                isForge={isForge}
+                                isSearched={searchedWallet === e.wallet}
+                            />
+                        ))}
                         {showRow6 && searchedEntry && (
-                            <tr className={styles.rowSearched}>
-                                <td>{searchedRank}</td>
-                                <td>
-                                    {isForge ? (
-                                        <span className={styles.walletLink}>{shortWallet(searchedEntry.wallet)}</span>
-                                    ) : (
-                                        <Link href={`/trader/${searchedEntry.wallet}`} className={styles.walletLink}>
-                                            {shortWallet(searchedEntry.wallet)}
-                                        </Link>
-                                    )}
-                                </td>
-                                <td>
-                                    {(() => {
-                                        const d = searchedEntry.details as { stepCount?: number; stepCountTotal?: number } | null;
-                                        return `${d?.stepCount ?? Math.round(searchedEntry.score)}/${d?.stepCountTotal ?? '—'}`;
-                                    })()}
-                                </td>
-                            </tr>
+                            <LMRow
+                                key={`searched-${searchedEntry.wallet}`}
+                                entry={searchedEntry}
+                                stepLabels={stepLabels}
+                                isForge={isForge}
+                                isSearched
+                            />
                         )}
                     </tbody>
                 </table>
             )}
         </div>
+    );
+}
+
+function LMRow({
+    entry, stepLabels, isForge, isSearched,
+}: {
+    entry: LeverageMasterLeaderboardEntry;
+    stepLabels: string[];
+    isForge: boolean;
+    isSearched: boolean;
+}) {
+    return (
+        <tr className={isSearched ? styles.rowSearched : undefined}>
+            <td>{entry.rank}</td>
+            <td>
+                {isForge ? (
+                    <span className={styles.walletLink}>{shortWallet(entry.wallet)}</span>
+                ) : (
+                    <Link href={`/trader/${entry.wallet}`} className={styles.walletLink}>
+                        {shortWallet(entry.wallet)}
+                    </Link>
+                )}
+            </td>
+            <td>
+                <div className={styles.lmBadgeRow}>
+                    {stepLabels.map((label, i) => {
+                        const completed = entry.stepsCompleted[i] === true;
+                        return (
+                            <span
+                                key={`${label}-${i}`}
+                                className={`${styles.lmBadgeCell} ${completed ? styles.lmBadgeCellDone : ''}`}
+                                title={`${label}${completed ? ' ✓' : ' (missing)'}`}
+                            >
+                                {label}
+                            </span>
+                        );
+                    })}
+                </div>
+            </td>
+            <td>{entry.stepCount}/{entry.stepTotal}</td>
+            <td>{entry.points > 0 ? entry.points.toFixed(2) : '—'}</td>
+        </tr>
     );
 }
 

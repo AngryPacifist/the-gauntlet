@@ -530,6 +530,40 @@ export async function getQuestProgress(
     return apiFetch<QuestProgressDetails>(url);
 }
 
+// Round 2 (LM-2 + LM-3): per-asset, per-side LM leaderboard from quest_progress
+// (live, not week-boundary). Backend at /api/quests/:tournamentId/leaderboard.
+export interface LeverageMasterLeaderboardEntry {
+    wallet: string;
+    stepCount: number;
+    stepTotal: number;
+    stepsCompleted: boolean[];
+    rank: number;
+    points: number;
+}
+
+export interface LeverageMasterLeaderboard {
+    weekNumber: number;
+    byAssetSide: Record<string, {
+        long: LeverageMasterLeaderboardEntry[];
+        short: LeverageMasterLeaderboardEntry[];
+    }>;
+}
+
+export async function getLeverageMasterLeaderboard(
+    tournamentId: number,
+    week?: number,
+    date?: string,
+): Promise<LeverageMasterLeaderboard> {
+    const params = new URLSearchParams();
+    if (week !== undefined) params.set('week', String(week));
+    else if (date) params.set('date', date);
+    const qs = params.toString();
+    const url = qs
+        ? `/api/quests/${tournamentId}/leaderboard?${qs}`
+        : `/api/quests/${tournamentId}/leaderboard`;
+    return apiFetch<LeverageMasterLeaderboard>(url);
+}
+
 // --- Raffle API Functions ---
 
 export interface RaffleResult {
