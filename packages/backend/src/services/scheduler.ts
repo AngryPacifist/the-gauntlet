@@ -180,25 +180,27 @@ async function scoreDailyCategories(): Promise<void> {
 
         if (activeTournaments.length === 0) return;
 
-        // Yesterday in UTC (the day that just ended at midnight)
         const now = new Date();
         const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-        const dateStr = yesterday.toISOString().slice(0, 10); // YYYY-MM-DD
-        // Phase 7.b D28: batch fetch moved INSIDE per-tournament loop below
-        // so each tournament passes its own assetList to fetchDailyOHLCBatch.
-        // pyth_ohlc_cache deduplicates redundant fetches across tournaments.
+        const yesterdayStr = yesterday.toISOString().slice(0, 10);
+
+        // Round 2: rolling re-score window. Each midnight tick scores yesterday
+        // (canonical) + yesterday-1 + yesterday-2 (rescore). Catches cross-day
+        // closes whose entry-day daily-category attribution would otherwise
+        // be missed (entry-day finalized when the trade was still open). Replaces
+        // the manual `_backfill-t1-categories.ts` workflow with an automated
+        // 3-day rolling window. Days older than 3 are not rescored — diminishing
+        // returns vs cost.
+        const datesToScore: Date[] = [
+            new Date(yesterday.getTime() - 2 * 24 * 60 * 60 * 1000),  // yesterday-2
+            new Date(yesterday.getTime() - 1 * 24 * 60 * 60 * 1000),  // yesterday-1
+            yesterday,                                                  // canonical
+        ];
 
         for (const tournament of activeTournaments) {
-            console.log(
-                `[Scheduler] Computing daily category scores for tournament ${tournament.id} ` +
-                `on ${dateStr}`,
-            );
-
             // Phase 3: resolve config once per tournament for engine threading
             const config = resolveConfig(tournament.config);
-
-            // Phase 7.b D28: per-tournament daily OHLC batch (moved from outside loop)
-            const ohlcData = await fetchDailyOHLCBatch(dateStr, config.assetList);
+            const seasonId = tournament.seasonId ?? null;
 
             // Get all registered wallets
             const regs = await db
@@ -208,7 +210,8 @@ async function scoreDailyCategories(): Promise<void> {
 
             if (regs.length === 0) continue;
 
-            // Fetch positions for all wallets
+            // Fetch positions ONCE per tournament (positions are wallet-keyed,
+            // not date-keyed). Reused across all 3 date scoring passes.
             const walletPositions = new Map<string, AdrenaPosition[]>();
             for (const reg of regs) {
                 try {
@@ -222,44 +225,8 @@ async function scoreDailyCategories(): Promise<void> {
                 }
             }
 
-            // --- Daily Categories: All Around + Fisher (Bottom Fisher = longs, Top-Tick = shorts) ---
-
-            const allAroundRows: CategoryScoreRow[] = [];
-            for (const [wallet, positions] of walletPositions) {
-                const details = computeAllAroundScore(positions, dateStr, config);
-                allAroundRows.push({
-                    wallet, category: 'all_around',
-                    score: details.totalPoints, details,
-                });
-            }
-
-            const fisherResults = computeFisherScores(walletPositions, dateStr, ohlcData, config);
-            const bottomFisherRows: CategoryScoreRow[] = [];
-            const topTickRows: CategoryScoreRow[] = [];
-
-            for (const [wallet, details] of fisherResults) {
-                bottomFisherRows.push({
-                    wallet, category: 'bottom_fisher',
-                    score: details.longPoints,
-                    details: { longEntry: details.longEntry, totalPoints: details.longPoints },
-                });
-                topTickRows.push({
-                    wallet, category: 'top_tick_traveler',
-                    score: details.shortPoints,
-                    details: { shortEntry: details.shortEntry, totalPoints: details.shortPoints },
-                });
-            }
-
-            // Persist daily scores
-            const seasonId = tournament.seasonId ?? null;
-            await saveDailyCategoryScores(
-                tournament.id, seasonId, dateStr,
-                [...allAroundRows, ...topTickRows, ...bottomFisherRows],
-            );
-
-            // --- 2-Day Engagement Categories: Risk Manager + Humble One ---
-
-            // Determine the tournament's actual trading start date (first round startTime)
+            // Determine tournament trading start (anchors quest week + skips
+            // pre-tournament dates in the rolling window)
             const [firstRound] = await db
                 .select({ startTime: rounds.startTime })
                 .from(rounds)
@@ -269,53 +236,101 @@ async function scoreDailyCategories(): Promise<void> {
                 ))
                 .orderBy(asc(rounds.startTime))
                 .limit(1);
+            if (!firstRound) continue;
+            const tradingStart = new Date(firstRound.startTime);
+            tradingStart.setUTCHours(0, 0, 0, 0);
 
-            if (firstRound) {
-                // Phase 8.o: 2-day scoring (Risk Manager + Humble One) moved to
-                // hourly job exclusively. Eliminates midnight/hourly race at 00:00
-                // UTC and lets provisional odd-day rows surface trader actions
-                // every day. Authoritative even-day writes upsert provisional
-                // odd-day rows via shared scoreDate=windowStart. Daily categories
-                // (All Around, Fisher) keep midnight scoring with finalized OHLC.
+            // --- Daily Categories: rolling 3-day rescore window ---
+            for (const date of datesToScore) {
+                if (date < tradingStart) continue;  // skip pre-tournament dates
+                const dateStr = date.toISOString().slice(0, 10);
+                const isCanonical = date.getTime() === yesterday.getTime();
 
-                // --- Leverage Master Quest Progress ---
-                // Evaluate quest progress for each wallet (runs daily, updates cumulative steps)
-                const weekInfo = computeCurrentQuestWeek(firstRound.startTime, dateStr);
-                if (weekInfo) {
-                    for (const [wallet, positions] of walletPositions) {
-                        await evaluateLeverageProgress(
-                            tournament.id, wallet, positions,
-                            weekInfo.weekNumber, weekInfo.weekStart, weekInfo.weekEnd,
-                            config,
-                        );
-                    }
+                console.log(
+                    `[Scheduler] Computing daily category scores for tournament ${tournament.id} ` +
+                    `on ${dateStr}${isCanonical ? '' : ' (rolling rescore)'}`,
+                );
 
-                    // At week boundary (last day of quest week), compute leaderboard scores
-                    if (weekInfo.isLastDay) {
-                        const seasonId = tournament.seasonId ?? null;
-                        await computeLeverageMasterLeaderboard(
-                            tournament.id, weekInfo.weekNumber, dateStr, config, seasonId,
-                        );
-                    }
+                // Phase 7.b D28: per-tournament daily OHLC batch
+                const ohlcData = await fetchDailyOHLCBatch(dateStr, config.assetList);
+
+                // All Around
+                const allAroundRows: CategoryScoreRow[] = [];
+                for (const [wallet, positions] of walletPositions) {
+                    const details = computeAllAroundScore(positions, dateStr, config);
+                    allAroundRows.push({
+                        wallet, category: 'all_around',
+                        score: details.totalPoints, details,
+                    });
+                }
+
+                // Fisher (Bottom Fisher = longs, Top-Tick = shorts)
+                const fisherResults = computeFisherScores(walletPositions, dateStr, ohlcData, config);
+                const bottomFisherRows: CategoryScoreRow[] = [];
+                const topTickRows: CategoryScoreRow[] = [];
+                for (const [wallet, details] of fisherResults) {
+                    bottomFisherRows.push({
+                        wallet, category: 'bottom_fisher',
+                        score: details.longPoints,
+                        details: { longEntry: details.longEntry, totalPoints: details.longPoints },
+                    });
+                    topTickRows.push({
+                        wallet, category: 'top_tick_traveler',
+                        score: details.shortPoints,
+                        details: { shortEntry: details.shortEntry, totalPoints: details.shortPoints },
+                    });
+                }
+
+                await saveDailyCategoryScores(
+                    tournament.id, seasonId, dateStr,
+                    [...allAroundRows, ...topTickRows, ...bottomFisherRows],
+                );
+
+                // Award daily-category season points only on the canonical
+                // (yesterday) pass. Sentinel rows in season-manager.ts:619-638
+                // already enforce single-award per (tournament, scoreDate), so
+                // this is defense-in-depth — also keeps log noise down on
+                // rescore passes.
+                if (isCanonical && seasonId !== null) {
+                    await awardDailyFisherPoints(tournament.id, seasonId, dateStr);
+                    await awardDailyAllAroundPoints(tournament.id, seasonId, dateStr);
                 }
             }
 
-            // Award daily category season points if this tournament belongs to a season
-            if (seasonId !== null) {
-                await awardDailyFisherPoints(tournament.id, seasonId, dateStr);
-                await awardDailyAllAroundPoints(tournament.id, seasonId, dateStr);
+            // --- LM Quest Progress + week-boundary leaderboard ---
+            // LM block runs ONCE per tick (not per date) — quest_progress is
+            // week-keyed not date-keyed. evaluateLeverageProgress is idempotent
+            // (only flips stepsCompleted false→true). isLastDay anchored to
+            // yesterday (canonical) per existing semantics.
+            const weekInfo = computeCurrentQuestWeek(firstRound.startTime, yesterdayStr);
+            if (weekInfo) {
+                for (const [wallet, positions] of walletPositions) {
+                    await evaluateLeverageProgress(
+                        tournament.id, wallet, positions,
+                        weekInfo.weekNumber, weekInfo.weekStart, weekInfo.weekEnd,
+                        config,
+                    );
+                }
+                if (weekInfo.isLastDay) {
+                    await computeLeverageMasterLeaderboard(
+                        tournament.id, weekInfo.weekNumber, yesterdayStr, config, seasonId,
+                    );
+                }
+            }
 
-                // Phase 8.o: 2-day season points key on windowStart (odd-day anchor)
-                // and only fire on even-day window completion. Reads humble_one /
-                // risk_manager rows that the hourly job authoritatively wrote during
-                // the day that just ended (yesterday=even). dateStr=yesterday;
-                // windowStart=yesterday-1 (the odd-day windowStart).
+            // --- 2-Day Engagement Categories: Risk Manager + Humble One ---
+            // Phase 8.o: 2-day scoring moved to hourly job exclusively. Hourly
+            // already rescores RM/HO every hour against current positions, so
+            // cross-day closes get attributed implicitly without a separate
+            // rolling window here.
+
+            // Phase 8.o: 2-day season points key on windowStart (odd-day anchor)
+            // and only fire on even-day window completion (canonical pass only).
+            if (seasonId !== null) {
                 const tournamentConfig = tournament.config as Record<string, unknown>;
-                if (tournamentConfig?.award2DayCategorySeasonPoints && firstRound) {
-                    const tradingStartDate = new Date(firstRound.startTime);
-                    tradingStartDate.setUTCHours(0, 0, 0, 0);
+                if (tournamentConfig?.award2DayCategorySeasonPoints) {
                     const daysSinceStart = Math.floor(
-                        (yesterday.getTime() - tradingStartDate.getTime()) / (24 * 60 * 60 * 1000),
+                        (yesterday.getTime() - tradingStart.getTime()) / (24 * 60 * 60 * 1000),
                     );
                     const dayNumber = daysSinceStart + 1;
                     if (dayNumber >= 2 && dayNumber % 2 === 0) {
@@ -328,7 +343,7 @@ async function scoreDailyCategories(): Promise<void> {
 
             console.log(
                 `[Scheduler] Daily categories scored for tournament ${tournament.id}: ` +
-                `${walletPositions.size} wallets`,
+                `${walletPositions.size} wallets across ${datesToScore.length} dates (rolling)`,
             );
         }
     } catch (error) {
