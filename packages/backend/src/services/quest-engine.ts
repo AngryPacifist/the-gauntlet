@@ -40,9 +40,14 @@ import { DEFAULT_TOURNAMENT_CONFIG } from '../types.js';
 // --------------------------------------------------------------------------
 
 /**
- * Leverage step windows: ±2x tolerance per step.
- * Step 100 is capped at protocol max (100x).
+ * Leverage step windows: ±2x tolerance per step uniformly.
  * No overlap between consecutive steps (gap = 6x between windows).
+ *
+ * Round 2: step 100 max relaxed from 100 → 102 to match the ±2 tolerance
+ * applied to every other rung. Adrena's protocol max is 100x but reported
+ * `entry_leverage` drifts slightly above 100x due to fee/calculation
+ * precision after entry; trader intent at 100x should not be rejected
+ * for sub-2x precision noise.
  */
 export const LEVERAGE_STEPS: LeverageStep[] = [
     { step: 10,  min: 8,   max: 12  },
@@ -54,7 +59,7 @@ export const LEVERAGE_STEPS: LeverageStep[] = [
     { step: 70,  min: 68,  max: 72  },
     { step: 80,  min: 78,  max: 82  },
     { step: 90,  min: 88,  max: 92  },
-    { step: 100, min: 98,  max: 100 },  // capped at Adrena protocol max
+    { step: 100, min: 98,  max: 102 },  // ±2 tolerance like every other rung
 ];
 
 // Phase 7.a: build LeverageStep[] from per-asset values + tolerance.
