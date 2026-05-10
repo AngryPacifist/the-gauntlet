@@ -130,7 +130,7 @@ export function getLeverageMasterDescription(
         description:
             `Leverage Master (${sideLabel}) is a weekly per-asset progression quest. Open qualifying ${sideArticle} positions ` +
             `at increasing leverage tiers — ${ladderRange} ${assetScope}. ` +
-            `Each step requires a position at or above the tier's leverage. ` +
+            `Each step requires a position WITHIN the tier's leverage window (±tolerance — see Steps below). ` +
             `Completing the full ladder on a single asset earns that asset's share of the weekly LM ceiling; ` +
             `maxing LM overall requires topping ladders on every supported asset.`,
         rules: [
