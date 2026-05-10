@@ -778,7 +778,7 @@ export default function AdminTournamentsPage() {
                                         </button>
                                     )}
                                     <button className="btn btn--secondary" onClick={() => { setCategoryTournamentId(t.id); setShowCategoryModal(true); }} disabled={actionLoading}>
-                                        <CalendarDays size={14} /> Categories
+                                        <CalendarDays size={14} /> Score Categories
                                     </button>
                                     <button className="btn btn--secondary" onClick={() => handleComputeRaffle(t.id, t.name)} disabled={actionLoading}>
                                         <Ticket size={14} /> Compute Raffle
