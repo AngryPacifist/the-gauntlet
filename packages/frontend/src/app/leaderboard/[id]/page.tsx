@@ -534,6 +534,7 @@ export default function LeaderboardPage({ params }: { params: Promise<{ id: stri
                     searchedWallet={searchedWallet}
                     isForge={isForge}
                     lmLeaderboard={lmLeaderboard}
+                    tournamentStatus={data.tournament.status}
                 />
             )}
 
@@ -975,18 +976,24 @@ interface QuestLeaderboardsProps {
     searchedWallet: string | null;
     isForge: boolean;
     lmLeaderboard: LeverageMasterLeaderboard | null;
+    tournamentStatus: string;
 }
 
 function QuestLeaderboards({
     questPeriod, questDate, questScores, questLoading,
     expandedRules, assetList, onPeriodChange, onNavigateDate, onToggleRules, onJumpToToday,
-    searchQuery, onSearch, searchedWallet, isForge, lmLeaderboard,
+    searchQuery, onSearch, searchedWallet, isForge, lmLeaderboard, tournamentStatus,
 }: QuestLeaderboardsProps) {
     const periodLabel = questPeriod === 'daily' ? `Day: ${questDate}`
         : questPeriod === '2day' ? `Window: ${questDate}`
         : `Week: ${questDate}`;
 
     const isToday = questDate === todayUTC();
+    // Chip says LIVE only when the date is today AND the tournament is still
+    // scoring. Without this status gate, the chip kept saying LIVE on today's
+    // view even after a tournament went 'completed' (scheduler scoring stops
+    // on status flip; chip was unaware).
+    const isLive = isToday && tournamentStatus === 'active';
 
     return (
         <>
@@ -1015,8 +1022,8 @@ function QuestLeaderboards({
                     <span className={styles.dateLabel}>
                         {periodLabel}
                         {questDate <= todayUTC() && (
-                            <span className={`${styles.dateChip} ${isToday ? styles.dateChipLive : styles.dateChipFinal}`}>
-                                {isToday ? 'LIVE' : 'FINAL'}
+                            <span className={`${styles.dateChip} ${isLive ? styles.dateChipLive : styles.dateChipFinal}`}>
+                                {isLive ? 'LIVE' : 'FINAL'}
                             </span>
                         )}
                     </span>
