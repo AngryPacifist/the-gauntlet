@@ -13,11 +13,11 @@
 
 import { eq, and, desc, asc } from 'drizzle-orm';
 import { db } from '../db/index.js';
-import { raffleResults, raffleDraws } from '../db/schema.js';
+import { raffleResults, raffleDraws, tournaments } from '../db/schema.js';
 import { computeFinalScores } from './final-score.js';
 import { AdrenaClient } from './adrena-client.js';
 import type { TournamentConfig } from '../types.js';
-import { DEFAULT_TOURNAMENT_CONFIG } from '../types.js';
+import { DEFAULT_TOURNAMENT_CONFIG, resolveConfig } from '../types.js';
 
 // --------------------------------------------------------------------------
 // Constants: migrated to TournamentConfig (Phase 3 items 17 + 26, 2026-04-22).
@@ -226,11 +226,26 @@ export async function executeDeterministicDraw(
         );
     }
 
-    // Read eligible entries (not top 30%, tickets > 0)
+    // Fetch tournament config for minClosedPositions threshold. Previously
+    // only enforced at computeAllTickets time → "eligible" count displayed
+    // by admin UI diverged from actual draw pool size. Engine docstring at
+    // top of file claims "≥10 closed positions"; pool filter now matches.
+    const [tournament] = await db
+        .select({ config: tournaments.config })
+        .from(tournaments)
+        .where(eq(tournaments.id, tournamentId))
+        .limit(1);
+    if (!tournament) throw new Error(`Tournament ${tournamentId} not found`);
+    const config = resolveConfig(tournament.config);
+    const minClosed = config.raffleMinClosedPositions
+        ?? DEFAULT_TOURNAMENT_CONFIG.raffleMinClosedPositions;
+
+    // Read eligible entries (not top 30%, tickets > 0, closedPos >= minClosed)
     const eligible = await db
         .select({
             wallet: raffleResults.wallet,
             ticketCount: raffleResults.ticketCount,
+            closedPositionCount: raffleResults.closedPositionCount,
         })
         .from(raffleResults)
         .where(and(
@@ -239,8 +254,11 @@ export async function executeDeterministicDraw(
         ))
         .orderBy(asc(raffleResults.wallet));
 
-    // Filter to entries with actual tickets
-    const pool = eligible.filter(e => e.ticketCount > 0);
+    // Filter: tickets > 0 AND closedPos >= minClosed (matches computeAllTickets
+    // "eligible" definition + engine docstring claim).
+    const pool = eligible.filter(e =>
+        e.ticketCount > 0 && e.closedPositionCount >= minClosed,
+    );
 
     if (pool.length === 0) {
         console.log(`[RaffleEngine] No eligible entries for draw in tournament ${tournamentId}`);
