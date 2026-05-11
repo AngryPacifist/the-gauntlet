@@ -11,6 +11,7 @@
 import { useState, useEffect, use, useCallback, useMemo } from 'react';
 import {
     getForgeLeaderboard,
+    getTournament,
     getWalletBreakdown,
     getDailyScores,
     getLeverageMasterLeaderboard,
@@ -22,6 +23,7 @@ import {
     type CategorySlug,
     type LeverageMasterLeaderboard,
     type LeverageMasterLeaderboardEntry,
+    type TournamentState,
 } from '@/lib/api';
 import { QUEST_DESCRIPTIONS, FF_DESCRIPTION, getLeverageMasterDescription, type QuestDescription } from '@/lib/quest-descriptions';
 import { CPI_DESCRIPTION } from '@/lib/cpi-description';
@@ -254,6 +256,11 @@ export default function LeaderboardPage({ params }: { params: Promise<{ id: stri
     const tournamentId = parseInt(resolvedParams.id, 10);
 
     const [data, setData] = useState<ForgeLeaderboard | null>(null);
+    // Round 3 nav-cap: tournamentState fetched in parallel with the forge leaderboard
+    // for completed/cancelled tournaments — its rounds[].endTime drives the
+    // Quest-Leaderboards date-navigator cap so users don't land on / navigate to
+    // post-tournament dates that show empty or partial-day data.
+    const [tournamentState, setTournamentState] = useState<TournamentState | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [activeTab, setActiveTab] = useState<PageTab>('general');
@@ -284,8 +291,16 @@ export default function LeaderboardPage({ params }: { params: Promise<{ id: stri
     useEffect(() => {
         async function load() {
             try {
-                const result = await getForgeLeaderboard(tournamentId);
+                // Parallel-fetch the forge leaderboard + tournament state (rounds[].endTime
+                // powers the post-completion date-navigator cap; the second fetch is fire-and-
+                // forget for active tournaments and just slightly delays the page render for
+                // completed ones). Promise.all so a single network roundtrip in practice.
+                const [result, tstate] = await Promise.all([
+                    getForgeLeaderboard(tournamentId),
+                    getTournament(tournamentId),
+                ]);
                 setData(result);
+                setTournamentState(tstate);
             } catch (err) {
                 setError(err instanceof Error ? err.message : 'Failed to load leaderboard');
             } finally {
@@ -294,6 +309,32 @@ export default function LeaderboardPage({ params }: { params: Promise<{ id: stri
         }
         load();
     }, [tournamentId]);
+
+    // Round 3 nav-cap: the max date the Quest-Leaderboards navigator should allow.
+    // For active tournaments: today (existing behavior). For completed/cancelled:
+    // (round endTime UTC date - 1 day) = last full UTC day of trading. Hides
+    // partial-end-day fragments + empty Week N+1 from the navigator entirely.
+    const maxQuestDate = useMemo(() => {
+        const today = todayUTC();
+        if (!tournamentState) return today;
+        const status = tournamentState.status;
+        if (status !== 'completed' && status !== 'cancelled') return today;
+        const mainRound = tournamentState.rounds.find((r) => r.type === 'main');
+        if (!mainRound) return today;
+        const endDate = new Date(mainRound.endTime);
+        endDate.setUTCDate(endDate.getUTCDate() - 1);
+        return formatDate(endDate);
+    }, [tournamentState]);
+
+    // Snap initial questDate to the cap when the tournament-state load reveals
+    // a completed/cancelled tournament. Only fires once on the null → loaded
+    // transition so user navigation isn't overridden afterward.
+    useEffect(() => {
+        if (tournamentState && maxQuestDate < todayUTC()) {
+            setQuestDate(maxQuestDate);
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [tournamentState]);
 
     const loadQuestScores = useCallback(async (period: QuestPeriod, date: string) => {
         setQuestLoading(true);
@@ -375,12 +416,12 @@ export default function LeaderboardPage({ params }: { params: Promise<{ id: stri
         const step = questPeriod === 'weekly' ? 7 : questPeriod === '2day' ? 2 : 1;
         setQuestDate((prev) => {
             const next = stepDate(prev, direction * step);
-            return next > todayUTC() ? todayUTC() : next;
+            return next > maxQuestDate ? maxQuestDate : next;
         });
     }
 
     function jumpToToday() {
-        setQuestDate(todayUTC());
+        setQuestDate(maxQuestDate);
     }
 
     async function handleRegister(e: React.FormEvent) {
@@ -535,6 +576,7 @@ export default function LeaderboardPage({ params }: { params: Promise<{ id: stri
                     isForge={isForge}
                     lmLeaderboard={lmLeaderboard}
                     tournamentStatus={data.tournament.status}
+                    maxQuestDate={maxQuestDate}
                 />
             )}
 
@@ -977,12 +1019,13 @@ interface QuestLeaderboardsProps {
     isForge: boolean;
     lmLeaderboard: LeverageMasterLeaderboard | null;
     tournamentStatus: string;
+    maxQuestDate: string;
 }
 
 function QuestLeaderboards({
     questPeriod, questDate, questScores, questLoading,
     expandedRules, assetList, onPeriodChange, onNavigateDate, onToggleRules, onJumpToToday,
-    searchQuery, onSearch, searchedWallet, isForge, lmLeaderboard, tournamentStatus,
+    searchQuery, onSearch, searchedWallet, isForge, lmLeaderboard, tournamentStatus, maxQuestDate,
 }: QuestLeaderboardsProps) {
     const periodLabel = questPeriod === 'daily' ? `Day: ${questDate}`
         : questPeriod === '2day' ? `Window: ${questDate}`
@@ -994,6 +1037,12 @@ function QuestLeaderboards({
     // view even after a tournament went 'completed' (scheduler scoring stops
     // on status flip; chip was unaware).
     const isLive = isToday && tournamentStatus === 'active';
+    // Round 3 nav-cap: for completed/cancelled tournaments the rightmost
+    // reachable date is maxQuestDate (= round endDate - 1 day). For active
+    // tournaments maxQuestDate === todayUTC() so semantics are unchanged.
+    const isAtMax = questDate === maxQuestDate;
+    const isCompleted = tournamentStatus === 'completed' || tournamentStatus === 'cancelled';
+    const todayBtnLabel = isCompleted ? 'Latest' : 'Today';
 
     return (
         <>
@@ -1032,11 +1081,11 @@ function QuestLeaderboards({
                     </button>
                     <button
                         onClick={onJumpToToday}
-                        disabled={isToday}
-                        title={isToday ? 'Already on today' : 'Jump to today'}
+                        disabled={isAtMax}
+                        title={isAtMax ? `Already on ${todayBtnLabel.toLowerCase()}` : `Jump to ${todayBtnLabel.toLowerCase()}`}
                         className={styles.todayBtn}
                     >
-                        Today
+                        {todayBtnLabel}
                     </button>
                 </div>
             </div>
