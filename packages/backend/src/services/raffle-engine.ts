@@ -326,12 +326,26 @@ export async function verifyDraw(
         return { verified: false, mismatches: ['No draw found for this tournament'], drawId: null };
     }
 
+    // Fetch tournament config for minClosedPositions threshold. Pool filter
+    // must mirror executeDeterministicDraw exactly — otherwise replay uses a
+    // wider pool than the live draw and verification fails deterministically.
+    const [tournament] = await db
+        .select({ config: tournaments.config })
+        .from(tournaments)
+        .where(eq(tournaments.id, tournamentId))
+        .limit(1);
+    if (!tournament) throw new Error(`Tournament ${tournamentId} not found`);
+    const config = resolveConfig(tournament.config);
+    const minClosed = config.raffleMinClosedPositions
+        ?? DEFAULT_TOURNAMENT_CONFIG.raffleMinClosedPositions;
+
     // Re-read the eligible pool as it existed at draw time
     // (raffle_results should not have changed since draw)
     const eligible = await db
         .select({
             wallet: raffleResults.wallet,
             ticketCount: raffleResults.ticketCount,
+            closedPositionCount: raffleResults.closedPositionCount,
         })
         .from(raffleResults)
         .where(and(
@@ -340,7 +354,10 @@ export async function verifyDraw(
         ))
         .orderBy(asc(raffleResults.wallet));
 
-    const pool = eligible.filter(e => e.ticketCount > 0);
+    // Same tri-condition filter as executeDeterministicDraw
+    const pool = eligible.filter(e =>
+        e.ticketCount > 0 && e.closedPositionCount >= minClosed,
+    );
 
     // Re-run the PRNG with the stored seed
     const rng = mulberry32(draw.seed);
