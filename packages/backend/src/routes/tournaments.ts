@@ -1,13 +1,14 @@
 // ============================================================================
 // Tournament API Routes
 //
-// POST   /api/tournaments             — Create a new tournament (admin-protected)
-// GET    /api/tournaments             — List all tournaments
-// GET    /api/tournaments/:id         — Get tournament state
-// PUT    /api/tournaments/:id         — Update tournament (admin, registration only)
-// DELETE /api/tournaments/:id         — Delete tournament (admin, full cascade)
+// POST   /api/tournaments              — Create a new tournament (admin-protected)
+// GET    /api/tournaments              — List all tournaments
+// GET    /api/tournaments/:id          — Get tournament state
+// PUT    /api/tournaments/:id          — Update tournament (admin, registration only)
+// DELETE /api/tournaments/:id          — Delete tournament (admin, full cascade)
 // GET    /api/tournaments/:id/brackets — Get all brackets for active round
-// GET    /api/tournaments/:id/forge   — The Forge merged leaderboard
+// GET    /api/tournaments/:id/forge    — The Forge merged leaderboard
+// GET    /api/tournaments/:id/payouts  — Final payout list (skill + raffle), for external distribution systems (e.g. MrRewards)
 // ============================================================================
 
 import { Router } from 'express';
@@ -16,9 +17,28 @@ import {
     getTournamentState,
 } from '../services/tournament-manager.js';
 import { db } from '../db/index.js';
-import { tournaments, rounds, brackets, bracketEntries, registrations, scoreSnapshots, dailyCategoryScores } from '../db/schema.js';
-import { eq, desc, inArray } from 'drizzle-orm';
-import type { TournamentConfig } from '../types.js';
+import { tournaments, rounds, brackets, bracketEntries, registrations, scoreSnapshots, dailyCategoryScores, raffleResults, raffleDraws } from '../db/schema.js';
+import { eq, desc, asc, and, inArray } from 'drizzle-orm';
+import { resolveConfig, type TournamentConfig } from '../types.js';
+
+// Phase 8.q geometric-decay extension (mirrors FE prizesByRank in
+// leaderboard/[id]/page.tsx). When K (top% wallet count) exceeds the
+// configured skillPrizes.length, extend the curve so every slot pays out.
+function extendSkillPrizes(skillPrizes: number[], K: number): number[] {
+    if (K <= skillPrizes.length) return skillPrizes;
+    if (skillPrizes.length === 0) return [];
+    const len = skillPrizes.length;
+    const tail2 = skillPrizes[len - 1];
+    const tail1 = len >= 2 ? skillPrizes[len - 2] : tail2 * 2;
+    const rawRatio = tail1 > 0 ? tail2 / tail1 : 0.5;
+    const decayRatio = Math.min(Math.max(rawRatio, 0), 1);
+    const extended = [...skillPrizes];
+    while (extended.length < K) {
+        const next = extended[extended.length - 1] * decayRatio;
+        extended.push(Math.max(next, 1));
+    }
+    return extended;
+}
 
 const router = Router();
 
@@ -415,6 +435,160 @@ router.get('/:id/forge', async (req, res) => {
         });
     } catch (error) {
         console.error('[API] Error getting forge leaderboard:', error);
+        res.status(500).json({
+            success: false,
+            error: error instanceof Error ? error.message : 'Internal server error',
+        });
+    }
+});
+
+// GET /api/tournaments/:id/payouts
+// Returns the final payout list for a tournament — skill prizes + raffle
+// winners with their ADX amounts. Designed for external distribution
+// systems (e.g., MrRewards / Adrena Prize Distribution worker) to ingest
+// the determinate result post-tournament.
+//
+// Data is computed on-demand from raffle_results (skill rank order by
+// finalScore DESC) + raffle_draws latest row (raffle winner array order).
+// Pro-rata scale via Phase 8.q extension when K > skillPrizes.length.
+//
+// Response includes `complete: boolean` — true only when tournament status
+// is 'completed' AND payout rows exist. Clients can poll this and act
+// when complete flips to true.
+router.get('/:id/payouts', async (req, res) => {
+    try {
+        const tournamentId = parseInt(req.params.id, 10);
+        if (isNaN(tournamentId)) {
+            res.status(400).json({ success: false, error: 'Invalid tournament ID' });
+            return;
+        }
+
+        const [t] = await db
+            .select()
+            .from(tournaments)
+            .where(eq(tournaments.id, tournamentId))
+            .limit(1);
+        if (!t) {
+            res.status(404).json({ success: false, error: 'Tournament not found' });
+            return;
+        }
+
+        const config = resolveConfig(t.config);
+        const prizeTable = config.prizeTable;
+        if (!prizeTable) {
+            res.json({
+                success: true,
+                data: {
+                    tournamentId,
+                    status: t.status,
+                    complete: false,
+                    reason: 'no prize table configured',
+                    rows: [],
+                },
+            });
+            return;
+        }
+
+        const skillPrizes = prizeTable.skillPrizes;
+        const rafflePrizes = prizeTable.rafflePrizes;
+
+        // Top% wallets ranked by finalScore DESC, wallet ASC (mirrors raffle-engine).
+        const topPercentRows = await db
+            .select()
+            .from(raffleResults)
+            .where(and(
+                eq(raffleResults.tournamentId, tournamentId),
+                eq(raffleResults.isTopPercent, true),
+            ))
+            .orderBy(desc(raffleResults.finalScore), asc(raffleResults.wallet));
+
+        const K = topPercentRows.length;
+        const extendedSkill = extendSkillPrizes(skillPrizes, K);
+        const totalSkillPool = skillPrizes.reduce((a, b) => a + b, 0);
+        const usedWeights = extendedSkill.slice(0, K).reduce((a, b) => a + b, 0);
+        const proRataScale = usedWeights > 0 ? totalSkillPool / usedWeights : 1;
+
+        type PayoutRow = {
+            wallet: string;
+            amountADX: number;
+            category: 'skill' | 'raffle';
+            rank: number | null;
+            drawPosition: number | null;
+        };
+        const rows: PayoutRow[] = [];
+
+        // Competition ranking — wallets tied at the same finalScore share a rank.
+        let prevScore = Number.POSITIVE_INFINITY;
+        let currentRank = 0;
+        for (let i = 0; i < topPercentRows.length; i++) {
+            const r = topPercentRows[i];
+            if (r.finalScore !== prevScore) currentRank = i + 1;
+            prevScore = r.finalScore;
+            const slotADX = extendedSkill[currentRank - 1] ?? 0;
+            const finalADX = Math.round(slotADX * proRataScale);
+            rows.push({
+                wallet: r.wallet,
+                amountADX: finalADX,
+                category: 'skill',
+                rank: currentRank,
+                drawPosition: null,
+            });
+        }
+
+        // Raffle: latest draw row for this tournament
+        const [draw] = await db
+            .select()
+            .from(raffleDraws)
+            .where(eq(raffleDraws.tournamentId, tournamentId))
+            .orderBy(desc(raffleDraws.drawnAt))
+            .limit(1);
+
+        let raffleDrawInfo: {
+            id: number;
+            blockHash: string;
+            drawnAt: Date;
+        } | null = null;
+        if (draw) {
+            const winners = draw.winners as string[];
+            for (let i = 0; i < winners.length; i++) {
+                rows.push({
+                    wallet: winners[i],
+                    amountADX: rafflePrizes[i] ?? 0,
+                    category: 'raffle',
+                    rank: null,
+                    drawPosition: i + 1,
+                });
+            }
+            raffleDrawInfo = {
+                id: draw.id,
+                blockHash: draw.blockHash,
+                drawnAt: draw.drawnAt,
+            };
+        }
+
+        const totalPayout = rows.reduce((a, r) => a + r.amountADX, 0);
+        const complete = t.status === 'completed' && rows.length > 0;
+
+        res.json({
+            success: true,
+            data: {
+                tournamentId,
+                status: t.status,
+                complete,
+                prizeTable: {
+                    totalPool: prizeTable.totalPool,
+                    skillPrizes,
+                    rafflePrizes,
+                    currency: prizeTable.currency,
+                },
+                raffleDraw: raffleDrawInfo,
+                proRataScale,
+                totalPayout,
+                rows,
+            },
+        });
+    } catch (error) {
+        console.error('[API] Error getting tournament payouts:', error);
         res.status(500).json({
             success: false,
             error: error instanceof Error ? error.message : 'Internal server error',
