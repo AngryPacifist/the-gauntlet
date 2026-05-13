@@ -517,20 +517,43 @@ router.get('/:id/payouts', async (req, res) => {
         };
         const rows: PayoutRow[] = [];
 
-        // Competition ranking — wallets tied at the same finalScore share a rank.
+        // Competition ranking (1224) — wallets tied at the same finalScore
+        // share a rank. We must MATCH the FE's prizesByRank tie-handling in
+        // leaderboard/[id]/page.tsx: for a group of N wallets tied at rank R,
+        // the per-wallet ADX is (extendedPrizes[R-1] + ... + extendedPrizes[R+N-2]) / N.
+        // This preserves conservation — orphaned skipped-rank slots redistribute
+        // across the tied group rather than disappearing.
+        //
+        // Pass 1: assign competition rank to every wallet.
+        const walletRanks: Array<{ wallet: string; rank: number; finalScore: number }> = [];
         let prevScore = Number.POSITIVE_INFINITY;
         let currentRank = 0;
         for (let i = 0; i < topPercentRows.length; i++) {
             const r = topPercentRows[i];
             if (r.finalScore !== prevScore) currentRank = i + 1;
             prevScore = r.finalScore;
-            const slotADX = extendedSkill[currentRank - 1] ?? 0;
-            const finalADX = Math.round(slotADX * proRataScale);
+            walletRanks.push({ wallet: r.wallet, rank: currentRank, finalScore: r.finalScore });
+        }
+        // Pass 2: count members per rank, then split summed-slot ADX per FE convention.
+        const rankCounts = new Map<number, number>();
+        for (const w of walletRanks) {
+            rankCounts.set(w.rank, (rankCounts.get(w.rank) ?? 0) + 1);
+        }
+        const perRankADX = new Map<number, number>();
+        for (const [rank, count] of rankCounts) {
+            let sum = 0;
+            for (let i = 0; i < count; i++) {
+                sum += extendedSkill[rank - 1 + i] ?? 0;
+            }
+            perRankADX.set(rank, (sum * proRataScale) / count);
+        }
+        for (const w of walletRanks) {
+            const adxFloat = perRankADX.get(w.rank) ?? 0;
             rows.push({
-                wallet: r.wallet,
-                amountADX: finalADX,
+                wallet: w.wallet,
+                amountADX: Math.round(adxFloat),
                 category: 'skill',
-                rank: currentRank,
+                rank: w.rank,
                 drawPosition: null,
             });
         }
