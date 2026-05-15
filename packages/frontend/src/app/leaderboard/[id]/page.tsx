@@ -931,11 +931,17 @@ function ForgeRow({
                                     <div>
                                         <h4 className={styles.breakdownHeading}>Category Scores</h4>
                                         {breakdown ? (
-                                            <QuestBreakdownBars breakdown={breakdown} assetList={assetList} />
+                                            <QuestBreakdownBars breakdown={breakdown} />
                                         ) : (
                                             <p className={styles.breakdownEmpty}>No quest data available.</p>
                                         )}
                                     </div>
+                                    {breakdown && assetList && assetList.length > 0 && (
+                                        <LeverageMasterBreakdown
+                                            questProgress={breakdown.questProgress}
+                                            assetList={assetList}
+                                        />
+                                    )}
                                 </div>
                             )}
                         </div>
@@ -1093,15 +1099,10 @@ function LMSplitBgGrid({
     );
 }
 
-function QuestBreakdownBars({
-    breakdown, assetList,
-}: {
-    breakdown: WalletBreakdown;
-    assetList?: Array<{ symbol: string; lmSteps?: number[]; lmTolerance?: number }>;
-}) {
-    // Non-LM categories render as horizontal bars; LM categories render
-    // per-asset split-bg cells (post-T1 batch Item 2-2 — replaces the
-    // lmCompactGroup text strip).
+function QuestBreakdownBars({ breakdown }: { breakdown: WalletBreakdown }) {
+    // Non-LM categories only; LM moved to LeverageMasterBreakdown so it can
+    // span the full breakdownGrid width (step cells need room to fit one
+    // row per asset).
     const allEntries = Object.entries(breakdown.breakdown).map(([key, data]) => ({
         key,
         label: getQuestLabel(key),
@@ -1110,7 +1111,29 @@ function QuestBreakdownBars({
     const nonLmEntries = allEntries.filter((e) => !e.key.startsWith('leverage_master_'));
     const maxScore = Math.max(...nonLmEntries.map((e) => Math.abs(e.score)), 1);
 
-    // Per-asset LM progress: stepsCompleted long + short come from byAsset payload.
+    return (
+        <>
+            {nonLmEntries.map(({ key, label, score }) => (
+                <HorizontalBar key={key} label={label} value={score} max={maxScore} color="var(--accent-primary)" />
+            ))}
+        </>
+    );
+}
+
+// --------------------------------------------------------------------------
+// Leverage Master Breakdown (full-width row in expanded breakdownGrid)
+//
+// Renders the per-asset LM progress strip. Lives outside QuestBreakdownBars
+// so it can occupy a row of its own in the grid (grid-column: 1 / -1 via
+// .lmExpandedGroup) — gives each asset's step cells the horizontal room to
+// stay on one line instead of wrapping inside a narrow column.
+// --------------------------------------------------------------------------
+function LeverageMasterBreakdown({
+    questProgress, assetList,
+}: {
+    questProgress: WalletBreakdown['questProgress'];
+    assetList: Array<{ symbol: string; lmSteps?: number[]; lmTolerance?: number }>;
+}) {
     type LmAsset = {
         symbol: string;
         stepLabels: string[];
@@ -1121,49 +1144,40 @@ function QuestBreakdownBars({
         short: boolean[];
     };
     const lmAssets: LmAsset[] = [];
-    if (assetList?.length) {
-        for (const asset of assetList) {
-            const progress = breakdown.questProgress?.byAsset?.[asset.symbol];
-            const stepTotal = asset.lmSteps?.length ?? 10;
-            const stepLabels = asset.lmSteps && asset.lmSteps.length > 0
-                ? asset.lmSteps.map((v) => `${v}x`)
-                : Array.from({ length: 10 }, (_, i) => `${(i + 1) * 10}x`);
-            lmAssets.push({
-                symbol: asset.symbol,
-                stepLabels,
-                longCount: progress?.longCount ?? 0,
-                shortCount: progress?.shortCount ?? 0,
-                stepTotal,
-                long: progress?.long ?? new Array(stepTotal).fill(false),
-                short: progress?.short ?? new Array(stepTotal).fill(false),
-            });
-        }
+    for (const asset of assetList) {
+        const progress = questProgress?.byAsset?.[asset.symbol];
+        const stepTotal = asset.lmSteps?.length ?? 10;
+        const stepLabels = asset.lmSteps && asset.lmSteps.length > 0
+            ? asset.lmSteps.map((v) => `${v}x`)
+            : Array.from({ length: 10 }, (_, i) => `${(i + 1) * 10}x`);
+        lmAssets.push({
+            symbol: asset.symbol,
+            stepLabels,
+            longCount: progress?.longCount ?? 0,
+            shortCount: progress?.shortCount ?? 0,
+            stepTotal,
+            long: progress?.long ?? new Array(stepTotal).fill(false),
+            short: progress?.short ?? new Array(stepTotal).fill(false),
+        });
     }
 
     return (
-        <>
-            {nonLmEntries.map(({ key, label, score }) => (
-                <HorizontalBar key={key} label={label} value={score} max={maxScore} color="var(--accent-primary)" />
-            ))}
-            {lmAssets.length > 0 && (
-                <div className={styles.lmExpandedGroup}>
-                    <div className={styles.lmExpandedHeading}>Leverage Master (current week)</div>
-                    {lmAssets.map((a) => (
-                        <div key={a.symbol} className={styles.lmExpandedRow}>
-                            <div className={styles.lmExpandedRowHeader}>
-                                <span className={styles.lmExpandedSymbol}>{a.symbol}</span>
-                                <span className={styles.lmExpandedCounter}>
-                                    L <span className={a.longCount > 0 ? styles.lmCounterActive : ''}>{a.longCount}/{a.stepTotal}</span>
-                                    {' · '}
-                                    S <span className={a.shortCount > 0 ? styles.lmCounterActive : ''}>{a.shortCount}/{a.stepTotal}</span>
-                                </span>
-                            </div>
-                            <LMSplitBgGrid stepLabels={a.stepLabels} stepsCompletedLong={a.long} stepsCompletedShort={a.short} />
-                        </div>
-                    ))}
+        <div className={styles.lmExpandedGroup}>
+            <div className={styles.lmExpandedHeading}>Leverage Master (current week)</div>
+            {lmAssets.map((a) => (
+                <div key={a.symbol} className={styles.lmExpandedRow}>
+                    <div className={styles.lmExpandedRowHeader}>
+                        <span className={styles.lmExpandedSymbol}>{a.symbol}</span>
+                        <span className={styles.lmExpandedCounter}>
+                            L <span className={a.longCount > 0 ? styles.lmCounterActive : ''}>{a.longCount}/{a.stepTotal}</span>
+                            {' · '}
+                            S <span className={a.shortCount > 0 ? styles.lmCounterActive : ''}>{a.shortCount}/{a.stepTotal}</span>
+                        </span>
+                    </div>
+                    <LMSplitBgGrid stepLabels={a.stepLabels} stepsCompletedLong={a.long} stepsCompletedShort={a.short} />
                 </div>
-            )}
-        </>
+            ))}
+        </div>
     );
 }
 

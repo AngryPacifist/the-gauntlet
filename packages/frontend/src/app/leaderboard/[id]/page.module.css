@@ -553,7 +553,9 @@
 /* Post-T1 batch (Item 2-2): expanded-row LM section (replaces lmCompactGroup).
    Per-asset row with counter line + LMSplitBgGrid below. */
 .lmExpandedGroup {
-    margin-top: var(--space-sm);
+    /* Spans full breakdownGrid width so each asset's step cells fit on one line.
+       Inside the 3-col grid it occupies a second row; outside a grid the rule is inert. */
+    grid-column: 1 / -1;
     padding: var(--space-sm) var(--space-md);
     background: var(--bg-elevated);
     border-radius: var(--radius-sm);
