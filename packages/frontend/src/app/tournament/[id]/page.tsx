@@ -219,7 +219,7 @@ export default function TournamentPage({ params }: { params: Promise<{ id: strin
                         <h1 className="page-header__title">{tournament.name}</h1>
                         <p className="page-header__subtitle">
                             {tournament.status === 'registration' && (
-                                <><Clock size={14} style={{ verticalAlign: 'middle', marginRight: 4 }} /> Registration is open — join now</>
+                                <><Clock size={14} style={{ verticalAlign: 'middle', marginRight: 4 }} /> Registration is open: join now</>
                             )}
                             {tournament.status === 'active' && activeRound && (
                                 <><Swords size={14} style={{ verticalAlign: 'middle', marginRight: 4 }} /> {activeRound.name} · {getTimeRemaining(activeRound.endTime)}</>
@@ -254,7 +254,7 @@ export default function TournamentPage({ params }: { params: Promise<{ id: strin
                 <div className="card stat-card">
                     <div className="stat-card__label">Current Round</div>
                     <div className="stat-card__value">
-                        {activeRound ? activeRound.roundNumber : completedRounds.length || '—'}
+                        {activeRound ? activeRound.roundNumber : completedRounds.length || '-'}
                     </div>
                 </div>
                 <div className="card stat-card">
@@ -351,7 +351,7 @@ export default function TournamentPage({ params }: { params: Promise<{ id: strin
                                     <p className={styles.ruleText}>
                                         Traders are placed into brackets of {tournament.config.bracketSize}.
                                         After each round, the bottom {Math.round((1 - tournament.config.advanceRatio) * 100)}% is eliminated.
-                                        {' '}{tournament.config.roundDurations.length} round{tournament.config.roundDurations.length !== 1 ? 's' : ''} — last ones standing win.
+                                        {' '}{tournament.config.roundDurations.length} round{tournament.config.roundDurations.length !== 1 ? 's' : ''}; last ones standing win.
                                     </p>
                                 </div>
                                 <div className={`card ${styles.ruleCard}`}>
@@ -379,7 +379,7 @@ export default function TournamentPage({ params }: { params: Promise<{ id: strin
                                         <li>Minimum collateral threshold per position</li>
                                         <li>Trades must meet a minimum open-duration requirement</li>
                                         <li>Risk score based on equity curve drawdown</li>
-                                        <li>No entry fee — free to compete</li>
+                                        <li>No entry fee, free to compete</li>
                                     </ul>
                                 </div>
                             </div>

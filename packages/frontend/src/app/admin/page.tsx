@@ -85,7 +85,7 @@ export default function AdminLandingPage() {
                     Admin Command Center
                 </h1>
                 <p className="page-header__subtitle">
-                    Tournament + season lifecycle, registrations, analytics. URL-only — not in nav.
+                    Tournament + season lifecycle, registrations, analytics. URL-only, not in nav.
                 </p>
             </header>
 

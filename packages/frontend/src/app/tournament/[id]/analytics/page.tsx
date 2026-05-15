@@ -143,7 +143,7 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
                     <div>
                         <h1 className="page-header__title">
                             <BarChart3 size={22} style={{ verticalAlign: 'middle', marginRight: 8 }} />
-                            {tournament.name} — Analytics
+                            {tournament.name}: Analytics
                         </h1>
                         <p className="page-header__subtitle">
                             {tournament.totalTraders} traders across {tournament.totalRounds} round{tournament.totalRounds !== 1 ? 's' : ''}
@@ -194,7 +194,7 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
                 <div className="card stat-card">
                     <div className="stat-card__label"><TrendingUp size={12} style={{ marginRight: 4 }} /> Avg CPI</div>
                     <div className="stat-card__value stat-card__value--accent">
-                        {mainRounds.length > 0 ? (mainRounds.reduce((a, r) => a + r.avgCpi, 0) / mainRounds.length).toFixed(1) : '—'}
+                        {mainRounds.length > 0 ? (mainRounds.reduce((a, r) => a + r.avgCpi, 0) / mainRounds.length).toFixed(1) : '-'}
                     </div>
                 </div>
             </div>

@@ -121,14 +121,14 @@ export default function SeasonDetailPage({ params }: { params: Promise<{ id: str
                                         <td className={styles.points}>{s.totalPoints}</td>
                                         <td className={styles.tdRight}>{s.weeksParticipated}</td>
                                         <td className={styles.tdRight}>
-                                            {s.bestPlacement !== null ? `#${s.bestPlacement}` : '—'}
+                                            {s.bestPlacement !== null ? `#${s.bestPlacement}` : '-'}
                                         </td>
                                         <td className={styles.tdCenter}>
                                             {s.qualifiedForFinal ? (
                                                 <span className={styles.qualified}>
                                                     <Crown size={12} /> Qualified
                                                 </span>
-                                            ) : '—'}
+                                            ) : '-'}
                                         </td>
                                     </tr>
                                 ))}
