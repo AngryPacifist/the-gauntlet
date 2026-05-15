@@ -67,7 +67,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <head>
-        <title>Adrena: The Gauntlet — Trading Competition Engine</title>
+        <title>Adrena: The Gauntlet · Trading Competition Engine</title>
         <meta
           name="description"
           content="Bracket-style elimination trading competitions on Adrena. Compete, survive, conquer."

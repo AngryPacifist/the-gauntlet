@@ -108,7 +108,7 @@ export default function AdminSeasonsPage() {
                 commitSecret(seasonSecretDraft);
                 setSeasonSecretDraft('');
             }
-            addLog(`Created season "${seasonName}" (id: ${result.id}) — ${seasonWeeks} weeks, ${seasonQualSlots} qual slots`);
+            addLog(`Created season "${seasonName}" (id: ${result.id}): ${seasonWeeks} weeks, ${seasonQualSlots} qual slots`);
             showToast(`Season "${seasonName}" created`, 'success');
             setSeasonName('');
             setShowSeasonModal(false);
@@ -267,7 +267,7 @@ export default function AdminSeasonsPage() {
                                         <Lock size={12} style={{ marginRight: 4, verticalAlign: 'middle' }} /> Admin Secret
                                     </label>
                                     <div style={{ display: 'flex', gap: 'var(--space-sm)' }}>
-                                        <input type="password" className="input input--mono" placeholder="Required to create — paste your secret + click Apply"
+                                        <input type="password" className="input input--mono" placeholder="Required to create. Paste your secret then click Apply."
                                             value={seasonSecretDraft} onChange={(e) => setSeasonSecretDraft(e.target.value)} style={{ flex: 1 }} />
                                         <button type="button" className="btn btn--secondary" disabled={!seasonSecretDraft.trim()}
                                             onClick={() => {

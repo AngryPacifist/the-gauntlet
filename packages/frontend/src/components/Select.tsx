@@ -46,7 +46,7 @@ export interface SelectProps {
     onChange: (value: string) => void;
     /** Available options. */
     options: SelectOption[];
-    /** Placeholder shown when no value selected. Default: "— select —". */
+    /** Placeholder shown when no value selected. Default: "Select…". */
     placeholder?: string;
     /** Disable the select entirely. */
     disabled?: boolean;
@@ -66,7 +66,7 @@ export function Select({
     value,
     onChange,
     options,
-    placeholder = '— select —',
+    placeholder = 'Select…',
     disabled = false,
     className = '',
     popupClassName = '',

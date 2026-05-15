@@ -18,7 +18,7 @@ export const FF_DESCRIPTION = {
     title: 'Fallen Fighters',
     description:
         'All eliminated traders are automatically scored during the Endgame round. ' +
-        'Your trades during this period count toward the Fallen Fighters pool — ' +
+        'Your trades during this period count toward the Fallen Fighters pool: ' +
         'keep trading for a shot at consolation prizes. ' +
         'The top 3 Fallen Fighters earn season points (6, 4, 3), and all participants earn at least 1.',
 };
@@ -35,8 +35,8 @@ export const QUEST_DESCRIPTIONS: Record<string, QuestDescription> = {
             'Low-size trades are excluded.',
             'Your best trade per asset (by ROI) is selected.',
             'Positive ROI earns points per asset, capped to prevent a single outlier dominating.',
-            'Negative ROI on an asset scores 0 — it won\'t drag you down.',
-            'Scores are summed across all assets — more assets = higher ceiling.',
+            'Negative ROI on an asset scores 0; it won\'t drag you down.',
+            'Scores are summed across all assets; more assets means a higher ceiling.',
         ],
     },
     top_tick_traveler: {
@@ -47,36 +47,36 @@ export const QUEST_DESCRIPTIONS: Record<string, QuestDescription> = {
             'the higher your score. Precision timing on short entries is everything.',
         rules: [
             'Your best short entry of the day is selected (closest to the daily high).',
-            'Proximity is measured as a percentage — 100% means you shorted the exact high.',
-            'All traders are ranked by proximity — the sharpest entries score highest.',
-            'Negative ROI can produce negative scores — precision without profit costs you.',
+            'Proximity is measured as a percentage; 100% means you shorted the exact high.',
+            'All traders are ranked by proximity; the sharpest entries score highest.',
+            'Negative ROI can produce negative scores; precision without profit costs you.',
             'Assets with unusually tight price ranges are excluded (stale price feeds).',
         ],
     },
     bottom_fisher: {
         tagline: 'Buy the dip. Nail the bottom.',
         description:
-            'Bottom Fisher is the mirror of Top-Tick Traveler — it rewards the best long entries. Your best long position each day is scored by ' +
+            'Bottom Fisher is the mirror of Top-Tick Traveler; it rewards the best long entries. Your best long position each day is scored by ' +
             'how close your entry price was to the daily low. If you consistently enter longs near the bottom of the daily range, ' +
             'this quest is yours. ROI acts as a tiebreaker when entry precision is equal.',
         rules: [
             'Your best long entry of the day is selected (closest to the daily low).',
-            'Proximity is measured as a percentage — 100% means you bought the exact low.',
-            'All traders are ranked by proximity — the sharpest entries score highest.',
-            'Negative ROI can produce negative scores — precision without profit costs you.',
+            'Proximity is measured as a percentage; 100% means you bought the exact low.',
+            'All traders are ranked by proximity; the sharpest entries score highest.',
+            'Negative ROI can produce negative scores; precision without profit costs you.',
             'Assets with unusually tight price ranges are excluded (stale price feeds).',
         ],
     },
     risk_manager: {
         tagline: 'Discipline over danger. Control your downside.',
         description:
-            'Risk Manager rewards traders who use stop-losses effectively. Your score is based on your best stop-loss triggered trade — ' +
+            'Risk Manager rewards traders who use stop-losses effectively. Your score is based on your best stop-loss triggered trade: ' +
             'the tightest, best-controlled loss wins. ' +
             'This quest spans a 2-day rolling window, giving you time to set up and manage positions carefully.',
         rules: [
             'Scored over a 2-day window (Day 1–2, Day 3–4, etc.).',
             'Only positions closed by stop-loss (SL) with negative PnL count.',
-            'Your best SL trade is selected — the tightest controlled loss.',
+            'Your best SL trade is selected: the tightest controlled loss.',
             'Tighter losses score higher.',
             'Minimum trade size applies (prevents micro-trade exploitation).',
             'Leaderboard shows the best single window, not a sum across windows.',
@@ -91,7 +91,7 @@ export const QUEST_DESCRIPTIONS: Record<string, QuestDescription> = {
         rules: [
             'Scored over a 2-day window (Day 1–2, Day 3–4, etc.).',
             'Only positions closed by take-profit (TP) with positive PnL count.',
-            'Your best TP trade is selected — the highest-return precision close.',
+            'Your best TP trade is selected: the highest-return precision close.',
             'Leaderboard shows the best single window, not a sum across windows.',
         ],
     },
@@ -127,19 +127,19 @@ export function getLeverageMasterDescription(
     const toleranceValue = tolerance ?? 2;
 
     return {
-        tagline: `Push the limits on ${sideArticle}s — ${ladder.length} steps per asset.`,
+        tagline: `Push the limits on ${sideArticle}s; ${ladder.length} steps per asset.`,
         description:
             `Leverage Master (${sideLabel}) is a weekly per-asset progression quest. Open qualifying ${sideArticle} positions ` +
-            `at increasing leverage tiers — ${ladderRange} ${assetScope}. ` +
-            `Each step requires a position WITHIN the tier's leverage window (±tolerance — see Steps below). ` +
+            `at increasing leverage tiers: ${ladderRange} ${assetScope}. ` +
+            `Each step requires a position WITHIN the tier's leverage window (±tolerance; see Steps below). ` +
             `Completing the full ladder on a single asset earns that asset's share of the weekly LM ceiling; ` +
             `maxing LM overall requires topping ladders on every supported asset.`,
         rules: [
             `Steps: ${ladderText} (±${toleranceValue}x tolerance per step; per-asset configurable).`,
             `Position must be a qualifying ${sideArticle} position above a minimum collateral threshold.`,
             'Position must meet a minimum open-duration requirement.',
-            'Opening a qualifying position at any step counts — it doesn\'t need to be profitable.',
-            'Steps are permanent per week — once earned, never removed.',
+            'Opening a qualifying position at any step counts; it doesn\'t need to be profitable.',
+            'Steps are permanent per week; once earned, never removed.',
             'Each asset has its own independent ladder; asset breadth matters for the full ceiling.',
         ],
     };

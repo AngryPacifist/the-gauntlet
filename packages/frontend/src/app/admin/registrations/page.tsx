@@ -139,7 +139,7 @@ export default function AdminRegistrationsPage() {
                             ariaLabel="Pick a tournament"
                             value={selectedId === null ? '' : String(selectedId)}
                             onChange={(v) => setSelectedId(v ? parseInt(v, 10) : null)}
-                            placeholder="— pick a tournament —"
+                            placeholder="Pick a tournament"
                             options={tournaments.map((t) => ({
                                 value: String(t.id),
                                 label: t.name,

@@ -38,25 +38,25 @@ export const CPI_DESCRIPTION: CPIDescription = {
             heading: 'The CPI Formula',
             paragraph: 'CPI weights four dimensions of trading performance, each scored 0–100:',
             items: [
-                'PnL (35%) — profitability on closed trades',
-                'Risk (30%) — drawdown discipline and liquidation avoidance',
-                'Consistency (20%) — steady performance across trading days',
-                'Activity (15%) — trade count, volume, and asset variety',
+                'PnL (35%): profitability on closed trades',
+                'Risk (30%): drawdown discipline and liquidation avoidance',
+                'Consistency (20%): steady performance across trading days',
+                'Activity (15%): trade count, volume, and asset variety',
             ],
         },
         {
             heading: 'Sub-Scores in Detail',
             items: [
-                'PnL — rewards total net profit relative to position size. Larger profitable positions and bigger ROIs both contribute. Losses are penalized proportionally.',
-                'Risk — rewards controlled risk-taking. Smaller equity-curve drawdowns and fewer liquidations increase the score.',
-                'Consistency — rewards traders who are profitable on more of their trading days, not just on one outlier day.',
-                'Activity — rewards active participation: number of trades (capped), trading volume (log-scaled), and the diversity of assets traded.',
+                'PnL: rewards total net profit relative to position size. Larger profitable positions and bigger ROIs both contribute. Losses are penalized proportionally.',
+                'Risk: rewards controlled risk-taking. Smaller equity-curve drawdowns and fewer liquidations increase the score.',
+                'Consistency: rewards traders who are profitable on more of their trading days, not just on one outlier day.',
+                'Activity: rewards active participation: number of trades (capped), trading volume (log-scaled), and the diversity of assets traded.',
             ],
         },
         {
             heading: 'Trade Quality Filters',
             paragraph:
-                'To keep the scoring meaningful, trades must meet minimum quality criteria to count toward CPI — ' +
+                'To keep the scoring meaningful, trades must meet minimum quality criteria to count toward CPI, ' +
                 'preventing dust trades and wash trades from influencing rankings. Filter specifics are intentionally ' +
                 'not published, to keep the system robust against just-above-threshold optimization.',
         },

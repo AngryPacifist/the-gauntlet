@@ -206,7 +206,7 @@ function SeasonTab({ data }: { data: CumulativeLeaderboardData['season'] }) {
                                     <td className={`${styles.tdLeft} ${styles.tdMono}`}>{shortWallet(e.wallet)}</td>
                                     <td className={`${styles.tdMono} ${styles.tdStrong}`}>{e.totalPoints}</td>
                                     <td className={styles.tdMono}>{e.weeksParticipated}</td>
-                                    <td className={styles.tdMono}>{e.bestPlacement !== null ? `#${e.bestPlacement}` : '—'}</td>
+                                    <td className={styles.tdMono}>{e.bestPlacement !== null ? `#${e.bestPlacement}` : '-'}</td>
                                 </tr>
                             ))}
                         </tbody>

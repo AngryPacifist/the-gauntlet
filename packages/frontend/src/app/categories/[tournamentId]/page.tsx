@@ -47,7 +47,7 @@ const BASE_CATEGORY_TABS: CategoryTab[] = [
         icon: TrendingUp,
         color: 'var(--accent-primary)',
         colorBg: 'rgba(108, 92, 231, 0.1)',
-        description: 'Catch the best short entry relative to the day\'s high — sharpest shorts score highest.',
+        description: 'Catch the best short entry relative to the day\'s high; sharpest shorts score highest.',
     },
     {
         slug: 'bottom_fisher',
@@ -55,7 +55,7 @@ const BASE_CATEGORY_TABS: CategoryTab[] = [
         icon: Target,
         color: '#e17055',
         colorBg: 'rgba(225, 112, 85, 0.1)',
-        description: 'Catch the best long entry relative to the day\'s low — sharpest longs score highest.',
+        description: 'Catch the best long entry relative to the day\'s low; sharpest longs score highest.',
     },
     {
         slug: 'risk_manager',
@@ -258,7 +258,7 @@ export default function CategoriesPage({ params }: { params: Promise<{ tournamen
                     Daily Categories
                 </h1>
                 <p className="page-header__subtitle">
-                    Tournament #{tournamentId} &mdash; Tactical side competitions
+                    Tournament #{tournamentId} · Tactical side competitions
                 </p>
             </header>
 
@@ -287,7 +287,7 @@ export default function CategoriesPage({ params }: { params: Promise<{ tournamen
 
             {/* Description */}
             <div className={`card ${styles.descCard}`}>
-                <strong style={{ color: activeTab.color }}>{activeTab.label}</strong> &mdash; {activeTab.description}
+                <strong style={{ color: activeTab.color }}>{activeTab.label}</strong>: {activeTab.description}
             </div>
 
             {/* Cumulative Leaderboard */}
@@ -594,7 +594,7 @@ function LeverageBadgeGrid({ steps, stepValues, color }: { steps: boolean[]; ste
                                 {label}
                             </span>
                             <span className={styles.badgeStatus} style={completed ? { color } : undefined}>
-                                {completed ? '✓' : '—'}
+                                {completed ? '✓' : '-'}
                             </span>
                         </div>
                     );

@@ -98,7 +98,7 @@ export default function RafflePage({ params }: { params: Promise<{ tournamentId:
                 </Link>
                 <h1 className="page-header__title">Raffle</h1>
                 <p className="page-header__subtitle">
-                    Tournament #{tournamentId} &mdash; Engagement-weighted draw
+                    Tournament #{tournamentId} · Engagement-weighted draw
                 </p>
             </header>
 
@@ -138,7 +138,7 @@ export default function RafflePage({ params }: { params: Promise<{ tournamentId:
             )}
 
             <div className={`card ${styles.formulaCard}`}>
-                <strong className={styles.formulaTitle}>Ticket Formula</strong> &mdash;{' '}
+                <strong className={styles.formulaTitle}>Ticket Formula:</strong>{' '}
                 <code className={styles.formulaCode}>
                     floor(CPI &times; {tournament?.config.cpiTicketMultiplier ?? 0.5}) + floor(Quest Points &times; {tournament?.config.questTicketMultiplier ?? 20})
                 </code>

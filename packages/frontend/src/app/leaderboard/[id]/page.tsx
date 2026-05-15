@@ -218,22 +218,22 @@ function extractQuestColumns(
         case 'bottom_fisher': {
             const entry = d.longEntry as { proximity: number; roi: number } | null;
             return [
-                { label: 'Bottom Accuracy', value: entry ? `${(entry.proximity * 100).toFixed(2)}%` : '—' },
-                { label: 'ROI', value: entry ? `${(entry.roi * 100).toFixed(2)}%` : '—' },
+                { label: 'Bottom Accuracy', value: entry ? `${(entry.proximity * 100).toFixed(2)}%` : '-' },
+                { label: 'ROI', value: entry ? `${(entry.roi * 100).toFixed(2)}%` : '-' },
             ];
         }
         case 'top_tick_traveler': {
             const entry = d.shortEntry as { proximity: number; roi: number } | null;
             return [
-                { label: 'Top Accuracy', value: entry ? `${(entry.proximity * 100).toFixed(2)}%` : '—' },
-                { label: 'ROI', value: entry ? `${(entry.roi * 100).toFixed(2)}%` : '—' },
+                { label: 'Top Accuracy', value: entry ? `${(entry.proximity * 100).toFixed(2)}%` : '-' },
+                { label: 'ROI', value: entry ? `${(entry.roi * 100).toFixed(2)}%` : '-' },
             ];
         }
         case 'risk_manager':
         case 'humble_one': {
             const trade = d.bestTrade as { roi: number } | null;
             return [
-                { label: 'ROI', value: trade ? `${(trade.roi * 100).toFixed(2)}%` : '—' },
+                { label: 'ROI', value: trade ? `${(trade.roi * 100).toFixed(2)}%` : '-' },
             ];
         }
         default: {
@@ -890,7 +890,7 @@ function ForgeRow({
                                 tokens={raffleEntry.tokens}
                                 usdPrices={usdPrices}
                                 drawPosition={raffleEntry.drawPosition} />
-                            : '—'}
+                            : '-'}
                 </td>
                 <td className={entry.isTopPercent ? styles.ticketColTop : styles.ticketColRaffle}>
                     {entry.raffleTickets}
@@ -1003,26 +1003,26 @@ function TraderStatisticsPanel({ cpiDetails }: {
             <div className={styles.traderStatsPanel}>
                 <div className={styles.traderStatRow}>
                     <span className={styles.traderStatLabel}>ROI</span>
-                    <span className={styles.traderStatValue}>—</span>
+                    <span className={styles.traderStatValue}>-</span>
                 </div>
                 <div className={styles.traderStatRow}>
                     <span className={styles.traderStatLabel}>Liquidations · Max DD</span>
-                    <span className={styles.traderStatValue}>—</span>
+                    <span className={styles.traderStatValue}>-</span>
                 </div>
                 <div className={styles.traderStatRow}>
                     <span className={styles.traderStatLabel}>Profitable Days · Win Rate</span>
-                    <span className={styles.traderStatValue}>—</span>
+                    <span className={styles.traderStatValue}>-</span>
                 </div>
                 <div className={styles.traderStatRow}>
                     <span className={styles.traderStatLabel}>Trades · Volume</span>
-                    <span className={styles.traderStatValue}>—</span>
+                    <span className={styles.traderStatValue}>-</span>
                 </div>
             </div>
         );
     }
     const winRate = cpiDetails.totalClosedTrades > 0
         ? `${((cpiDetails.winningTrades / cpiDetails.totalClosedTrades) * 100).toFixed(0)}%`
-        : '—';
+        : '-';
     return (
         <div className={styles.traderStatsPanel}>
             <div className={styles.traderStatRow}>
@@ -1086,7 +1086,7 @@ function LMSplitBgGrid({
                 const titleParts: string[] = [];
                 if (longDone) titleParts.push('Long ✓');
                 if (shortDone) titleParts.push('Short ✓');
-                const title = titleParts.length > 0 ? `${label} — ${titleParts.join(', ')}` : `${label} (none)`;
+                const title = titleParts.length > 0 ? `${label}: ${titleParts.join(', ')}` : `${label} (none)`;
                 return (
                     <span key={`${label}-${i}`} className={cls} title={title}>
                         <span className={styles.lmSplitBgCellLabel}>{label}</span>
@@ -1448,7 +1448,7 @@ function CategoryLeaderboard({ category, scores, isRulesExpanded, onToggleRules,
                                 ) : (
                                     <td colSpan={2 + sampleColumns.length + 1} className={styles.row6Empty}>
                                         <span className={styles.row6EmptyWallet}>{shortWallet(searchedWallet!)}</span>
-                                        — Not ranked in this category
+                                        : Not ranked in this category
                                     </td>
                                 )}
                             </tr>
@@ -1590,7 +1590,7 @@ function LMMergedRow({
                 S <span className={entry.shortCount > 0 ? styles.lmCounterActive : ''}>{entry.shortCount}/{entry.stepTotal}</span>
             </td>
             <td className={styles.finalScore}>
-                {entry.totalPoints > 0 ? entry.totalPoints.toFixed(2) : '—'}
+                {entry.totalPoints > 0 ? entry.totalPoints.toFixed(2) : '-'}
             </td>
         </tr>
     );
@@ -1778,7 +1778,7 @@ function PrizeInfo({ prizeTable, topPercentCutoff }: {
             <div className={styles.prizeMain}>
                 <div className={styles.prizeLabel}>Total Prize Pool</div>
                 <div className={styles.prizeValue} title={tokenBreakdown}>
-                    {usdPrices ? formatUSD(totalUSD) : '—'}
+                    {usdPrices ? formatUSD(totalUSD) : '-'}
                 </div>
                 <div className={styles.prizeSubtitle}>Sponsored by {sponsorsDisplay}</div>
                 <div className={styles.prizeSubtitle}>Distributed in {symbolsDisplay}</div>
@@ -1794,7 +1794,7 @@ function PrizeInfo({ prizeTable, topPercentCutoff }: {
                             Top {Math.round((topPercentCutoff ?? 0.30) * 100)}% Skill
                         </div>
                         <div className={styles.prizeSplitValueSkill} title={`${formatUSD(skillUSD)} (${(skillFrac * 100).toFixed(0)}% of pool)`}>
-                            {usdPrices ? formatUSD(skillUSD) : '—'}
+                            {usdPrices ? formatUSD(skillUSD) : '-'}
                         </div>
                     </div>
                 )}
@@ -1802,7 +1802,7 @@ function PrizeInfo({ prizeTable, topPercentCutoff }: {
                     <div className={styles.prizeSplit}>
                         <div className={styles.prizeSplitLabel}>Raffle</div>
                         <div className={styles.prizeSplitValueRaffle} title={`${formatUSD(raffleUSD)} (${(raffleFrac * 100).toFixed(0)}% of pool)`}>
-                            {usdPrices ? formatUSD(raffleUSD) : '—'}
+                            {usdPrices ? formatUSD(raffleUSD) : '-'}
                         </div>
                     </div>
                 )}
@@ -1825,7 +1825,7 @@ function PrizeCellMultiToken({
     usdPrices: Record<string, TokenUSDPrice> | null;
     drawPosition?: number;
 }) {
-    if (!tokens || tokens.length === 0) return <>—</>;
+    if (!tokens || tokens.length === 0) return <>-</>;
     const usd = tokens.reduce((s, t) => {
         const p = usdPrices?.[t.symbol]?.usd;
         return s + (p !== null && p !== undefined ? t.amount * p : 0);
@@ -1835,7 +1835,7 @@ function PrizeCellMultiToken({
     const breakdown = breakdownParts.join('\n');
     return (
         <span title={breakdown}>
-            {usdPrices ? formatUSD(usd) : '—'}
+            {usdPrices ? formatUSD(usd) : '-'}
         </span>
     );
 }

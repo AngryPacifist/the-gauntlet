@@ -230,7 +230,7 @@ export default function AdminTournamentsPage() {
         } catch (err) {
             const msg = err instanceof Error ? err.message : 'Failed to load tradable assets';
             setCfgTradableAssetsError(msg);
-            addLog(`Warning: ${msg} — asset list dropdown falling back to free-text`);
+            addLog(`Warning: ${msg}. Asset list dropdown falling back to free-text.`);
         }
     };
 
@@ -790,7 +790,7 @@ export default function AdminTournamentsPage() {
         try {
             setActionLoading(true);
             const result = await adminDrawRaffle(drawTournamentId, drawBlockHash.trim(), drawPrizeCount, adminSecret);
-            addLog(`Raffle drawn for tournament #${drawTournamentId}: ${result.winners.length} winner(s) — ${result.winners.map((w) => w.slice(0, 8) + '...').join(', ')}`);
+            addLog(`Raffle drawn for tournament #${drawTournamentId}: ${result.winners.length} winner(s): ${result.winners.map((w) => w.slice(0, 8) + '...').join(', ')}`);
             showToast(`${result.winners.length} raffle winner(s) drawn!`, 'success');
             setShowDrawModal(false);
             setDrawBlockHash('');
@@ -811,7 +811,7 @@ export default function AdminTournamentsPage() {
                 showToast('Raffle draw verified ✓', 'success');
             } else {
                 addLog(`Raffle verification FAILED: ${result.mismatches.join(', ')}`);
-                showToast('Verification failed — see log', 'error');
+                showToast('Verification failed; see log', 'error');
             }
         } catch (err) {
             const msg = err instanceof Error ? err.message : 'Failed to verify';
@@ -1025,7 +1025,7 @@ export default function AdminTournamentsPage() {
                                         <Lock size={12} style={{ marginRight: 4, verticalAlign: 'middle' }} /> Admin Secret
                                     </label>
                                     <div style={{ display: 'flex', gap: 'var(--space-sm)' }}>
-                                        <input type="password" className="input input--mono" placeholder="Required to create — paste your secret + click Apply"
+                                        <input type="password" className="input input--mono" placeholder="Required to create. Paste your secret then click Apply."
                                             value={modalSecretDraft} onChange={(e) => setModalSecretDraft(e.target.value)} style={{ flex: 1 }} />
                                         <button type="button" className="btn btn--secondary" disabled={!modalSecretDraft.trim()}
                                             onClick={() => {
@@ -1060,7 +1060,7 @@ export default function AdminTournamentsPage() {
                                     </button>
                                 </div>
                                 <span className={styles.formHint}>
-                                    {cfgFormat === 'bracket' ? 'Bracket elimination with rounds — The Gauntlet' : 'Flat leaderboard, open registration — The Forge'}
+                                    {cfgFormat === 'bracket' ? 'Bracket elimination with rounds (The Gauntlet)' : 'Flat leaderboard, open registration (The Forge)'}
                                 </span>
                             </div>
 
@@ -1098,17 +1098,17 @@ export default function AdminTournamentsPage() {
                                 <div className={styles.formGroup}>
                                     <label className={styles.formLabel}>Min Trade Duration (s)</label>
                                     <input type="number" className="input input--mono" value={cfgMinDuration} onChange={(e) => setCfgMinDuration(Number(e.target.value))} min={0} />
-                                    <span className={styles.formHint}>Wash-trade filter (e.g., 240 = 4 min for test)</span>
+                                    <span className={styles.formHint}>Wash-trade filter (seconds, e.g. 240 = 4 min)</span>
                                 </div>
                                 <div className={styles.formGroup}>
                                     <label className={styles.formLabel}>All Around Min Trade ($)</label>
                                     <input type="number" className="input input--mono" value={cfgAllAroundMinTradeUsd} onChange={(e) => setCfgAllAroundMinTradeUsd(Number(e.target.value))} min={0} />
-                                    <span className={styles.formHint}>Quest-specific min exit_size (test: 100 / prod: 500)</span>
+                                    <span className={styles.formHint}>Quest-specific minimum exit size in USD (default 500)</span>
                                 </div>
                                 <div className={styles.formGroup}>
                                     <label className={styles.formLabel}>Risk Manager Min Size ($)</label>
                                     <input type="number" className="input input--mono" value={cfgRiskManagerMinSize} onChange={(e) => setCfgRiskManagerMinSize(Number(e.target.value))} min={0} />
-                                    <span className={styles.formHint}>Minimum trade exit_size for RM eligibility (test: 500 / prod: 1000)</span>
+                                    <span className={styles.formHint}>Minimum trade exit size in USD for RM eligibility (default 1000)</span>
                                 </div>
                             </div>
 
@@ -1176,7 +1176,7 @@ export default function AdminTournamentsPage() {
                             {cfgPrizeEnabled && (
                                 <>
                                     <div className={styles.formGroup}>
-                                        <label className={styles.formLabel}>Total Pool (informational — overridden by sum of sponsor token amounts at submit)</label>
+                                        <label className={styles.formLabel}>Total Pool (informational; overridden by sum of sponsor token amounts at submit)</label>
                                         <input type="number" className="input input--mono" value={cfgPrizeTotalPool} onChange={(e) => setCfgPrizeTotalPool(Number(e.target.value))} min={0} />
                                         <span className={styles.formHint}>Used by Preset mode below to derive Skill/Raffle arrays. After submit, the saved `totalPool` is replaced with `sum(sponsors.tokens.amount)`.</span>
                                     </div>
@@ -1188,8 +1188,8 @@ export default function AdminTournamentsPage() {
                                         <label className={styles.formLabel}>Sponsors / Token Pool</label>
                                         <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: 'var(--space-sm)' }}>
                                             Each sponsor contributes one or more tokens. Live USD totals derive from current prices.
-                                            Optional per-token mint (Fork A) lets you add any SPL token without a code change;
-                                            optional Static $/tok (Fork B) is used only if Pyth + Jupiter both return null.
+                                            Optional per-token mint lets you add any SPL token without a code change;
+                                            optional static USD/token is used only if Pyth + Jupiter both return null.
                                         </div>
                                         {cfgSponsors.map((sponsor, sIdx) => (
                                             <div key={sIdx} className={styles.sponsorRow}>
@@ -1213,7 +1213,7 @@ export default function AdminTournamentsPage() {
                                                                             : t) }
                                                                         : s));
                                                                 }}
-                                                                placeholder="— select token —"
+                                                                placeholder="Select token"
                                                                 options={[
                                                                     { value: 'ADX', label: 'ADX' },
                                                                     { value: 'JTO', label: 'JTO' },
@@ -1231,7 +1231,7 @@ export default function AdminTournamentsPage() {
                                                                     : s))}
                                                                 min={0} />
                                                             {/* Optional mint override. */}
-                                                            <input type="text" className="input input--mono" placeholder="Mint (optional, Fork A)"
+                                                            <input type="text" className="input input--mono" placeholder="Mint (optional)"
                                                                 value={tok.mint ?? ''}
                                                                 title="Optional SPL token mint pubkey. Required for custom tokens Jupiter can't resolve via the server-side default map. Empty for ADX/JTO/USDC."
                                                                 onChange={(e) => {
@@ -1243,7 +1243,7 @@ export default function AdminTournamentsPage() {
                                                                         : s));
                                                                 }} />
                                                             {/* Optional static USD fallback. */}
-                                                            <input type="number" className="input input--mono" placeholder="Static $/tok (Fork B)"
+                                                            <input type="number" className="input input--mono" placeholder="Static $/tok (optional)"
                                                                 value={tok.staticUsdPrice ?? ''}
                                                                 step="0.000001" min="0"
                                                                 title="Optional static USD/token fallback. Used only when both Pyth + Jupiter return null. Leave empty for live-only pricing."
@@ -1264,7 +1264,7 @@ export default function AdminTournamentsPage() {
                                                                         : (tok.staticUsdPrice ?? 0);
                                                                     const indicator = live != null && live > 0
                                                                         ? 'live'
-                                                                        : (tok.staticUsdPrice ? 'static' : '—');
+                                                                        : (tok.staticUsdPrice ? 'static' : 'n/a');
                                                                     return `≈ $${(tok.amount * usdPerTok).toLocaleString('en-US', { maximumFractionDigits: 0 })} (${indicator})`;
                                                                 })()}
                                                             </span>
@@ -1312,7 +1312,7 @@ export default function AdminTournamentsPage() {
                                         </div>
                                         <span className={styles.formHint}>
                                             {cfgPrizeMode === 'manual'
-                                                ? 'Type skill + raffle arrays directly. 7.c descriptor below shows totals.'
+                                                ? 'Type skill + raffle arrays directly. Totals descriptor below flags mismatches.'
                                                 : 'Pick template + customize percentages. Skill/Raffle prize arrays auto-derived (read-only).'}
                                         </span>
                                     </div>
@@ -1401,7 +1401,7 @@ export default function AdminTournamentsPage() {
 
                             <h3 className={styles.formSectionTitle}>Asset List</h3>
                             <p className={styles.formHint} style={{ marginBottom: '0.5rem' }}>
-                                Tradable assets scored in this tournament. Leave empty for engine fallback (permissive — all symbols observed).
+                                Tradable assets scored in this tournament. Leave empty for the permissive fallback (engine accepts all symbols observed).
                             </p>
                             {!adminSecret && cfgTradableAssets.length === 0 && !cfgTradableAssetsError && (
                                 <p style={{ color: 'var(--text-muted)', fontSize: '0.75rem', marginBottom: '0.5rem', fontStyle: 'italic' }}>
@@ -1410,7 +1410,7 @@ export default function AdminTournamentsPage() {
                             )}
                             {cfgTradableAssetsError && (
                                 <p style={{ color: 'var(--status-warning)', fontSize: '0.75rem', marginBottom: '0.5rem' }}>
-                                    Asset list fetch failed — falling back to free-text.
+                                    Asset list fetch failed; falling back to free-text.
                                 </p>
                             )}
                             {cfgAssetList.map((asset, i) => (
@@ -1430,7 +1430,7 @@ export default function AdminTournamentsPage() {
                                                 const fromApi = cfgTradableAssets.find((tt) => tt.symbol === symbol);
                                                 setCfgAssetList((prev) => prev.map((a, j) => j === i ? { ...a, symbol, mint: fromApi?.mint, feed_id: fromApi?.feed_id } : a));
                                             }}
-                                            placeholder="— select asset —"
+                                            placeholder="Select asset"
                                             options={cfgTradableAssets.map((tt) => {
                                                 const parts = [
                                                     tt.mint ? `${tt.mint.slice(0, 4)}…${tt.mint.slice(-4)}` : null,
@@ -1453,7 +1453,7 @@ export default function AdminTournamentsPage() {
                                                 const v = e.target.value ? Number(e.target.value) : undefined;
                                                 setCfgAssetList((prev) => prev.map((a, j) => j === i ? { ...a, feed_id: v } : a));
                                             }}
-                                            title="Pyth Lazer feed_id — auto-filled for known symbols; override if needed" />
+                                            title="Pyth Lazer feed_id (auto-filled for known symbols; override if needed)" />
                                     </div>
                                     <span className={styles.assetRowJoinedAt}>joined: {asset.joinedAt}</span>
                                     <div className={styles.assetRowField}>
@@ -1514,14 +1514,14 @@ export default function AdminTournamentsPage() {
                                 <label className={styles.formLabel}>Bitcoin Block Hash</label>
                                 <input type="text" className="input input--mono" placeholder="000000000000000000024bead8df69990852c202..."
                                     value={drawBlockHash} onChange={(e) => setDrawBlockHash(e.target.value)} autoFocus />
-                                <span className={styles.formHint}>Deterministic seed — use a recent Bitcoin block hash for verifiability</span>
+                                <span className={styles.formHint}>Deterministic seed: use a recent Bitcoin block hash for verifiability.</span>
                             </div>
                             <div className={styles.formGroup}>
                                 <label className={styles.formLabel}>Number of Winners</label>
                                 <input type="number" className="input input--mono" value={drawPrizeCount} readOnly disabled
                                     style={{ opacity: 0.7, cursor: 'not-allowed' }} />
                                 <span className={styles.formHint}>
-                                    Locked to <code>rafflePrizes.length</code> from tournament config (Phase 7.d) — prevents prizeCount/rafflePrizes mismatch.
+                                    Locked to <code>rafflePrizes.length</code> from tournament config; prevents a prizeCount/rafflePrizes mismatch.
                                 </span>
                             </div>
                             <div className={styles.modalActions}>

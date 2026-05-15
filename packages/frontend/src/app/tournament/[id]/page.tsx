@@ -150,7 +150,7 @@ export default function TournamentPage({ params }: { params: Promise<{ id: strin
 
     function getTimeRemaining(endTime: string): string {
         const diff = new Date(endTime).getTime() - now;
-        if (diff <= 0) return 'Round ended — awaiting advancement';
+        if (diff <= 0) return 'Round ended; awaiting advancement';
         const hours = Math.floor(diff / (1000 * 60 * 60));
         const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
         return `${hours}h ${minutes}m remaining`;
@@ -222,7 +222,7 @@ export default function TournamentPage({ params }: { params: Promise<{ id: strin
                                 <><Clock size={14} style={{ verticalAlign: 'middle', marginRight: 4 }} /> Registration is open — join now</>
                             )}
                             {tournament.status === 'active' && activeRound && (
-                                <><Swords size={14} style={{ verticalAlign: 'middle', marginRight: 4 }} /> {activeRound.name} — {getTimeRemaining(activeRound.endTime)}</>
+                                <><Swords size={14} style={{ verticalAlign: 'middle', marginRight: 4 }} /> {activeRound.name} · {getTimeRemaining(activeRound.endTime)}</>
                             )}
                             {tournament.status === 'completed' && (
                                 <><Trophy size={14} style={{ verticalAlign: 'middle', marginRight: 4 }} /> Tournament completed</>
@@ -231,7 +231,7 @@ export default function TournamentPage({ params }: { params: Promise<{ id: strin
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-sm)' }}>
                         <ShareButton
-                            text={`\u{2694}\u{FE0F} Check out ${tournament.name} — a Battle Royale trading competition on @AdrenaProtocol!\n\n${tournament.registrationCount} traders competing across ${allRounds.length} round${allRounds.length !== 1 ? 's' : ''}\n\n#AdrenaGauntlet`}
+                            text={`\u{2694}\u{FE0F} Check out ${tournament.name}, a Battle Royale trading competition on @AdrenaProtocol!\n\n${tournament.registrationCount} traders competing across ${allRounds.length} round${allRounds.length !== 1 ? 's' : ''}\n\n#AdrenaGauntlet`}
                         />
                         <span className={`badge badge--${tournament.status}`}>
                             {tournament.status}
@@ -360,7 +360,7 @@ export default function TournamentPage({ params }: { params: Promise<{ id: strin
                                     <p className={styles.ruleText}>
                                         You&apos;re scored on a Composite Performance Index:
                                         PnL, risk management, consistency across days, and trading activity.
-                                        Not just who makes the most — who trades the smartest.
+                                        Not just who makes the most, but who trades the smartest.
                                     </p>
                                 </div>
                                 <div className={`card ${styles.ruleCard}`}>
@@ -369,7 +369,7 @@ export default function TournamentPage({ params }: { params: Promise<{ id: strin
                                     <p className={styles.ruleText}>
                                         Register your Solana wallet, then trade perps on{' '}
                                         <a href="https://www.adrena.trade" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent-primary)' }}>adrena.trade</a>.
-                                        The engine tracks your positions automatically — just trade like you normally would.
+                                        The engine tracks your positions automatically; just trade like you normally would.
                                     </p>
                                 </div>
                                 <div className={`card ${styles.ruleCard}`}>
