@@ -186,14 +186,14 @@ function extractQuestColumns(
         case 'bottom_fisher': {
             const entry = d.longEntry as { proximity: number; roi: number } | null;
             return [
-                { label: '% from Bottom', value: entry ? `${(entry.proximity * 100).toFixed(2)}%` : '—' },
+                { label: 'Bottom Accuracy', value: entry ? `${(entry.proximity * 100).toFixed(2)}%` : '—' },
                 { label: 'ROI', value: entry ? `${(entry.roi * 100).toFixed(2)}%` : '—' },
             ];
         }
         case 'top_tick_traveler': {
             const entry = d.shortEntry as { proximity: number; roi: number } | null;
             return [
-                { label: '% from Top', value: entry ? `${(entry.proximity * 100).toFixed(2)}%` : '—' },
+                { label: 'Top Accuracy', value: entry ? `${(entry.proximity * 100).toFixed(2)}%` : '—' },
                 { label: 'ROI', value: entry ? `${(entry.roi * 100).toFixed(2)}%` : '—' },
             ];
         }
