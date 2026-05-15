@@ -38,6 +38,7 @@ import {
     CalendarDays, Lock, RotateCcw, Flame, Swords, ArrowLeft, Compass, Pencil,
 } from 'lucide-react';
 import { Select } from '@/components/Select';
+import { Tooltip } from '@/components/Tooltip';
 import styles from '../page.module.css';
 
 const ADMIN_SECRET_KEY = 'adrena_admin_secret';
@@ -1231,31 +1232,33 @@ export default function AdminTournamentsPage() {
                                                                     : s))}
                                                                 min={0} />
                                                             {/* Optional mint override. */}
-                                                            <input type="text" className="input input--mono" placeholder="Mint (optional)"
-                                                                value={tok.mint ?? ''}
-                                                                title="Optional SPL token mint pubkey. Required for custom tokens Jupiter can't resolve via the server-side default map. Empty for ADX/JTO/USDC."
-                                                                onChange={(e) => {
-                                                                    const m = e.target.value.trim() || undefined;
-                                                                    setCfgSponsors((prev) => prev.map((s, j) => j === sIdx
-                                                                        ? { ...s, tokens: s.tokens.map((t, k) => k === tIdx
-                                                                            ? { ...t, mint: m }
-                                                                            : t) }
-                                                                        : s));
-                                                                }} />
+                                                            <Tooltip content="Optional SPL token mint pubkey. Required for custom tokens Jupiter can't resolve via the server-side default map. Empty for ADX/JTO/USDC.">
+                                                                <input type="text" className="input input--mono" placeholder="Mint (optional)"
+                                                                    value={tok.mint ?? ''}
+                                                                    onChange={(e) => {
+                                                                        const m = e.target.value.trim() || undefined;
+                                                                        setCfgSponsors((prev) => prev.map((s, j) => j === sIdx
+                                                                            ? { ...s, tokens: s.tokens.map((t, k) => k === tIdx
+                                                                                ? { ...t, mint: m }
+                                                                                : t) }
+                                                                            : s));
+                                                                    }} />
+                                                            </Tooltip>
                                                             {/* Optional static USD fallback. */}
-                                                            <input type="number" className="input input--mono" placeholder="Static $/tok (optional)"
-                                                                value={tok.staticUsdPrice ?? ''}
-                                                                step="0.000001" min="0"
-                                                                title="Optional static USD/token fallback. Used only when both Pyth + Jupiter return null. Leave empty for live-only pricing."
-                                                                onChange={(e) => {
-                                                                    const v = e.target.value.trim();
-                                                                    const num = v ? Number(v) : undefined;
-                                                                    setCfgSponsors((prev) => prev.map((s, j) => j === sIdx
-                                                                        ? { ...s, tokens: s.tokens.map((t, k) => k === tIdx
-                                                                            ? { ...t, staticUsdPrice: (num != null && !isNaN(num) && num > 0) ? num : undefined }
-                                                                            : t) }
-                                                                        : s));
-                                                                }} />
+                                                            <Tooltip content="Optional static USD/token fallback. Used only when both Pyth + Jupiter return null. Leave empty for live-only pricing.">
+                                                                <input type="number" className="input input--mono" placeholder="Static $/tok (optional)"
+                                                                    value={tok.staticUsdPrice ?? ''}
+                                                                    step="0.000001" min="0"
+                                                                    onChange={(e) => {
+                                                                        const v = e.target.value.trim();
+                                                                        const num = v ? Number(v) : undefined;
+                                                                        setCfgSponsors((prev) => prev.map((s, j) => j === sIdx
+                                                                            ? { ...s, tokens: s.tokens.map((t, k) => k === tIdx
+                                                                                ? { ...t, staticUsdPrice: (num != null && !isNaN(num) && num > 0) ? num : undefined }
+                                                                                : t) }
+                                                                            : s));
+                                                                    }} />
+                                                            </Tooltip>
                                                             <span className={styles.sponsorTokenUSDHint}>
                                                                 {(() => {
                                                                     const live = cfgTokenUSDPrices[tok.symbol];
@@ -1446,32 +1449,35 @@ export default function AdminTournamentsPage() {
                                     </div>
                                     <div className={styles.assetRowField}>
                                         <label className={styles.assetRowFieldLabel}>Feed ID</label>
-                                        <input type="number" className="input input--mono"
-                                            placeholder="feed_id"
-                                            value={asset.feed_id ?? ''}
-                                            onChange={(e) => {
-                                                const v = e.target.value ? Number(e.target.value) : undefined;
-                                                setCfgAssetList((prev) => prev.map((a, j) => j === i ? { ...a, feed_id: v } : a));
-                                            }}
-                                            title="Pyth Lazer feed_id (auto-filled for known symbols; override if needed)" />
+                                        <Tooltip content="Pyth Lazer feed_id (auto-filled for known symbols; override if needed)">
+                                            <input type="number" className="input input--mono"
+                                                placeholder="feed_id"
+                                                value={asset.feed_id ?? ''}
+                                                onChange={(e) => {
+                                                    const v = e.target.value ? Number(e.target.value) : undefined;
+                                                    setCfgAssetList((prev) => prev.map((a, j) => j === i ? { ...a, feed_id: v } : a));
+                                                }} />
+                                        </Tooltip>
                                     </div>
                                     <span className={styles.assetRowJoinedAt}>joined: {asset.joinedAt}</span>
                                     <div className={styles.assetRowField}>
                                         <label className={styles.assetRowFieldLabel}>LM Steps (CSV)</label>
-                                        <input type="text" className="input input--mono"
-                                            placeholder="lmSteps CSV"
-                                            value={asset.lmSteps ?? ''}
-                                            onChange={(e) => setCfgAssetList((prev) => prev.map((a, j) => j === i ? { ...a, lmSteps: e.target.value } : a))}
-                                            title="Comma-separated step values (e.g. 10,20,30,40,50,60,70,80,90,100). Leave empty for crypto default." />
+                                        <Tooltip content="Comma-separated step values (e.g. 10,20,30,40,50,60,70,80,90,100). Leave empty for crypto default.">
+                                            <input type="text" className="input input--mono"
+                                                placeholder="lmSteps CSV"
+                                                value={asset.lmSteps ?? ''}
+                                                onChange={(e) => setCfgAssetList((prev) => prev.map((a, j) => j === i ? { ...a, lmSteps: e.target.value } : a))} />
+                                        </Tooltip>
                                     </div>
                                     <div className={styles.assetRowField}>
                                         <label className={styles.assetRowFieldLabel}>± Tol</label>
-                                        <input type="number" className="input input--mono"
-                                            placeholder="±tol"
-                                            value={asset.lmTolerance ?? ''}
-                                            onChange={(e) => setCfgAssetList((prev) => prev.map((a, j) => j === i ? { ...a, lmTolerance: e.target.value } : a))}
-                                            title="Tolerance window (default 2 for crypto; ~0.2 for sub-10x RWA ladders)"
-                                            step="0.01" min="0.01" />
+                                        <Tooltip content="Tolerance window (default 2 for crypto; ~0.2 for sub-10x RWA ladders)">
+                                            <input type="number" className="input input--mono"
+                                                placeholder="±tol"
+                                                value={asset.lmTolerance ?? ''}
+                                                onChange={(e) => setCfgAssetList((prev) => prev.map((a, j) => j === i ? { ...a, lmTolerance: e.target.value } : a))}
+                                                step="0.01" min="0.01" />
+                                        </Tooltip>
                                     </div>
                                     <button type="button" className={`btn btn--secondary ${styles.assetRowRemove}`}
                                         onClick={() => setCfgAssetList((prev) => prev.filter((_, j) => j !== i))}

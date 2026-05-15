@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { Share2, Check, Link2, Twitter } from 'lucide-react';
+import { Tooltip } from './Tooltip';
 
 interface ShareButtonProps {
     text: string;
@@ -47,15 +48,16 @@ export default function ShareButton({ text, url, label = 'Share', compact = fals
 
     return (
         <div style={{ position: 'relative', display: 'inline-block' }}>
-            <button
-                onClick={toggleMenu}
-                className={`share-btn${compact ? ' share-btn--compact' : ''}`}
-                title="Share"
-                type="button"
-            >
-                <Share2 size={compact ? 13 : 14} />
-                {!compact && <span>{label}</span>}
-            </button>
+            <Tooltip content="Share">
+                <button
+                    onClick={toggleMenu}
+                    className={`share-btn${compact ? ' share-btn--compact' : ''}`}
+                    type="button"
+                >
+                    <Share2 size={compact ? 13 : 14} />
+                    {!compact && <span>{label}</span>}
+                </button>
+            </Tooltip>
 
             {showMenu && (
                 <>

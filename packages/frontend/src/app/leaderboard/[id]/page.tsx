@@ -47,6 +47,7 @@ import {
     XCircle,
 } from 'lucide-react';
 import Link from 'next/link';
+import { Tooltip } from '@/components/Tooltip';
 import styles from './page.module.css';
 
 // --------------------------------------------------------------------------
@@ -1086,11 +1087,13 @@ function LMSplitBgGrid({
                 const titleParts: string[] = [];
                 if (longDone) titleParts.push('Long ✓');
                 if (shortDone) titleParts.push('Short ✓');
-                const title = titleParts.length > 0 ? `${label}: ${titleParts.join(', ')}` : `${label} (none)`;
+                const tooltipText = titleParts.length > 0 ? `${label}: ${titleParts.join(', ')}` : `${label} (none)`;
                 return (
-                    <span key={`${label}-${i}`} className={cls} title={title}>
-                        <span className={styles.lmSplitBgCellLabel}>{label}</span>
-                    </span>
+                    <Tooltip key={`${label}-${i}`} content={tooltipText}>
+                        <span className={cls}>
+                            <span className={styles.lmSplitBgCellLabel}>{label}</span>
+                        </span>
+                    </Tooltip>
                 );
             })}
         </div>
@@ -1260,14 +1263,15 @@ function QuestLeaderboards({
                     <button onClick={() => onNavigateDate(1)} className={styles.dateNavBtn}>
                         <ChevronRight size={16} />
                     </button>
-                    <button
-                        onClick={onJumpToToday}
-                        disabled={isAtMax}
-                        title={isAtMax ? `Already on ${todayBtnLabel.toLowerCase()}` : `Jump to ${todayBtnLabel.toLowerCase()}`}
-                        className={styles.todayBtn}
-                    >
-                        {todayBtnLabel}
-                    </button>
+                    <Tooltip content={isAtMax ? `Already on ${todayBtnLabel.toLowerCase()}` : `Jump to ${todayBtnLabel.toLowerCase()}`}>
+                        <button
+                            onClick={onJumpToToday}
+                            disabled={isAtMax}
+                            className={styles.todayBtn}
+                        >
+                            {todayBtnLabel}
+                        </button>
+                    </Tooltip>
                 </div>
             </div>
 
@@ -1629,14 +1633,15 @@ function RegisterButton({ status, onClick }: {
     const tooltip = isOpen ? undefined : 'Registration closed';
 
     return (
-        <button
-            onClick={isOpen ? onClick : undefined}
-            title={tooltip}
-            disabled={!isOpen}
-            className={styles.registerBtn}
-        >
-            <UserPlus size={14} /> Register
-        </button>
+        <Tooltip content={tooltip}>
+            <button
+                onClick={isOpen ? onClick : undefined}
+                disabled={!isOpen}
+                className={styles.registerBtn}
+            >
+                <UserPlus size={14} /> Register
+            </button>
+        </Tooltip>
     );
 }
 
@@ -1777,9 +1782,11 @@ function PrizeInfo({ prizeTable, topPercentCutoff }: {
         <div className={styles.prizeBanner}>
             <div className={styles.prizeMain}>
                 <div className={styles.prizeLabel}>Total Prize Pool</div>
-                <div className={styles.prizeValue} title={tokenBreakdown}>
-                    {usdPrices ? formatUSD(totalUSD) : '-'}
-                </div>
+                <Tooltip content={tokenBreakdown}>
+                    <div className={styles.prizeValue}>
+                        {usdPrices ? formatUSD(totalUSD) : '-'}
+                    </div>
+                </Tooltip>
                 <div className={styles.prizeSubtitle}>Sponsored by {sponsorsDisplay}</div>
                 <div className={styles.prizeSubtitle}>Distributed in {symbolsDisplay}</div>
             </div>
@@ -1793,17 +1800,21 @@ function PrizeInfo({ prizeTable, topPercentCutoff }: {
                         <div className={styles.prizeSplitLabel}>
                             Top {Math.round((topPercentCutoff ?? 0.30) * 100)}% Skill
                         </div>
-                        <div className={styles.prizeSplitValueSkill} title={`${formatUSD(skillUSD)} (${(skillFrac * 100).toFixed(0)}% of pool)`}>
-                            {usdPrices ? formatUSD(skillUSD) : '-'}
-                        </div>
+                        <Tooltip content={`${formatUSD(skillUSD)} (${(skillFrac * 100).toFixed(0)}% of pool)`}>
+                            <div className={styles.prizeSplitValueSkill}>
+                                {usdPrices ? formatUSD(skillUSD) : '-'}
+                            </div>
+                        </Tooltip>
                     </div>
                 )}
                 {raffleWeight > 0 && (
                     <div className={styles.prizeSplit}>
                         <div className={styles.prizeSplitLabel}>Raffle</div>
-                        <div className={styles.prizeSplitValueRaffle} title={`${formatUSD(raffleUSD)} (${(raffleFrac * 100).toFixed(0)}% of pool)`}>
-                            {usdPrices ? formatUSD(raffleUSD) : '-'}
-                        </div>
+                        <Tooltip content={`${formatUSD(raffleUSD)} (${(raffleFrac * 100).toFixed(0)}% of pool)`}>
+                            <div className={styles.prizeSplitValueRaffle}>
+                                {usdPrices ? formatUSD(raffleUSD) : '-'}
+                            </div>
+                        </Tooltip>
                     </div>
                 )}
             </div>
@@ -1834,9 +1845,11 @@ function PrizeCellMultiToken({
     if (drawPosition !== undefined) breakdownParts.unshift(`Raffle slot #${drawPosition}`);
     const breakdown = breakdownParts.join('\n');
     return (
-        <span title={breakdown}>
-            {usdPrices ? formatUSD(usd) : '-'}
-        </span>
+        <Tooltip content={breakdown}>
+            <span>
+                {usdPrices ? formatUSD(usd) : '-'}
+            </span>
+        </Tooltip>
     );
 }
 

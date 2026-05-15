@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import ShareButton from '@/components/ShareButton';
+import { Tooltip } from '@/components/Tooltip';
 import styles from './page.module.css';
 
 export default function TraderPage({ params }: { params: Promise<{ wallet: string }> }) {
@@ -112,13 +113,14 @@ export default function TraderPage({ params }: { params: Promise<{ wallet: strin
                         <h1 className="page-header__title">Trader Profile</h1>
                         <div className={styles.walletRow}>
                             <code className={styles.walletDisplay}>{wallet}</code>
-                            <button
-                                className={styles.copyBtn}
-                                onClick={copyWallet}
-                                title="Copy wallet address"
-                            >
-                                {copied ? <CheckCircle size={14} /> : <Copy size={14} />}
-                            </button>
+                            <Tooltip content="Copy wallet address">
+                                <button
+                                    className={styles.copyBtn}
+                                    onClick={copyWallet}
+                                >
+                                    {copied ? <CheckCircle size={14} /> : <Copy size={14} />}
+                                </button>
+                            </Tooltip>
                             {profile && profile.rounds.length > 0 && (
                                 <ShareButton text={getShareText()} label="Share" />
                             )}
@@ -172,20 +174,23 @@ export default function TraderPage({ params }: { params: Promise<{ wallet: strin
                             <h3 className={styles.journeyTitle}>Journey</h3>
                             <div className={styles.journeyTrack}>
                                 {profile.rounds.map((round) => (
-                                    <div
+                                    <Tooltip
                                         key={round.roundNumber}
-                                        className={`${styles.journeyNode} ${round.advanced ? styles.journeyAdvanced : ''} ${round.eliminated ? styles.journeyEliminated : ''}`}
-                                        title={`${round.roundName}: ${getStatusLabel(round)}`}
+                                        content={`${round.roundName}: ${getStatusLabel(round)}`}
                                     >
-                                        {round.eliminated ? (
-                                            <Skull size={16} />
-                                        ) : round.advanced ? (
-                                            <ShieldCheck size={16} />
-                                        ) : (
-                                            <Swords size={16} />
-                                        )}
-                                        <span className={styles.journeyLabel}>R{round.roundNumber}</span>
-                                    </div>
+                                        <div
+                                            className={`${styles.journeyNode} ${round.advanced ? styles.journeyAdvanced : ''} ${round.eliminated ? styles.journeyEliminated : ''}`}
+                                        >
+                                            {round.eliminated ? (
+                                                <Skull size={16} />
+                                            ) : round.advanced ? (
+                                                <ShieldCheck size={16} />
+                                            ) : (
+                                                <Swords size={16} />
+                                            )}
+                                            <span className={styles.journeyLabel}>R{round.roundNumber}</span>
+                                        </div>
+                                    </Tooltip>
                                 ))}
                             </div>
                         </div>
