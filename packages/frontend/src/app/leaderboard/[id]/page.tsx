@@ -22,7 +22,7 @@ import {
     type DailyCategoryScore,
     type CategorySlug,
     type LeverageMasterLeaderboard,
-    type LeverageMasterLeaderboardEntry,
+    type LeverageMasterMergedEntry,
     type TournamentState,
 } from '@/lib/api';
 import { QUEST_DESCRIPTIONS, FF_DESCRIPTION, getLeverageMasterDescription, type QuestDescription } from '@/lib/quest-descriptions';
@@ -944,16 +944,57 @@ function TraderStatisticsPanel({ cpiDetails }: {
 // Quest Breakdown Bars (inside expanded row)
 // --------------------------------------------------------------------------
 
+// --------------------------------------------------------------------------
+// LM Split-Background Grid (post-T1 batch Item 2-2)
+//
+// Renders one cell per leverage step with a two-tone background:
+//   - left half = green when Long achieved at that step
+//   - right half = red when Short achieved
+//   - grey when neither
+// Used by BOTH the General Leaderboard expanded row (replacing the old
+// lmCompactGroup text strip) AND the Weekly tab merged-row table.
+// Inline component by design — both consumers live in this same file.
+// --------------------------------------------------------------------------
+function LMSplitBgGrid({
+    stepLabels, stepsCompletedLong, stepsCompletedShort,
+}: {
+    stepLabels: string[];
+    stepsCompletedLong: boolean[];
+    stepsCompletedShort: boolean[];
+}) {
+    return (
+        <div className={styles.lmSplitBgRow}>
+            {stepLabels.map((label, i) => {
+                const longDone = stepsCompletedLong[i] === true;
+                const shortDone = stepsCompletedShort[i] === true;
+                const cls = [
+                    styles.lmSplitBgCell,
+                    longDone ? styles.lmSplitBgCellLongDone : '',
+                    shortDone ? styles.lmSplitBgCellShortDone : '',
+                ].filter(Boolean).join(' ');
+                const titleParts: string[] = [];
+                if (longDone) titleParts.push('Long ✓');
+                if (shortDone) titleParts.push('Short ✓');
+                const title = titleParts.length > 0 ? `${label} — ${titleParts.join(', ')}` : `${label} (none)`;
+                return (
+                    <span key={`${label}-${i}`} className={cls} title={title}>
+                        <span className={styles.lmSplitBgCellLabel}>{label}</span>
+                    </span>
+                );
+            })}
+        </div>
+    );
+}
+
 function QuestBreakdownBars({
     breakdown, assetList,
 }: {
     breakdown: WalletBreakdown;
     assetList?: Array<{ symbol: string; lmSteps?: number[]; lmTolerance?: number }>;
 }) {
-    // Phase 8 item (c.5)+(a.2): split LM categories from non-LM. Non-LM render
-    // as horizontal bars (existing). LM categories aggregate by asset and
-    // render compact step-count rows (current-week step progress, not
-    // leaderboard score which is 0.0 mid-week).
+    // Non-LM categories render as horizontal bars; LM categories render
+    // per-asset split-bg cells (post-T1 batch Item 2-2 — replaces the
+    // lmCompactGroup text strip).
     const allEntries = Object.entries(breakdown.breakdown).map(([key, data]) => ({
         key,
         label: getQuestLabel(key),
@@ -962,24 +1003,32 @@ function QuestBreakdownBars({
     const nonLmEntries = allEntries.filter((e) => !e.key.startsWith('leverage_master_'));
     const maxScore = Math.max(...nonLmEntries.map((e) => Math.abs(e.score)), 1);
 
-    // Group LM step counts by asset using the questProgress payload.
-    // Asset-keyed step counts come from questProgress.byAsset; fall back to 0/0
-    // when no progress data is available (legacy or fetch failure).
-    const lmAssets: Array<{
+    // Per-asset LM progress: stepsCompleted long + short come from byAsset payload.
+    type LmAsset = {
         symbol: string;
+        stepLabels: string[];
         longCount: number;
         shortCount: number;
         stepTotal: number;
-    }> = [];
+        long: boolean[];
+        short: boolean[];
+    };
+    const lmAssets: LmAsset[] = [];
     if (assetList?.length) {
         for (const asset of assetList) {
             const progress = breakdown.questProgress?.byAsset?.[asset.symbol];
             const stepTotal = asset.lmSteps?.length ?? 10;
+            const stepLabels = asset.lmSteps && asset.lmSteps.length > 0
+                ? asset.lmSteps.map((v) => `${v}x`)
+                : Array.from({ length: 10 }, (_, i) => `${(i + 1) * 10}x`);
             lmAssets.push({
                 symbol: asset.symbol,
+                stepLabels,
                 longCount: progress?.longCount ?? 0,
                 shortCount: progress?.shortCount ?? 0,
                 stepTotal,
+                long: progress?.long ?? new Array(stepTotal).fill(false),
+                short: progress?.short ?? new Array(stepTotal).fill(false),
             });
         }
     }
@@ -990,23 +1039,19 @@ function QuestBreakdownBars({
                 <HorizontalBar key={key} label={label} value={score} max={maxScore} color="var(--accent-primary)" />
             ))}
             {lmAssets.length > 0 && (
-                <div className={styles.lmCompactGroup}>
-                    <div className={styles.lmCompactHeading}>Leverage Master (current week)</div>
-                    {lmAssets.map(({ symbol, longCount, shortCount, stepTotal }) => (
-                        <div key={symbol} className={styles.lmCompactRow}>
-                            <span className={styles.lmCompactSymbol}>{symbol}</span>
-                            <span className={styles.lmCompactSide}>
-                                L:{' '}
-                                <span className={longCount > 0 ? styles.lmCompactCountActive : styles.lmCompactCount}>
-                                    {longCount}/{stepTotal}
+                <div className={styles.lmExpandedGroup}>
+                    <div className={styles.lmExpandedHeading}>Leverage Master (current week)</div>
+                    {lmAssets.map((a) => (
+                        <div key={a.symbol} className={styles.lmExpandedRow}>
+                            <div className={styles.lmExpandedRowHeader}>
+                                <span className={styles.lmExpandedSymbol}>{a.symbol}</span>
+                                <span className={styles.lmExpandedCounter}>
+                                    L <span className={a.longCount > 0 ? styles.lmCounterActive : ''}>{a.longCount}/{a.stepTotal}</span>
+                                    {' · '}
+                                    S <span className={a.shortCount > 0 ? styles.lmCounterActive : ''}>{a.shortCount}/{a.stepTotal}</span>
                                 </span>
-                            </span>
-                            <span className={styles.lmCompactSide}>
-                                S:{' '}
-                                <span className={shortCount > 0 ? styles.lmCompactCountActive : styles.lmCompactCount}>
-                                    {shortCount}/{stepTotal}
-                                </span>
-                            </span>
+                            </div>
+                            <LMSplitBgGrid stepLabels={a.stepLabels} stepsCompletedLong={a.long} stepsCompletedShort={a.short} />
                         </div>
                     ))}
                 </div>
@@ -1117,13 +1162,12 @@ function QuestLeaderboards({
                 // (live quest_progress) instead of getDailyScores (week-boundary
                 // dailyCategoryScores rows). Mid-week step progress now visible.
                 assetList.map((asset) => {
-                    const assetData = lmLeaderboard?.byAssetSide[asset.symbol];
+                    const entries = lmLeaderboard?.byAsset[asset.symbol] ?? [];
                     return (
                         <LeverageMasterAssetCard
                             key={asset.symbol}
                             assetSymbol={asset.symbol}
-                            longEntries={assetData?.long ?? []}
-                            shortEntries={assetData?.short ?? []}
+                            entries={entries}
                             isRulesExpanded={expandedRules.has(`leverage_master_${asset.symbol}`)}
                             onToggleRules={() => onToggleRules(`leverage_master_${asset.symbol}`)}
                             isForge={isForge}
@@ -1300,18 +1344,16 @@ function CategoryLeaderboard({ category, scores, isRulesExpanded, onToggleRules,
 }
 
 // --------------------------------------------------------------------------
-// Leverage Master — Aggregated per-asset card (Phase 8 item c.5b)
+// Leverage Master — Merged per-asset card (post-T1 batch Item 2-2)
 //
-// Shows both Long and Short ladders for one asset, side-by-side (stacks
-// vertically on narrow screens). Replaces the 2 separate `CategoryLeaderboard`
-// cards (one per side) per asset with a single combined card. Reduces the
-// Weekly period card count from 12 (6 assets × 2 sides) to 6 (one per asset).
+// One table per asset showing both Long + Short progression per wallet in
+// a single row. Progress column uses split-background cells (green = Long,
+// red = Short, grey = neither). Replaces the prior dual sub-tables.
 // --------------------------------------------------------------------------
 
 interface LeverageMasterAssetCardProps {
     assetSymbol: string;
-    longEntries: LeverageMasterLeaderboardEntry[];
-    shortEntries: LeverageMasterLeaderboardEntry[];
+    entries: LeverageMasterMergedEntry[];
     isRulesExpanded: boolean;
     onToggleRules: () => void;
     isForge: boolean;
@@ -1321,11 +1363,20 @@ interface LeverageMasterAssetCardProps {
 }
 
 function LeverageMasterAssetCard({
-    assetSymbol, longEntries, shortEntries,
+    assetSymbol, entries,
     isRulesExpanded, onToggleRules, isForge, searchedWallet,
     lmSteps, lmTolerance,
 }: LeverageMasterAssetCardProps) {
     const questInfo = getLeverageMasterDescription('long', assetSymbol, lmSteps, lmTolerance);
+    const top5 = entries.slice(0, 5);
+    const searchedEntry = searchedWallet
+        ? entries.find((e) => e.wallet === searchedWallet) ?? null
+        : null;
+    const searchedInTop5 = !!(searchedEntry && top5.some((e) => e.wallet === searchedEntry.wallet));
+    const showRow6 = searchedEntry !== null && !searchedInTop5;
+    const stepLabels = lmSteps && lmSteps.length > 0
+        ? lmSteps.map((v) => `${v}x`)
+        : Array.from({ length: 10 }, (_, i) => `${(i + 1) * 10}x`);
 
     return (
         <div className={styles.categoryCard}>
@@ -1348,74 +1399,22 @@ function LeverageMasterAssetCard({
                 </div>
             )}
 
-            <div className={styles.lmAssetSplitGrid}>
-                <LeverageMasterSubLeaderboard
-                    sideLabel="Long"
-                    entries={longEntries}
-                    lmSteps={lmSteps}
-                    isForge={isForge}
-                    searchedWallet={searchedWallet}
-                />
-                <LeverageMasterSubLeaderboard
-                    sideLabel="Short"
-                    entries={shortEntries}
-                    lmSteps={lmSteps}
-                    isForge={isForge}
-                    searchedWallet={searchedWallet}
-                />
-            </div>
-        </div>
-    );
-}
-
-interface LeverageMasterSubLeaderboardProps {
-    sideLabel: 'Long' | 'Short';
-    entries: LeverageMasterLeaderboardEntry[];
-    lmSteps?: number[];
-    isForge: boolean;
-    searchedWallet: string | null;
-}
-
-// Round 2 (LM-2 + LM-3): rewritten to consume LeverageMasterLeaderboardEntry
-// from /api/quests/:tournamentId/leaderboard. Adds Progress column with
-// gray-dominant badge cells per ZeDef's "what they are MISSING" preference
-// (un-completed steps visually emphasized; completed pop in accent color).
-// Plus Steps + Points columns matching ZeDef's mockup (B2-4).
-function LeverageMasterSubLeaderboard({
-    sideLabel, entries, lmSteps, isForge, searchedWallet,
-}: LeverageMasterSubLeaderboardProps) {
-    const top5 = entries.slice(0, 5);
-    const searchedEntry = searchedWallet
-        ? entries.find((e) => e.wallet === searchedWallet) ?? null
-        : null;
-    const searchedInTop5 = !!(searchedEntry && top5.some((e) => e.wallet === searchedEntry.wallet));
-    const showRow6 = searchedEntry !== null && !searchedInTop5;
-
-    // Per-asset step labels (e.g., [10, 20, ..., 100] for crypto, [1.5, 2, ..., 4.5]
-    // for RWAs). Fallback to default crypto labels if lmSteps undefined (legacy).
-    const stepLabels = lmSteps && lmSteps.length > 0
-        ? lmSteps.map((v) => `${v}x`)
-        : Array.from({ length: 10 }, (_, i) => `${(i + 1) * 10}x`);
-
-    return (
-        <div className={styles.lmAssetSubBoard}>
-            <div className={styles.lmAssetSubHeader}>{sideLabel}</div>
             {top5.length === 0 ? (
-                <p className={styles.noScoresText}>No scores yet</p>
+                <div className={styles.noScoresText} style={{ padding: 'var(--space-md)' }}>No scores yet</div>
             ) : (
-                <table className={styles.lmAssetSubTable}>
+                <table className={styles.lmMergedTable}>
                     <thead>
                         <tr>
                             <th>#</th>
                             <th>Wallet</th>
-                            <th>Progress</th>
+                            <th>Progress (L · S per step)</th>
                             <th>Steps</th>
                             <th>Points</th>
                         </tr>
                     </thead>
                     <tbody>
                         {top5.map((e) => (
-                            <LMRow
+                            <LMMergedRow
                                 key={e.wallet}
                                 entry={e}
                                 stepLabels={stepLabels}
@@ -1424,7 +1423,7 @@ function LeverageMasterSubLeaderboard({
                             />
                         ))}
                         {showRow6 && searchedEntry && (
-                            <LMRow
+                            <LMMergedRow
                                 key={`searched-${searchedEntry.wallet}`}
                                 entry={searchedEntry}
                                 stepLabels={stepLabels}
@@ -1439,10 +1438,10 @@ function LeverageMasterSubLeaderboard({
     );
 }
 
-function LMRow({
+function LMMergedRow({
     entry, stepLabels, isForge, isSearched,
 }: {
-    entry: LeverageMasterLeaderboardEntry;
+    entry: LeverageMasterMergedEntry;
     stepLabels: string[];
     isForge: boolean;
     isSearched: boolean;
@@ -1460,23 +1459,20 @@ function LMRow({
                 )}
             </td>
             <td>
-                <div className={styles.lmBadgeRow}>
-                    {stepLabels.map((label, i) => {
-                        const completed = entry.stepsCompleted[i] === true;
-                        return (
-                            <span
-                                key={`${label}-${i}`}
-                                className={`${styles.lmBadgeCell} ${completed ? styles.lmBadgeCellDone : ''}`}
-                                title={`${label}${completed ? ' ✓' : ' (missing)'}`}
-                            >
-                                {label}
-                            </span>
-                        );
-                    })}
-                </div>
+                <LMSplitBgGrid
+                    stepLabels={stepLabels}
+                    stepsCompletedLong={entry.stepsCompletedLong}
+                    stepsCompletedShort={entry.stepsCompletedShort}
+                />
             </td>
-            <td>{entry.stepCount}/{entry.stepTotal}</td>
-            <td>{entry.points > 0 ? entry.points.toFixed(2) : '—'}</td>
+            <td className={styles.lmMergedCounterCell}>
+                L <span className={entry.longCount > 0 ? styles.lmCounterActive : ''}>{entry.longCount}/{entry.stepTotal}</span>
+                {' · '}
+                S <span className={entry.shortCount > 0 ? styles.lmCounterActive : ''}>{entry.shortCount}/{entry.stepTotal}</span>
+            </td>
+            <td className={styles.finalScore}>
+                {entry.totalPoints > 0 ? entry.totalPoints.toFixed(2) : '—'}
+            </td>
         </tr>
     );
 }

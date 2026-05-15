@@ -530,23 +530,26 @@ export async function getQuestProgress(
     return apiFetch<QuestProgressDetails>(url);
 }
 
-// Round 2 (LM-2 + LM-3): per-asset, per-side LM leaderboard from quest_progress
-// (live, not week-boundary). Backend at /api/quests/:tournamentId/leaderboard.
-export interface LeverageMasterLeaderboardEntry {
+// Post-T1 batch (Item 2-2): per-asset merged LM leaderboard. Each entry
+// combines both Long + Short progression for a single wallet. Backend at
+// /api/quests/:tournamentId/leaderboard. Engine awards points per-side
+// (unchanged); display sums total per wallet.
+export interface LeverageMasterMergedEntry {
     wallet: string;
-    stepCount: number;
+    longCount: number;
+    shortCount: number;
     stepTotal: number;
-    stepsCompleted: boolean[];
+    stepsCompletedLong: boolean[];
+    stepsCompletedShort: boolean[];
+    pointsLong: number;
+    pointsShort: number;
+    totalPoints: number;
     rank: number;
-    points: number;
 }
 
 export interface LeverageMasterLeaderboard {
     weekNumber: number;
-    byAssetSide: Record<string, {
-        long: LeverageMasterLeaderboardEntry[];
-        short: LeverageMasterLeaderboardEntry[];
-    }>;
+    byAsset: Record<string, LeverageMasterMergedEntry[]>;
 }
 
 export async function getLeverageMasterLeaderboard(

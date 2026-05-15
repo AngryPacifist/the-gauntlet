@@ -476,8 +476,75 @@
     font-variant-numeric: tabular-nums;
 }
 
-/* Phase 8 item (c.5)+(a.2): aggregated LM compact rows in expanded breakdown */
-.lmCompactGroup {
+/* Post-T1 batch (Item 2-2): split-background single cell for LM progress.
+   Single cell, label centered, background split into two halves —
+   left half = Long state (green when achieved), right half = Short state
+   (red when achieved). Both achieved = full color cell. Neither = grey. */
+.lmSplitBgRow {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 3px;
+}
+
+.lmSplitBgCell {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 32px;
+    padding: 4px 7px;
+    border-radius: 4px;
+    border: 1px solid var(--border-default);
+    background: var(--bg-elevated);
+    color: var(--text-muted);
+    font-size: 0.6875rem;
+    font-family: var(--font-mono);
+    line-height: 1;
+    overflow: hidden;
+}
+
+.lmSplitBgCell::before,
+.lmSplitBgCell::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 50%;
+    z-index: 0;
+    background: transparent;
+}
+
+.lmSplitBgCell::before { left: 0; }
+.lmSplitBgCell::after { right: 0; }
+
+/* Long achieved — left half green */
+.lmSplitBgCellLongDone::before {
+    background: rgba(74, 222, 128, 0.28);
+}
+.lmSplitBgCellLongDone {
+    border-left-color: rgba(74, 222, 128, 0.8);
+    color: var(--text-primary);
+}
+
+/* Short achieved — right half red */
+.lmSplitBgCellShortDone::after {
+    background: rgba(248, 113, 113, 0.28);
+}
+.lmSplitBgCellShortDone {
+    border-right-color: rgba(248, 113, 113, 0.8);
+    color: var(--text-primary);
+}
+
+/* Label sits above both fill halves */
+.lmSplitBgCellLabel {
+    position: relative;
+    z-index: 1;
+    font-variant-numeric: tabular-nums;
+}
+
+/* Post-T1 batch (Item 2-2): expanded-row LM section (replaces lmCompactGroup).
+   Per-asset row with counter line + LMSplitBgGrid below. */
+.lmExpandedGroup {
     margin-top: var(--space-sm);
     padding: var(--space-sm) var(--space-md);
     background: var(--bg-elevated);
@@ -485,7 +552,7 @@
     border: 1px solid var(--border-default);
 }
 
-.lmCompactHeading {
+.lmExpandedHeading {
     font-size: 0.6875rem;
     font-weight: 600;
     color: var(--text-muted);
@@ -494,88 +561,75 @@
     margin-bottom: var(--space-xs);
 }
 
-.lmCompactRow {
-    display: grid;
-    grid-template-columns: 1fr auto auto;
-    gap: var(--space-sm);
-    align-items: center;
-    padding: 4px 0;
+.lmExpandedRow {
+    padding: var(--space-xs) 0;
+    border-bottom: 1px solid var(--border-subtle);
+}
+.lmExpandedRow:last-child { border-bottom: none; }
+
+.lmExpandedRowHeader {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-md);
+    margin-bottom: 4px;
+}
+
+.lmExpandedSymbol {
+    font-weight: 600;
+    color: var(--text-primary);
+    min-width: 50px;
+}
+
+.lmExpandedCounter {
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    font-variant-numeric: tabular-nums;
+}
+
+.lmCounterActive {
+    color: var(--text-primary);
+    font-weight: 600;
+}
+
+/* Post-T1 batch (Item 2-2): Weekly tab merged-row table (replaces
+   lmAssetSubBoard + dual sub-tables). One row per wallet with split-cell
+   grid + counter + points columns. */
+.lmMergedTable {
+    width: 100%;
+    border-collapse: collapse;
     font-size: 0.8125rem;
 }
 
-.lmCompactSymbol {
-    font-weight: 600;
-    color: var(--text-primary);
-}
-
-.lmCompactSide {
-    color: var(--text-muted);
-    font-size: 0.75rem;
-}
-
-.lmCompactCount {
-    color: var(--text-secondary);
-    font-variant-numeric: tabular-nums;
-}
-
-.lmCompactCountActive {
-    color: var(--accent-primary);
-    font-weight: 600;
-    font-variant-numeric: tabular-nums;
-}
-
-/* Phase 8 item (c.5b): aggregated per-asset card in Quest Leaderboards Weekly tab */
-.lmAssetSplitGrid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: var(--space-md);
-    padding: var(--space-md);
-}
-
-@media (max-width: 720px) {
-    .lmAssetSplitGrid {
-        grid-template-columns: 1fr;
-    }
-}
-
-.lmAssetSubBoard {
-    background: var(--bg-elevated);
-    border-radius: var(--radius-sm);
-    padding: var(--space-sm) var(--space-md);
-    border: 1px solid var(--border-default);
-}
-
-.lmAssetSubHeader {
-    font-size: 0.6875rem;
-    font-weight: 600;
-    color: var(--text-muted);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    margin-bottom: var(--space-xs);
-}
-
-.lmAssetSubTable {
-    width: 100%;
-    font-size: 0.75rem;
-    border-collapse: collapse;
-}
-
-.lmAssetSubTable th {
+.lmMergedTable th {
     text-align: left;
     color: var(--text-muted);
-    font-weight: 500;
-    padding: 4px 6px;
-    border-bottom: 1px solid var(--border-default);
+    font-size: 0.6875rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    padding: var(--space-xs) var(--space-sm);
+    border-bottom: 1px solid var(--border-subtle);
 }
 
-.lmAssetSubTable th:last-child,
-.lmAssetSubTable td:last-child {
+.lmMergedTable th:last-child,
+.lmMergedTable td:last-child {
     text-align: right;
 }
 
-.lmAssetSubTable td {
-    padding: 4px 6px;
+.lmMergedTable td {
+    padding: var(--space-sm);
     color: var(--text-secondary);
+    border-bottom: 1px solid rgb(28, 38, 54);
+    vertical-align: middle;
+}
+
+.lmMergedTable tr:last-child td { border-bottom: none; }
+
+.lmMergedCounterCell {
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
 }
 
 .noScoresText {
@@ -1033,36 +1087,6 @@
     }
 }
 
-/* ----------------------------------------------------------------------------
-   Round 2 (LM-2 + LM-3): compact badge cells per row in LM sub-leaderboard.
-   Gray-dominant by default (ZeDef's "what they are missing" preference);
-   completed cells get accent fill + color.
-   ---------------------------------------------------------------------------- */
-
-.lmBadgeRow {
-    display: inline-flex;
-    flex-wrap: wrap;
-    gap: 2px;
-}
-
-.lmBadgeCell {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-width: 28px;
-    padding: 2px 5px;
-    border-radius: 3px;
-    border: 1px solid var(--border-default);
-    background: transparent;
-    color: var(--text-muted);
-    font-size: 0.6875rem;
-    font-family: var(--font-mono);
-    line-height: 1;
-}
-
-.lmBadgeCellDone {
-    border-color: #e84393;
-    background: rgba(232, 67, 147, 0.12);
-    color: #e84393;
-    font-weight: 600;
-}
+/* Post-T1 batch (Item 2-2): the Round-2 lmBadge* classes (single-accent
+   per-step badges in the prior LM sub-leaderboards) are removed. The
+   merged Weekly tab now uses .lmSplitBgCell* + .lmMergedTable above. */

@@ -24,33 +24,35 @@ const LEVERAGE_QUEST_POINTS = [0.5, 0.4, 0.3, 0.2, 0.1];
 // --------------------------------------------------------------------------
 // GET /api/quests/:tournamentId/leaderboard?week=N or ?date=YYYY-MM-DD
 //
-// Round 2 (LM-2 + LM-3): per-asset, per-side LM leaderboard read from
-// quest_progress (live state, hourly-updated by evaluateLeverageProgress)
-// instead of daily_category_scores (week-boundary writes only). Replaces
-// the dailyCategoryScores dependency that produced "no scores yet" mid-week
-// on the Quest Leaderboards Weekly tab.
+// Per-asset merged LM leaderboard from quest_progress (live state). Each
+// entry combines both Long + Short progression for a single wallet so the
+// FE Weekly tab + General Leaderboard expanded row can render one row per
+// wallet with split-background per-step badges (post-T1 batch Item 2-2).
 //
 // Response shape:
 // {
 //   weekNumber: 1,
-//   byAssetSide: {
-//     'SOL': {
-//       long: [{ wallet, stepCount, stepTotal, stepsCompleted, rank, points }, ...],
-//       short: [...]
-//     },
-//     'BTC': { long, short },
+//   byAsset: {
+//     'SOL': [{
+//       wallet,
+//       longCount, shortCount, stepTotal,
+//       stepsCompletedLong: boolean[], stepsCompletedShort: boolean[],
+//       pointsLong, pointsShort, totalPoints,
+//       rank
+//     }, ...],
+//     'BTC': [...],
 //     ...
 //   }
 // }
 //
-// Ranking: stepCount DESC, wallet ASC. Top 5 per (asset, side) earn LM
-// quest points from LEVERAGE_QUEST_POINTS table [0.5, 0.4, 0.3, 0.2, 0.1].
-// Phase 8.m guard: stepCount > 0 required for points.
+// Sort: (longCount + shortCount) DESC, max(L, S) DESC, wallet ASC.
+// Competition ranking (1224): tied wallets share rank, next rank skips.
+//
+// Points: engine UNCHANGED — top 5 per (asset, side) earn from
+// LEVERAGE_QUEST_POINTS [0.5, 0.4, 0.3, 0.2, 0.1]; Phase 8.m guard
+// requires stepCount > 0. Display sums pointsLong + pointsShort per wallet.
 //
 // Week resolution priority: ?week=N > ?date=YYYY-MM-DD > current week.
-// Date param supports the frontend's Quest Leaderboards Weekly date navigator
-// — frontend passes the displayed date string, this endpoint converts to
-// week number using the same logic as scheduler.ts:computeCurrentQuestWeek.
 // --------------------------------------------------------------------------
 router.get('/:tournamentId/leaderboard', async (req, res) => {
     try {
@@ -81,7 +83,7 @@ router.get('/:tournamentId/leaderboard', async (req, res) => {
             .orderBy(asc(rounds.startTime))
             .limit(1);
         if (!firstRound) {
-            res.json({ success: true, data: { weekNumber: 0, byAssetSide: {} } });
+            res.json({ success: true, data: { weekNumber: 0, byAsset: {} } });
             return;
         }
 
@@ -126,58 +128,116 @@ router.get('/:tournamentId/leaderboard', async (req, res) => {
                 eq(questProgress.tournamentId, tournamentId),
                 eq(questProgress.questType, 'leverage_master'),
                 eq(questProgress.weekNumber, targetWeek),
-            ))
-            .orderBy(desc(questProgress.stepCount), asc(questProgress.wallet));
+            ));
 
-        // Group by (asset, side)
-        type Entry = {
-            wallet: string;
-            stepCount: number;
-            stepTotal: number;
-            stepsCompleted: boolean[];
-            rank: number;
-            points: number;
-        };
-        const byAssetSide: Record<string, { long: Entry[]; short: Entry[] }> = {};
-
-        // Initialize from config.assetList so empty assets render correctly
-        if (config.assetList?.length) {
-            for (const a of config.assetList) {
-                byAssetSide[a.symbol] = { long: [], short: [] };
-            }
-        }
-
+        // Pivot: group by (asset, wallet), combine long + short per wallet.
+        type SideData = { stepsCompleted: boolean[]; stepCount: number };
+        const byAssetWallet: Record<string, Map<string, {
+            long?: SideData; short?: SideData; stepTotal: number;
+        }>> = {};
         for (const r of rows) {
-            const sym = r.asset;
-            if (!byAssetSide[sym]) byAssetSide[sym] = { long: [], short: [] };
+            if (!byAssetWallet[r.asset]) byAssetWallet[r.asset] = new Map();
+            const m = byAssetWallet[r.asset];
+            if (!m.has(r.wallet)) m.set(r.wallet, { stepTotal: r.stepTotal });
+            const entry = m.get(r.wallet)!;
             const side = r.side as 'long' | 'short';
-            byAssetSide[sym][side].push({
-                wallet: r.wallet,
-                stepCount: r.stepCount,
-                stepTotal: r.stepTotal,
+            entry[side] = {
                 stepsCompleted: r.stepsCompleted as boolean[],
-                rank: 0,
-                points: 0,
-            });
+                stepCount: r.stepCount,
+            };
+            entry.stepTotal = r.stepTotal;
         }
 
-        // Compute competition rank + LM quest points per (asset, side)
-        for (const sym of Object.keys(byAssetSide)) {
-            for (const side of ['long', 'short'] as const) {
-                const list = byAssetSide[sym][side];
-                let cRank = 0;
-                for (let i = 0; i < list.length; i++) {
-                    if (i > 0 && list[i].stepCount !== list[i - 1].stepCount) cRank = i;
-                    list[i].rank = cRank + 1;
-                    // Phase 8.m guard: stepCount > 0 required for points.
-                    if (list[i].stepCount > 0 && cRank < LEVERAGE_QUEST_POINTS.length) {
-                        list[i].points = LEVERAGE_QUEST_POINTS[cRank];
-                    }
+        // Initialize byAsset from config.assetList so empty assets render correctly.
+        type MergedEntry = {
+            wallet: string;
+            longCount: number;
+            shortCount: number;
+            stepTotal: number;
+            stepsCompletedLong: boolean[];
+            stepsCompletedShort: boolean[];
+            pointsLong: number;
+            pointsShort: number;
+            totalPoints: number;
+            rank: number;
+        };
+        const byAsset: Record<string, MergedEntry[]> = {};
+        if (config.assetList?.length) {
+            for (const a of config.assetList) byAsset[a.symbol] = [];
+        }
+
+        // Per-asset: compute per-side rank to assign points (engine unchanged),
+        // then build merged entries + sort by combined metrics.
+        for (const [asset, walletMap] of Object.entries(byAssetWallet)) {
+            type SideRanked = { wallet: string; stepCount: number; points: number };
+            const longList: SideRanked[] = [];
+            const shortList: SideRanked[] = [];
+            for (const [wallet, sides] of walletMap) {
+                if (sides.long) longList.push({ wallet, stepCount: sides.long.stepCount, points: 0 });
+                if (sides.short) shortList.push({ wallet, stepCount: sides.short.stepCount, points: 0 });
+            }
+            // Per-side rank: stepCount DESC, wallet ASC. Phase 8.m: stepCount > 0 required for points.
+            longList.sort((a, b) => b.stepCount - a.stepCount || a.wallet.localeCompare(b.wallet));
+            shortList.sort((a, b) => b.stepCount - a.stepCount || a.wallet.localeCompare(b.wallet));
+            let lcRank = 0;
+            for (let i = 0; i < longList.length; i++) {
+                if (i > 0 && longList[i].stepCount !== longList[i - 1].stepCount) lcRank = i;
+                if (longList[i].stepCount > 0 && lcRank < LEVERAGE_QUEST_POINTS.length) {
+                    longList[i].points = LEVERAGE_QUEST_POINTS[lcRank];
                 }
             }
+            let scRank = 0;
+            for (let i = 0; i < shortList.length; i++) {
+                if (i > 0 && shortList[i].stepCount !== shortList[i - 1].stepCount) scRank = i;
+                if (shortList[i].stepCount > 0 && scRank < LEVERAGE_QUEST_POINTS.length) {
+                    shortList[i].points = LEVERAGE_QUEST_POINTS[scRank];
+                }
+            }
+            const longPointsByWallet = new Map(longList.map((e) => [e.wallet, e.points]));
+            const shortPointsByWallet = new Map(shortList.map((e) => [e.wallet, e.points]));
+
+            // Build merged entries.
+            const merged: MergedEntry[] = [];
+            for (const [wallet, sides] of walletMap) {
+                const stepTotal = sides.stepTotal;
+                const longCount = sides.long?.stepCount ?? 0;
+                const shortCount = sides.short?.stepCount ?? 0;
+                const pointsLong = longPointsByWallet.get(wallet) ?? 0;
+                const pointsShort = shortPointsByWallet.get(wallet) ?? 0;
+                merged.push({
+                    wallet,
+                    longCount,
+                    shortCount,
+                    stepTotal,
+                    stepsCompletedLong: sides.long?.stepsCompleted ?? new Array(stepTotal).fill(false),
+                    stepsCompletedShort: sides.short?.stepsCompleted ?? new Array(stepTotal).fill(false),
+                    pointsLong,
+                    pointsShort,
+                    totalPoints: pointsLong + pointsShort,
+                    rank: 0,
+                });
+            }
+            // Combined sort: total step count DESC, max(L, S) DESC, wallet ASC.
+            merged.sort((a, b) => {
+                const totalDiff = (b.longCount + b.shortCount) - (a.longCount + a.shortCount);
+                if (totalDiff !== 0) return totalDiff;
+                const maxDiff = Math.max(b.longCount, b.shortCount) - Math.max(a.longCount, a.shortCount);
+                if (maxDiff !== 0) return maxDiff;
+                return a.wallet.localeCompare(b.wallet);
+            });
+            // Competition rank (1224) on the merged sort key.
+            let mRank = 1;
+            let prevKey = '';
+            for (let i = 0; i < merged.length; i++) {
+                const key = `${merged[i].longCount + merged[i].shortCount}|${Math.max(merged[i].longCount, merged[i].shortCount)}`;
+                if (i === 0 || key !== prevKey) mRank = i + 1;
+                merged[i].rank = mRank;
+                prevKey = key;
+            }
+            byAsset[asset] = merged;
         }
 
-        res.json({ success: true, data: { weekNumber: targetWeek, byAssetSide } });
+        res.json({ success: true, data: { weekNumber: targetWeek, byAsset } });
     } catch (error) {
         console.error('[Quests] Error getting LM leaderboard:', error);
         res.status(500).json({
