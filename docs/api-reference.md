@@ -98,10 +98,10 @@ Returns all tournaments, ordered by creation date (newest first).
 
 **`format` values**: `'bracket'` for the Gauntlet (elimination), `'rank_only'` for the Forge (flat leaderboard).
 
-**`prizeTable` shape (post-2026-05-15 multi-token batch)**:
+**`prizeTable` shape**:
 - `tokens[]`: list of per-sponsor contributions. Each entry is one sponsor contributing one token. A sponsor contributing multiple tokens appears as multiple entries. Optional `mint` (SPL token mint pubkey for Jupiter pricing of custom tokens). Optional `staticUsdPrice` (admin-supplied USD per token, used only when both Pyth + Jupiter return null).
 - `skillPrizes` and `rafflePrizes`: rank-weight ratios. Per-rank share of every token equals `(weight / totalWeight) × token.amount` where `totalWeight = sum(skillPrizes) + sum(rafflePrizes)`. For single-sponsor single-token tournaments, these can still be read as literal token amounts (math is identical).
-- Legacy `totalPool` + `currency` fields kept for backward compat. Pre-2026-05-15 tournaments may have these without `tokens[]`. New code paths read `tokens[]` and fall back to a synthesized `[{sponsor: 'Adrena', symbol: <currency>, amount: <totalPool>}]` when absent.
+- Legacy `totalPool` + `currency` fields kept for backward compat with older tournaments. New code paths read `tokens[]` and fall back to a synthesized `[{sponsor: 'Adrena', symbol: <currency>, amount: <totalPool>}]` when absent.
 
 ---
 
@@ -206,7 +206,7 @@ Updates a tournament's name and/or config. **Admin-only. Only works during `regi
 **Request body:**
 ```json
 {
-  "name": "Season 1 — Updated",
+  "name": "Season 1 (updated)",
   "config": {
     "bracketSize": 16,
     "roundDurations": [48, 48, 48]
@@ -214,7 +214,7 @@ Updates a tournament's name and/or config. **Admin-only. Only works during `regi
 }
 ```
 
-Config overrides are merged with the existing config — you only need to send the fields you want to change.
+Config overrides are merged with the existing config; you only need to send the fields you want to change.
 
 **Response:** Returns the updated tournament object.
 
@@ -259,7 +259,7 @@ Deletes a tournament and **all associated data** (registrations, rounds, bracket
 POST /api/register
 ```
 
-Registers a wallet for a tournament. Zero-barrier sign-up — any valid Solana wallet is accepted without eligibility checks.
+Registers a wallet for a tournament. Zero-barrier sign-up: any valid Solana wallet is accepted without eligibility checks.
 
 **Request body:**
 ```json
@@ -473,7 +473,7 @@ Returns aggregate post-tournament analytics: per-round statistics, CPI score dis
 
 ---
 
-### The Forge — Merged Leaderboard
+### The Forge: Merged Leaderboard
 
 ```
 GET /api/tournaments/:id/forge
@@ -524,7 +524,7 @@ GET /api/tournaments/:id/payouts
 
 Final distribution list for a tournament: skill prizes (top % wallets) plus raffle winners. Designed for external distribution systems (e.g. Adrena's MrRewards keeper) to ingest the determinate result post-tournament. Public, no auth.
 
-Each row carries both a legacy `amountADX` field (sum of any ADX token amounts in `tokens[]`, kept for backward compat) and a `tokens[]` array (the multi-token source of truth post-2026-05-15).
+Each row carries both a legacy `amountADX` field (sum of any ADX token amounts in `tokens[]`, kept for backward compat) and a `tokens[]` array (the multi-token source of truth).
 
 **Response:**
 ```json
@@ -580,7 +580,7 @@ Each row carries both a legacy `amountADX` field (sum of any ADX token amounts i
 - `complete` is `true` only when `status === 'completed'` AND `rows` is non-empty. Polling signal for downstream consumers (poll the endpoint, act when `complete` flips to true).
 - Skill rows have `category: 'skill'`, `rank: N`, `drawPosition: null`. Raffle rows have `category: 'raffle'`, `rank: null`, `drawPosition: 1/2/3/...`.
 - Tie-handling matches the frontend's `prizesByRank` math exactly: tied wallets at rank R split the summed slot prizes across the group, preserving conservation.
-- Per-rank skill share uses Phase 8.q geometric-decay extension when top % count exceeds `skillPrizes.length`, plus a pro-rata scale so the configured skill pool always flows fully to active top % wallets.
+- Per-rank skill share uses a geometric-decay curve extension when the top % count exceeds `skillPrizes.length` (so every top-% wallet gets a non-zero share), plus a pro-rata scale that boosts active wallets when the count is fewer than `skillPrizes.length` (so the configured pool always flows fully).
 - For multi-token tournaments: every winner gets a proportional share of every token. `rank_N_share_of_token_T = (rank_weight / totalWeight) × pool_token_T`. MrRewards should consume `tokens[]` directly, not `amountADX`.
 - For single-sponsor single-token tournaments (e.g. T1): `amountADX` works exactly as before. `tokens[]` is a single-entry array.
 
@@ -592,11 +592,11 @@ Each row carries both a legacy `amountADX` field (sum of any ADX token amounts i
 GET /api/leaderboard
 ```
 
-Bundled cumulative leaderboard payload powering the standalone `/leaderboard` page (Phase 5 item 20). Public, no auth. On-demand compute (no caching yet — Phase 6 will add it). Aggregates three views:
+Bundled cumulative leaderboard payload powering the standalone `/leaderboard` page. Public, no auth. On-demand compute (a TTL cache layer is the natural next step if load demands it). Aggregates three views:
 
-- **Tournament tab** — Top 10 of the current active tournament (or most-recent completed if none active). Format-agnostic — works for both Forge (rank_only) and Gauntlet (bracket).
-- **Season tab** — Current active season's full standings (or most-recent completed/final season).
-- **All-time tab** — Cross-tournament `finalScore` aggregation per wallet, capped at top 100. Spans all formats (Forge + Gauntlet) and includes Fallen Fighters participants.
+- **Tournament tab**: Top 10 of the current active tournament (or most-recent completed if none active). Format-agnostic, works for both Forge (rank_only) and Gauntlet (bracket).
+- **Season tab**: Current active season's full standings (or most-recent completed/final season).
+- **All-time tab**: Cross-tournament `finalScore` aggregation per wallet, capped at top 100. Spans all formats (Forge + Gauntlet) and includes Fallen Fighters participants.
 
 **Response:**
 ```json
@@ -628,7 +628,7 @@ Bundled cumulative leaderboard payload powering the standalone `/leaderboard` pa
 **Notes:**
 - All three rankings use tie-aware competition ranking (1, 1, 3, 4...).
 - Empty fields return as `null` (e.g. `current.tournament: null` if no tournaments exist).
-- The Tournament tab is intentionally slim (top 10) — full per-tournament leaderboard is at `/leaderboard/:id`.
+- The Tournament tab is intentionally slim (top 10); the full per-tournament leaderboard is at `/leaderboard/:id`.
 
 ---
 
@@ -652,10 +652,10 @@ X-Admin-Secret: <your-admin-secret>
 {
   "name": "Season 1",
   "config": {
-    "format": "bracket",  // 'bracket' (Gauntlet, default) | 'rank_only' (Forge — skips bracket creation)
+    "format": "bracket",  // 'bracket' (Gauntlet, default) | 'rank_only' (Forge, skips bracket creation)
     "bracketSize": 16,
     "roundDurations": [48, 48, 48],
-    "leveragePenaltyThreshold": 30,  // legacy — no longer used by Risk score
+    "leveragePenaltyThreshold": 30,  // legacy, no longer used by Risk score
     "supportedAssetCount": 4
   }
 }
@@ -702,7 +702,7 @@ Closes registration, creates Round 1 brackets, and sets the tournament status to
 **Errors:**
 - Tournament must be in `registration` status.
 - At least 2 registered traders are required.
-- **Singleton enforcement (Phase 5 item 21):** Another tournament with `active` status already exists. The error message includes the conflicting tournament's id and name. Cancel or complete it first.
+- **Singleton enforcement:** Another tournament with `active` status already exists. The error message includes the conflicting tournament's id and name. Cancel or complete it first.
 
 ---
 
@@ -742,7 +742,7 @@ Ranks each bracket by CPI, eliminates the bottom half (except in the final main 
 }
 ```
 
-`roundType` is optional. When omitted, the engine **auto-detects** the active round type — if a Fallen Fighters (consolation) round exists, it advances that; otherwise it advances the main round. You can still pass `"main"` or `"consolation"` explicitly to override.
+`roundType` is optional. When omitted, the engine **auto-detects** the active round type: if a Fallen Fighters (consolation) round exists, it advances that; otherwise it advances the main round. You can still pass `"main"` or `"consolation"` explicitly to override.
 
 **Response (next round created):**
 ```json
@@ -1099,13 +1099,13 @@ Body: { "tournamentId": 1, "date": "2026-03-10" }
 
 Manually triggers daily category scoring for a specific tournament and date. Computes all 7 categories:
 
-1. **All Around** — Position diversity and sizing metrics
-2. **Top-Tick Traveler** — Short entry proximity to daily high (Pyth OHLC)
-3. **Bottom Fisher** — Long entry proximity to daily low (Pyth OHLC)
-4. **Risk Manager** — Best risk-adjusted trade in 2-day windows (scored every 2nd day)
-5. **The Humble One** — Best low-leverage profitable trade in 2-day windows
-6. **Leverage Master (Long)** — Per-asset variable-step badge grid (Phase 7.a). Defaults to a 10-step `10x→100x` ladder for crypto assets; admin can configure custom `lmSteps` + `lmTolerance` per asset (e.g. `[1.5, 2, 2.5, 3, 3.5, 4, 4.5]` with `±0.2` tolerance for sub-10x RWAs like XAU/XAG/WTI). Long positions only.
-7. **Leverage Master (Short)** — Same per-asset variable-step semantics; separate ladder per side.
+1. **All Around**: Position diversity and sizing metrics
+2. **Top-Tick Traveler**: Short entry proximity to daily high (Pyth OHLC)
+3. **Bottom Fisher**: Long entry proximity to daily low (Pyth OHLC)
+4. **Risk Manager**: Best risk-adjusted trade in 2-day windows (scored every 2nd day)
+5. **The Humble One**: Best low-leverage profitable trade in 2-day windows
+6. **Leverage Master (Long)**: Per-asset variable-step badge grid. Defaults to a 10-step `10x→100x` ladder for crypto assets; admin can configure custom `lmSteps` + `lmTolerance` per asset (e.g. `[1.5, 2, 2.5, 3, 3.5, 4, 4.5]` with `±0.2` tolerance for sub-10x RWAs like XAU/XAG/WTI). Long positions only.
+7. **Leverage Master (Short)**: Same per-asset variable-step semantics; separate ladder per side.
 
 If the tournament belongs to a season, Fisher (3/2/1 for top 3 each direction) and All Around (3/2/1 for top 3) season points are also awarded.
 
@@ -1132,7 +1132,7 @@ If the tournament belongs to a season, Fisher (3/2/1 for top 3 each direction) a
 GET /api/quests/:tournamentId/:wallet
 ```
 
-Returns a wallet's Leverage Master quest progress (badge grid data). Returns the latest week's progress by default. The actual shape is per-asset (post-Phase-4 item 30), so the response contains a `byAsset` map keyed by asset symbol from the tournament's `assetList`.
+Returns a wallet's Leverage Master quest progress (badge grid data). Returns the latest week's progress by default. The shape is per-asset: the response contains a `byAsset` map keyed by asset symbol from the tournament's `assetList`.
 
 **Query parameters:**
 - `week` (optional): Specific week number to query.
@@ -1173,7 +1173,7 @@ Returns a wallet's Leverage Master quest progress (badge grid data). Returns the
 GET /api/quests/:tournamentId/leaderboard
 ```
 
-Per-asset Leverage Master leaderboard powering the Quest Leaderboards Weekly tab. Each entry merges Long + Short progression for a single wallet so the frontend can render one row per wallet with split-background per-step badges (post-2026-05-15 batch).
+Per-asset Leverage Master leaderboard powering the Quest Leaderboards Weekly tab. Each entry merges Long + Short progression for a single wallet so the frontend can render one row per wallet with split-background per-step badges.
 
 **Query parameters:**
 - `week` (optional): Week number to query.
@@ -1212,7 +1212,7 @@ Resolution priority: `week` > `date` > current week.
 - Sort within each asset: `(longCount + shortCount)` DESC, then `max(longCount, shortCount)` DESC, then `wallet` ASC.
 - Competition ranking (1224) on the merged sort key. Tied wallets share the same rank, next rank skips.
 - Points are awarded per side (top 5 each from `[0.5, 0.4, 0.3, 0.2, 0.1]`). `totalPoints = pointsLong + pointsShort`. Engine logic unchanged from the previous per-side leaderboard; only the response shape and display merge.
-- `stepCount > 0` is required to receive points (Phase 8.m guard).
+- `stepCount > 0` is required to receive points. Wallets at step 0 don't claim a top-N points slot, preventing baseline inflation when many wallets register without trading the category.
 - Empty assets (no progress at all) return as empty arrays. Assets listed in `config.assetList` are always present as keys, even when empty.
 
 ---
@@ -1293,7 +1293,7 @@ Returns a single wallet's raffle eligibility, ticket count, and winner status.
 GET /api/prices/usd?symbols=A,B,C&mints=mintA,mintB,mintC&statics=,,0.05
 ```
 
-Live USD price feed used by the multi-token prize display (post-2026-05-15 batch). Cascades per symbol with a Pyth Benchmarks lookup first, Jupiter v3 lite-api fallback, then an admin-supplied static price if both feeds return null.
+Live USD price feed used by the multi-token prize display. Cascades per symbol with a Pyth Benchmarks lookup first, Jupiter v3 lite-api fallback, then an admin-supplied static price if both feeds return null.
 
 **Query parameters:**
 - `symbols` (required): comma-separated, order-preserving list of token tickers.
@@ -1302,7 +1302,7 @@ Live USD price feed used by the multi-token prize display (post-2026-05-15 batch
 
 **Cascade per symbol:**
 
-1. Pyth Benchmarks via the prize-token-symbol map (covers JTO, USDC, and most major Solana tokens, though not ADX as of 2026-05-15).
+1. Pyth Benchmarks via the prize-token-symbol map (covers JTO, USDC, and most major Solana tokens; does not cover ADX).
 2. Jupiter price v3 (`lite-api.jup.ag/price/v3?ids=<mint>`) via mint lookup. Admin-supplied mint overrides the server-side default. Required for ADX, since Pyth doesn't index it. Mint-based lookup is mandatory: Jupiter v3 rejects symbol-only queries, and the ADX symbol is shared by two distinct tokens.
 3. Admin-supplied static USD. Used only if both feeds returned null.
 

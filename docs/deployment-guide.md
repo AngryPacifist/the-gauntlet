@@ -119,7 +119,7 @@ The migration script (`packages/backend/src/db/migrate.ts`) creates these tables
 | `season_standings`     | Aggregate points per wallet per season          |
 | `daily_category_scores`| Daily All Around and Fisher scores per wallet   |
 | `pyth_ohlc_cache`      | Cached daily OHLC candles from Pyth Benchmarks  |
-| `quest_progress`       | Leverage Master step completion (per-asset ladders, Phase 4 item 30) |
+| `quest_progress`       | Leverage Master step completion (per-asset ladders) |
 | `raffle_results`       | Per-wallet raffle eligibility, ticket count, winner flag |
 | `raffle_draws`         | Deterministic draw audit trail (block hash, seed, winners) |
 
@@ -149,7 +149,7 @@ adrena-the-gauntlet/
 │   │       │   ├── categories.ts     # Daily category leaderboards + manual scoring + wallet breakdown
 │   │       │   ├── quests.ts         # Leverage Master quest progress + LM leaderboard (per-asset merged)
 │   │       │   ├── raffle.ts         # Raffle results, verification, per-wallet info
-│   │       │   ├── leaderboard.ts    # Cumulative leaderboard (Phase 5 item 20)
+│   │       │   ├── leaderboard.ts    # Cumulative leaderboard (Tournament / Season / All-time)
 │   │       │   └── prices.ts         # Token USD prices (Pyth Benchmarks > Jupiter > admin static cascade)
 │   │       └── services/
 │   │           ├── tournament-manager.ts  # Tournament lifecycle logic
@@ -162,7 +162,7 @@ adrena-the-gauntlet/
 │   │           ├── raffle-engine.ts       # Raffle ticket computation, deterministic draw, verification
 │   │           ├── final-score.ts         # CPI + quest points join, batch computation, raffle tickets
 │   │           ├── pyth-client.ts         # Pyth Benchmarks OHLC fetcher with DB cache
-│   │           └── cumulative-leaderboard.ts  # Cross-tournament aggregation for /api/leaderboard (Phase 5 item 20)
+│   │           └── cumulative-leaderboard.ts  # Cross-tournament aggregation for /api/leaderboard
 │   └── frontend/
 │       └── src/
 │           ├── components/
@@ -171,8 +171,8 @@ adrena-the-gauntlet/
 │           └── app/
 │               ├── layout.tsx        # Root layout with navigation
 │               ├── page.tsx          # Dashboard (tournament list)
-│               ├── admin/                          # Admin (multi-route per Phase 5 item 19)
-│               │   ├── page.tsx                    # Landing — secret entry + sub-route cards
+│               ├── admin/                          # Admin (multi-route)
+│               │   ├── page.tsx                    # Landing: secret entry + sub-route cards
 │               │   ├── tournaments/page.tsx        # Tournament CRUD + lifecycle + raffle + categories
 │               │   ├── seasons/page.tsx            # Season CRUD + lifecycle
 │               │   ├── registrations/page.tsx     # Tournament-scoped registration browser
@@ -182,7 +182,7 @@ adrena-the-gauntlet/
 │               ├── forge/[tournamentId]/page.tsx  # Forge leaderboard + quest tabs
 │               ├── tournament/[id]/page.tsx           # Tournament detail
 │               ├── tournament/[id]/analytics/page.tsx # Post-tournament analytics
-│               ├── leaderboard/page.tsx               # Cumulative leaderboard (Phase 5 item 20)
+│               ├── leaderboard/page.tsx               # Cumulative leaderboard (Tournament / Season / All-time)
 │               ├── leaderboard/[id]/page.tsx          # Per-tournament leaderboard (CPI, format-aware)
 │               ├── trader/[wallet]/page.tsx           # Trader profile
 │               ├── raffle/[tournamentId]/page.tsx     # Raffle results + verification
