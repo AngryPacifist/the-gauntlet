@@ -419,7 +419,7 @@
 
 .breakdownGrid {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 1fr 1fr 1fr;
     gap: var(--space-lg);
 }
 
@@ -440,11 +440,39 @@
     margin-bottom: var(--space-sm);
 }
 
-/* Phase 8 item (c.1-4): granular CPI sub-bar text (ROI / Liq% / etc.) */
-.cpiSubText {
-    font-size: 0.6875rem;
+/* Phase post-T1 (Item 2A/B): consolidated Trader Statistics panel.
+   Replaces interleaved subtext under each CPI bar — gives stats first-class
+   visual weight while keeping the bar column clean. */
+.traderStatsPanel {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+}
+
+.traderStatRow {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--space-sm);
+    padding: var(--space-xs) 0;
+    border-bottom: 1px solid var(--border-subtle);
+    font-size: 0.8125rem;
+}
+
+.traderStatRow:last-child {
+    border-bottom: none;
+}
+
+.traderStatLabel {
     color: var(--text-muted);
-    margin: 2px 0 var(--space-sm) 2px;
+    font-size: 0.6875rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.traderStatValue {
+    color: var(--text-primary);
+    font-family: var(--font-mono);
     font-variant-numeric: tabular-nums;
 }
 

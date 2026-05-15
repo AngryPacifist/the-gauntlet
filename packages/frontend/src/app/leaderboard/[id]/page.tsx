@@ -808,15 +808,18 @@ function ForgeRow({ entry, isExpanded, onToggle, breakdown, breakdownLoading, is
                                     <div>
                                         <h4 className={styles.breakdownHeading}>CPI Breakdown</h4>
                                         {CPI_COMPONENTS.map(({ key, label, color }) => (
-                                            <CPIBarWithDetails
+                                            <HorizontalBar
                                                 key={key}
-                                                componentKey={key}
                                                 label={label}
                                                 value={entry[key as keyof ForgeEntry] as number}
+                                                max={100}
                                                 color={color}
-                                                cpiDetails={breakdown?.cpiDetails ?? null}
                                             />
                                         ))}
+                                    </div>
+                                    <div>
+                                        <h4 className={styles.breakdownHeading}>Trader Statistics</h4>
+                                        <TraderStatisticsPanel cpiDetails={breakdown?.cpiDetails ?? null} />
                                     </div>
                                     <div>
                                         <h4 className={styles.breakdownHeading}>Category Scores</h4>
@@ -863,21 +866,17 @@ function HorizontalBar({ label, value, max, color }: HorizontalBarProps) {
 }
 
 // --------------------------------------------------------------------------
-// CPI Bar with granular details (Phase 8 item c.1-4)
+// Trader Statistics Panel (Phase post-T1 item 2A/B)
 //
-// Wraps HorizontalBar and renders the underlying inputs (ROI / Liq% /
-// Max DD% / Profitable Days / Win Rate / Trade Count / Volume) below
-// each CPI sub-bar. cpiDetails comes from the wallet-breakdown endpoint;
-// null = recompute failed (rare), gracefully renders just the bar.
+// Consolidates ROI / Liquidations · Max DD / Profitable Days · Win Rate /
+// Trades · Volume into a dedicated middle panel in the expanded row.
+// Replaces the small subtext under each CPI bar (CPIBarWithDetails);
+// CPI column now calls HorizontalBar directly with no wrapper.
+//
+// Empty state (cpiDetails === null): renders 4 '—' placeholder rows so the
+// panel still has shape. All-zero trade counts: renders the literal zeros
+// (truthful for new wallets with no activity).
 // --------------------------------------------------------------------------
-
-interface CPIBarWithDetailsProps {
-    componentKey: string;
-    label: string;
-    value: number;
-    color: string;
-    cpiDetails: WalletBreakdown['cpiDetails'];
-}
 
 function formatVolume(v: number): string {
     if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(2)}M`;
@@ -885,40 +884,58 @@ function formatVolume(v: number): string {
     return v.toFixed(0);
 }
 
-function CPIBarWithDetails({ componentKey, label, value, color, cpiDetails }: CPIBarWithDetailsProps) {
-    return (
-        <div>
-            <HorizontalBar label={label} value={value} max={100} color={color} />
-            {cpiDetails && (
-                <div className={styles.cpiSubText}>
-                    {componentKey === 'pnlScore' && (
-                        <>ROI: {(cpiDetails.roi * 100).toFixed(2)}%</>
-                    )}
-                    {componentKey === 'riskScore' && (
-                        <>
-                            Liquidations: {cpiDetails.liquidatedCount}/{cpiDetails.totalCount}
-                            {' · '}
-                            Max DD: {(cpiDetails.drawdownRatio * 100).toFixed(2)}%
-                        </>
-                    )}
-                    {componentKey === 'consistencyScore' && (
-                        <>
-                            Profitable days: {cpiDetails.profitableDays}/{cpiDetails.totalTradingDays}
-                            {' · '}
-                            Win rate: {cpiDetails.totalClosedTrades > 0
-                                ? `${((cpiDetails.winningTrades / cpiDetails.totalClosedTrades) * 100).toFixed(0)}%`
-                                : '—'}
-                        </>
-                    )}
-                    {componentKey === 'activityScore' && (
-                        <>
-                            Trades: {cpiDetails.tradeCount}
-                            {' · '}
-                            Volume: ${formatVolume(cpiDetails.totalVolume)}
-                        </>
-                    )}
+function TraderStatisticsPanel({ cpiDetails }: {
+    cpiDetails: WalletBreakdown['cpiDetails'];
+}) {
+    if (!cpiDetails) {
+        return (
+            <div className={styles.traderStatsPanel}>
+                <div className={styles.traderStatRow}>
+                    <span className={styles.traderStatLabel}>ROI</span>
+                    <span className={styles.traderStatValue}>—</span>
                 </div>
-            )}
+                <div className={styles.traderStatRow}>
+                    <span className={styles.traderStatLabel}>Liquidations · Max DD</span>
+                    <span className={styles.traderStatValue}>—</span>
+                </div>
+                <div className={styles.traderStatRow}>
+                    <span className={styles.traderStatLabel}>Profitable Days · Win Rate</span>
+                    <span className={styles.traderStatValue}>—</span>
+                </div>
+                <div className={styles.traderStatRow}>
+                    <span className={styles.traderStatLabel}>Trades · Volume</span>
+                    <span className={styles.traderStatValue}>—</span>
+                </div>
+            </div>
+        );
+    }
+    const winRate = cpiDetails.totalClosedTrades > 0
+        ? `${((cpiDetails.winningTrades / cpiDetails.totalClosedTrades) * 100).toFixed(0)}%`
+        : '—';
+    return (
+        <div className={styles.traderStatsPanel}>
+            <div className={styles.traderStatRow}>
+                <span className={styles.traderStatLabel}>ROI</span>
+                <span className={styles.traderStatValue}>{(cpiDetails.roi * 100).toFixed(2)}%</span>
+            </div>
+            <div className={styles.traderStatRow}>
+                <span className={styles.traderStatLabel}>Liquidations · Max DD</span>
+                <span className={styles.traderStatValue}>
+                    {cpiDetails.liquidatedCount}/{cpiDetails.totalCount} · {(cpiDetails.drawdownRatio * 100).toFixed(2)}%
+                </span>
+            </div>
+            <div className={styles.traderStatRow}>
+                <span className={styles.traderStatLabel}>Profitable Days · Win Rate</span>
+                <span className={styles.traderStatValue}>
+                    {cpiDetails.profitableDays}/{cpiDetails.totalTradingDays} · {winRate}
+                </span>
+            </div>
+            <div className={styles.traderStatRow}>
+                <span className={styles.traderStatLabel}>Trades · Volume</span>
+                <span className={styles.traderStatValue}>
+                    {cpiDetails.tradeCount} · ${formatVolume(cpiDetails.totalVolume)}
+                </span>
+            </div>
         </div>
     );
 }
