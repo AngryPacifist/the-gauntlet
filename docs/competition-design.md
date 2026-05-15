@@ -532,7 +532,7 @@ prizeTable = {
 
 `skillPrizes` and `rafflePrizes` are interpreted as rank-weight ratios. Per-rank share of every token equals `(weight / totalWeight) × token.amount` where `totalWeight = sum(skillPrizes) + sum(rafflePrizes)`. Every winner gets a proportional slice of every token. Conservation holds per token (per-token total across all skill + raffle payouts equals that token's pool amount).
 
-For single-sponsor single-token tournaments (e.g. T1's 100K ADX), these arrays can still be read as literal token amounts because the math is identical.
+For single-sponsor single-token tournaments, these arrays can still be read as literal token amounts because the math is identical.
 
 ### Live USD display
 
@@ -542,7 +542,7 @@ The prize-pool USD display is computed live via a 3-tier cascade per token:
 2. Jupiter v3 lite-api by mint (required for tokens Pyth doesn't index, e.g. ADX)
 3. Admin-supplied static USD per token (used only when both feeds return null)
 
-If all three return null, the frontend renders `—` for that token's USD contribution but still shows the token amount and sponsor name. See `docs/api-reference.md` for the `/api/prices/usd` endpoint contract.
+If all three return null, the frontend renders a placeholder dash for that token's USD contribution but still shows the token amount and sponsor name. See `docs/api-reference.md` for the `/api/prices/usd` endpoint contract.
 
 ### Recommended skill distribution shapes
 
@@ -566,8 +566,8 @@ Adrena's `MrRewards` keeper processes reward distributions automatically. The in
 
 1. On tournament completion, the engine produces the final payout list via `GET /api/tournaments/:id/payouts`. Each row has both `amountADX` (legacy, single-currency sum) and `tokens[]` (multi-token source of truth).
 2. MrRewards polls this endpoint. `complete: true` on the response when the tournament is `completed` AND has rows. That's the trigger signal.
-3. For T1 and any single-sponsor ADX tournament: `amountADX` works as before. MrRewards can keep using it.
-4. For multi-token tournaments (T2+): MrRewards consumes `tokens[]` directly. `amountADX` becomes informational only.
+3. For any single-sponsor ADX tournament: `amountADX` works as before. MrRewards can keep using it.
+4. For multi-token tournaments: MrRewards consumes `tokens[]` directly. `amountADX` becomes informational only.
 5. MrRewards' keeper executes the SPL token transfers to each wallet automatically. No manual transfers needed.
 
 ### Manual Distribution (Fallback)
@@ -580,7 +580,7 @@ If MrRewards is unavailable, prizes can be distributed manually:
 
 ### Raffle prize visibility
 
-Raffle winners post-draw have their slot's USD value rendered on the General Leaderboard PRIZE column too (alongside the dedicated raffle page). Pre-draw raffle-tier wallets show `—`. The leaderboard reads from the same `/payouts` endpoint, filtering for `category === 'raffle'` rows.
+Raffle winners post-draw have their slot's USD value rendered on the General Leaderboard PRIZE column too (alongside the dedicated raffle page). Pre-draw raffle-tier wallets show a placeholder dash. The leaderboard reads from the same `/payouts` endpoint, filtering for `category === 'raffle'` rows.
 
 ---
 

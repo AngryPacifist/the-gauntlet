@@ -236,11 +236,11 @@ Live USD per token via `GET /api/prices/usd?symbols=A,B&mints=mintA,mintB&static
 2. Jupiter v3 lite-api by mint (required for tokens Pyth doesn't index, e.g. ADX).
 3. Admin-supplied static USD (per-request, fixed in config, used only when both feeds null).
 
-If all three return null for a token, the frontend renders `—` for that token's USD contribution but still shows the token amount and sponsor name on hover.
+If all three return null for a token, the frontend renders a placeholder dash for that token's USD contribution but still shows the token amount and sponsor name on hover.
 
 Server-side cache: 60s TTL per (cache key). Only Pyth + Jupiter results are memoized. Cache key is `mint || symbol:<symbol>` so different mints sharing a symbol don't collide.
 
-Empirically as of 2026-05-15: ADX has only Jupiter coverage (Pyth doesn't index it); JTO and USDC have Pyth coverage. T1 with 100K ADX displays as ~$83.33 USD given current Jupiter pricing. Admin can override with a static price per token if a different baseline is desired (e.g. treasury reference price for handover demos).
+Empirically: ADX has only Jupiter coverage (Pyth doesn't index it); JTO and USDC have Pyth coverage. Admin can override with a static price per token if a different baseline is desired (e.g. a treasury reference price for handover demos).
 
 ## Scoring engines
 
@@ -364,7 +364,7 @@ When adding new one-offs: `_<purpose>.ts` naming, `import 'dotenv/config'` at to
 | Quest categories all zero                            | `services/category-engine.ts`, OHLC cache, the `score > 0` points-gate |
 | Leverage Master rows missing                         | `services/quest-engine.ts`, `quest_progress` table  |
 | Raffle draw fails verification                       | `services/raffle-engine.ts:verifyDraw`, eligible-pool filter consistency |
-| Multi-token prize display shows `—`                  | `routes/prices.ts` cascade, browser console for fetch errors |
+| Multi-token prize display shows a placeholder dash   | `routes/prices.ts` cascade, browser console for fetch errors |
 | Admin form rejects valid input                       | `app/admin/tournaments/page.tsx` validation block   |
 | Adrena API fetches are slow                          | `services/adrena-client.ts`, `trade_cache` rows     |
 | OHLC fetches are slow / failing                      | `services/pyth-client.ts` (Pyth Benchmarks primary + Pyth Lazer fallback) |

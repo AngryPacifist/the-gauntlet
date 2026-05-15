@@ -1317,7 +1317,7 @@ Live USD price feed used by the multi-token prize display. Cascades per symbol w
 }
 ```
 
-`source` indicates which tier answered: `'pyth'`, `'jupiter'`, `'static'`, or `null` (all three returned null, frontend renders `—`).
+`source` indicates which tier answered: `'pyth'`, `'jupiter'`, `'static'`, or `null` (all three returned null, frontend renders a placeholder dash).
 
 **Cache:** 60s TTL per symbol. Only Pyth + Jupiter results are memoized. Statics are pass-through (not cached) since they are fixed in admin config.
 

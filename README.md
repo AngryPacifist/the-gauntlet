@@ -8,12 +8,12 @@ Traders register with their wallet, compete in timed rounds, and are scored on a
 
 ## How It Works
 
-1. **Registration** — Traders submit their Solana wallet address. Zero-barrier sign-up: any valid wallet is accepted.
-2. **Bracket Formation** — Registered traders are shuffled into brackets of 8 (or placed in seeded order for Season Finals).
-3. **Trading Rounds** — Each round runs for a configurable duration (default: 72h, 48h, 48h). Traders trade as they normally would on Adrena.
-4. **Scoring** — At the end of each round, positions are fetched from the Adrena API and a CPI score is computed.
-5. **Elimination** — The bottom 50% of each bracket is eliminated (except Round 3, which is rank-only). All eliminated traders from R1+R2 enter a single "Fallen Fighters" consolation pool. The top 50% advance in new brackets.
-6. **Completion** — After the main bracket and Fallen Fighters round are both scored, the tournament ends.
+1. **Registration**: traders submit their Solana wallet address. Zero-barrier sign-up: any valid wallet is accepted.
+2. **Bracket Formation**: registered traders are shuffled into brackets of 8 (or placed in seeded order for Season Finals).
+3. **Trading Rounds**: each round runs for a configurable duration (default: 72h, 48h, 48h). Traders trade as they normally would on Adrena.
+4. **Scoring**: at the end of each round, positions are fetched from the Adrena API and a CPI score is computed.
+5. **Elimination**: the bottom 50% of each bracket is eliminated (except Round 3, which is rank-only). All eliminated traders from R1+R2 enter a single "Fallen Fighters" consolation pool. The top 50% advance in new brackets.
+6. **Completion**: after the main bracket and Fallen Fighters round are both scored, the tournament ends.
 
 ### CPI Scoring
 
@@ -47,7 +47,7 @@ Full methodology: [docs/competition-design.md](docs/competition-design.md)
 ### Dashboard
 ![Tournament dashboard showing active, registration, and completed tournaments](docs/screenshots/dashboard.png)
 
-### Bracket View — First Blood
+### Bracket View: First Blood
 ![Round 1 brackets with 8 traders each, showing CPI scores, ADV/OUT status, and elimination line](docs/screenshots/round1.png)
 
 ### Leaderboard
@@ -55,6 +55,7 @@ Full methodology: [docs/competition-design.md](docs/competition-design.md)
 
 ### Post-Tournament Analytics
 ![Analytics page with elimination funnel, round-by-round performance table, CPI distribution histogram, winner differentiation chart, and top performers](docs/screenshots/analytics.png)
+
 
 ---
 
@@ -97,19 +98,19 @@ npm run dev
 
 ## Key Features
 
-- **Bracket Elimination** — Traders compete in groups. Bottom 50% eliminated each round.
-- **Fallen Fighters** — All eliminated traders compete in a single consolation pool. All participants earn season points.
-- **Multi-Dimensional Scoring** — CPI combines PnL, Risk, Consistency, and Activity.
-- **Daily Categories** — 7 quest categories across 3 time horizons: All Around + Bottom Fisher + Top-Tick Traveler (daily), Risk Manager + Humble One (2-day windows), Leverage Master Long/Short (weekly). Top 3 Fisher and All Around earn season points daily.
-- **Leverage Master Quest** — Progressive 10-step leverage quest (10x–100x) with independent Long/Short tracks. Weekly resets, anti-gaming filters, badge grid UI.
-- **The Forge** — Merged leaderboard combining CPI bracket performance with quest points. Expandable per-wallet CPI and quest breakdowns, LIVE/FINAL scoring badges, and hourly provisional updates.
-- **Deterministic Raffle** — Weighted raffle draw using Mulberry32 PRNG seeded by a future Bitcoin block hash. Full audit trail and public verification endpoint.
-- **Seasons** — Multi-week seasons with aggregate standings, seeded bracket finals, and automatic weekly tournament progression.
-- **Configurable Rounds** — Per-round durations, leverage thresholds, and asset counts.
-- **Anti-Gaming Filters** — Dust trade, wash trade, and duration filters prevent abuse.
-- **Automated Rounds** — Scheduler auto-scores every 15 minutes and auto-advances when rounds end.
-- **Share-to-X** — One-click tweet sharing from tournament, leaderboard, and trader profile pages.
-- **Post-Tournament Analytics** — Elimination funnel, CPI distribution histograms, component insights, and top performers.
+- **Bracket Elimination**: traders compete in groups. Bottom 50% eliminated each round.
+- **Fallen Fighters**: all eliminated traders compete in a single consolation pool. All participants earn season points.
+- **Multi-Dimensional Scoring**: CPI combines PnL, Risk, Consistency, and Activity.
+- **Daily Categories**: 7 quest categories across 3 time horizons. All Around + Bottom Fisher + Top-Tick Traveler (daily), Risk Manager + Humble One (2-day windows), Leverage Master Long/Short (weekly). Top 3 Fisher and All Around earn season points daily.
+- **Leverage Master Quest**: progressive 10-step leverage quest (10x–100x) with independent Long/Short tracks. Weekly resets, anti-gaming filters, badge grid UI.
+- **The Forge**: merged leaderboard combining CPI bracket performance with quest points. Expandable per-wallet CPI and quest breakdowns, LIVE/FINAL scoring badges, and hourly provisional updates.
+- **Deterministic Raffle**: weighted raffle draw using Mulberry32 PRNG seeded by a future Bitcoin block hash. Full audit trail and public verification endpoint.
+- **Seasons**: multi-week seasons with aggregate standings, seeded bracket finals, and automatic weekly tournament progression.
+- **Configurable Rounds**: per-round durations, leverage thresholds, and asset counts.
+- **Anti-Gaming Filters**: dust trade, wash trade, and duration filters prevent abuse.
+- **Automated Rounds**: scheduler auto-scores every 15 minutes and auto-advances when rounds end.
+- **Share-to-X**: one-click tweet sharing from tournament, leaderboard, and trader profile pages.
+- **Post-Tournament Analytics**: elimination funnel, CPI distribution histograms, component insights, and top performers.
 
 ---
 
@@ -136,7 +137,7 @@ adrena-the-gauntlet/
 │       └── src/
 │           ├── components/ # Shared components (ShareButton)
 │           ├── lib/       # API client, quest descriptions
-│           └── app/       # Pages (dashboard, tournament, analytics, admin, register, leaderboard, trader, forge, raffle, categories, season)
+│           └── app/       # Pages (dashboard, tournament, analytics, admin, leaderboard, trader, forge, raffle, categories, season)
 ├── docs/                  # Documentation
 │   ├── competition-design.md
 │   ├── api-reference.md
@@ -154,7 +155,7 @@ adrena-the-gauntlet/
 | [Competition Design](docs/competition-design.md) | Tournament mechanics, scoring, anti-gaming filters, seasons, daily categories, leverage quest, raffle system |
 | [API Reference](docs/api-reference.md) | All endpoints with request/response examples |
 | [Deployment Guide](docs/deployment-guide.md) | Setup, environment variables, production build, hosting |
-| [Testing Report](docs/testing-report.md) | Engine validation, simulation results, scoring analysis |
+| [Testing Report](docs/testing-report.md) | Pre-rewrite engine validation (archived; see `competition-design.md` for current behavior) |
 
 ---
 
