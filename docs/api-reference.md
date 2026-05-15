@@ -66,14 +66,28 @@ Returns all tournaments, ordered by creation date (newest first).
       "name": "Season 1",
       "status": "registration",
       "config": {
-        "format": "bracket",  // 'bracket' = Gauntlet (elimination) | 'rank_only' = Forge (flat leaderboard, no brackets)
+        "format": "bracket",
         "bracketSize": 8,
         "advanceRatio": 0.5,
         "roundDurations": [72, 48, 48],
         "minPositionCollateral": 25,
         "minTradeDurationSec": 120,
-        "leveragePenaltyThreshold": 30,  // legacy — no longer used by Risk score
-        "supportedAssetCount": 4
+        "supportedAssetCount": 4,
+        "prizeTable": {
+          "totalPool": 100000,
+          "currency": "ADX",
+          "skillPrizes": [25000, 18000, 14000, 10000, 8000, 5000, 5000],
+          "rafflePrizes": [5000, 5000, 5000],
+          "tokens": [
+            {
+              "sponsor": "Adrena",
+              "symbol": "ADX",
+              "amount": 100000,
+              "mint": null,
+              "staticUsdPrice": null
+            }
+          ]
+        }
       },
       "createdAt": "2026-03-08T04:00:00.000Z",
       "updatedAt": "2026-03-08T04:00:00.000Z"
@@ -81,6 +95,13 @@ Returns all tournaments, ordered by creation date (newest first).
   ]
 }
 ```
+
+**`format` values**: `'bracket'` for the Gauntlet (elimination), `'rank_only'` for the Forge (flat leaderboard).
+
+**`prizeTable` shape (post-2026-05-15 multi-token batch)**:
+- `tokens[]`: list of per-sponsor contributions. Each entry is one sponsor contributing one token. A sponsor contributing multiple tokens appears as multiple entries. Optional `mint` (SPL token mint pubkey for Jupiter pricing of custom tokens). Optional `staticUsdPrice` (admin-supplied USD per token, used only when both Pyth + Jupiter return null).
+- `skillPrizes` and `rafflePrizes`: rank-weight ratios. Per-rank share of every token equals `(weight / totalWeight) × token.amount` where `totalWeight = sum(skillPrizes) + sum(rafflePrizes)`. For single-sponsor single-token tournaments, these can still be read as literal token amounts (math is identical).
+- Legacy `totalPool` + `currency` fields kept for backward compat. Pre-2026-05-15 tournaments may have these without `tokens[]`. New code paths read `tokens[]` and fall back to a synthesized `[{sponsor: 'Adrena', symbol: <currency>, amount: <totalPool>}]` when absent.
 
 ---
 
@@ -492,6 +513,76 @@ Returns the merged competition leaderboard combining CPI scores, quest points, a
 - CPI sub-scores (`pnlScore`, `riskScore`, `consistencyScore`, `activityScore`) reflect the wallet's best bracket entry across all rounds.
 - `finalScore = cpiScore + questPoints`.
 - `raffleTickets = floor(cpiScore × 0.5) + floor(questPoints × 20)`.
+
+---
+
+### Tournament Payouts
+
+```
+GET /api/tournaments/:id/payouts
+```
+
+Final distribution list for a tournament: skill prizes (top % wallets) plus raffle winners. Designed for external distribution systems (e.g. Adrena's MrRewards keeper) to ingest the determinate result post-tournament. Public, no auth.
+
+Each row carries both a legacy `amountADX` field (sum of any ADX token amounts in `tokens[]`, kept for backward compat) and a `tokens[]` array (the multi-token source of truth post-2026-05-15).
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "tournamentId": 1,
+    "status": "completed",
+    "complete": true,
+    "prizeTable": {
+      "tokens": [
+        { "sponsor": "Adrena", "symbol": "ADX", "amount": 100000, "mint": null }
+      ],
+      "skillPrizes": [25000, 18000, 14000, 10000, 8000, 5000, 5000],
+      "rafflePrizes": [5000, 5000, 5000],
+      "totalPool": 100000,
+      "currency": "ADX"
+    },
+    "raffleDraw": {
+      "id": 4,
+      "blockHash": "0000000000000000000102d0e2a8ffe31a90a02a5df70f5d9faeb0a0c2b33b12",
+      "drawnAt": "2026-05-11T12:34:00.000Z"
+    },
+    "proRataScale": 1.0,
+    "totalPayout": 100000,
+    "rows": [
+      {
+        "wallet": "AyAd...",
+        "amountADX": 25000,
+        "tokens": [
+          { "symbol": "ADX", "mint": null, "sponsor": "Adrena", "amount": 25000 }
+        ],
+        "category": "skill",
+        "rank": 1,
+        "drawPosition": null
+      },
+      {
+        "wallet": "2Cdt...",
+        "amountADX": 5000,
+        "tokens": [
+          { "symbol": "ADX", "mint": null, "sponsor": "Adrena", "amount": 5000 }
+        ],
+        "category": "raffle",
+        "rank": null,
+        "drawPosition": 1
+      }
+    ]
+  }
+}
+```
+
+**Notes:**
+- `complete` is `true` only when `status === 'completed'` AND `rows` is non-empty. Polling signal for downstream consumers (poll the endpoint, act when `complete` flips to true).
+- Skill rows have `category: 'skill'`, `rank: N`, `drawPosition: null`. Raffle rows have `category: 'raffle'`, `rank: null`, `drawPosition: 1/2/3/...`.
+- Tie-handling matches the frontend's `prizesByRank` math exactly: tied wallets at rank R split the summed slot prizes across the group, preserving conservation.
+- Per-rank skill share uses Phase 8.q geometric-decay extension when top % count exceeds `skillPrizes.length`, plus a pro-rata scale so the configured skill pool always flows fully to active top % wallets.
+- For multi-token tournaments: every winner gets a proportional share of every token. `rank_N_share_of_token_T = (rank_weight / totalWeight) × pool_token_T`. MrRewards should consume `tokens[]` directly, not `amountADX`.
+- For single-sponsor single-token tournaments (e.g. T1): `amountADX` works exactly as before. `tokens[]` is a single-entry array.
 
 ---
 
@@ -1041,7 +1132,7 @@ If the tournament belongs to a season, Fisher (3/2/1 for top 3 each direction) a
 GET /api/quests/:tournamentId/:wallet
 ```
 
-Returns a wallet's Leverage Master quest progress (badge grid data). Returns the latest week's progress by default.
+Returns a wallet's Leverage Master quest progress (badge grid data). Returns the latest week's progress by default. The actual shape is per-asset (post-Phase-4 item 30), so the response contains a `byAsset` map keyed by asset symbol from the tournament's `assetList`.
 
 **Query parameters:**
 - `week` (optional): Specific week number to query.
@@ -1051,18 +1142,78 @@ Returns a wallet's Leverage Master quest progress (badge grid data). Returns the
 {
   "success": true,
   "data": {
-    "long": [true, true, true, false, false, false, false, false, false, false],
-    "short": [true, false, false, false, false, false, false, false, false, false],
-    "longCount": 3,
-    "shortCount": 1,
+    "byAsset": {
+      "SOL": {
+        "long": [true, true, true, false, false, false, false, false, false, false],
+        "short": [true, false, false, false, false, false, false, false, false, false],
+        "longCount": 3,
+        "shortCount": 1
+      },
+      "BTC": {
+        "long": [false, false, false, false, false, false, false, false, false, false],
+        "short": [false, false, false, false, false, false, false, false, false, false],
+        "longCount": 0,
+        "shortCount": 0
+      }
+    },
     "weekNumber": 2
   }
 }
 ```
 
-**Note (Phase 7.a):** `long` and `short` array lengths are variable per asset — defaulting to 10 elements for crypto (`10x→100x` ladder), but configurable via the tournament's `assetList[i].lmSteps` (e.g. RWAs use a 7-element `[1.5, 2, 2.5, 3, 3.5, 4, 4.5]` ladder with `±0.2` tolerance). Each `quest_progress` row carries a `stepTotal` column (`stepCount` × ladder size) reflecting the configured length. Frontend should render `${count}/${total}` rather than assuming `/10`.
+**Notes:**
+- `long` and `short` array lengths are variable per asset, defaulting to 10 elements for crypto (`10x → 100x` ladder), configurable via the tournament's `assetList[i].lmSteps` (e.g. RWAs use a 7-element `[1.5, 2, 2.5, 3, 3.5, 4, 4.5]` ladder with `±0.2` tolerance). Each `quest_progress` row carries a `stepTotal` column reflecting the configured length. Frontend should render `${count}/${total}` rather than assuming `/10`.
+- If no progress exists for a wallet, the `byAsset` object is empty.
 
-If no progress exists, all boolean arrays default to `false` and counts to `0`.
+---
+
+### Get LM Leaderboard (per-asset, merged Long + Short)
+
+```
+GET /api/quests/:tournamentId/leaderboard
+```
+
+Per-asset Leverage Master leaderboard powering the Quest Leaderboards Weekly tab. Each entry merges Long + Short progression for a single wallet so the frontend can render one row per wallet with split-background per-step badges (post-2026-05-15 batch).
+
+**Query parameters:**
+- `week` (optional): Week number to query.
+- `date` (optional): `YYYY-MM-DD` date string. Frontend passes the displayed Weekly date; the backend converts to week number.
+
+Resolution priority: `week` > `date` > current week.
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "weekNumber": 2,
+    "byAsset": {
+      "SOL": [
+        {
+          "wallet": "AbcXyz...",
+          "longCount": 5,
+          "shortCount": 3,
+          "stepTotal": 10,
+          "stepsCompletedLong":  [true, true, true, true, true, false, false, false, false, false],
+          "stepsCompletedShort": [true, true, true, false, false, false, false, false, false, false],
+          "pointsLong": 0.5,
+          "pointsShort": 0.4,
+          "totalPoints": 0.9,
+          "rank": 1
+        }
+      ],
+      "BTC": []
+    }
+  }
+}
+```
+
+**Notes:**
+- Sort within each asset: `(longCount + shortCount)` DESC, then `max(longCount, shortCount)` DESC, then `wallet` ASC.
+- Competition ranking (1224) on the merged sort key. Tied wallets share the same rank, next rank skips.
+- Points are awarded per side (top 5 each from `[0.5, 0.4, 0.3, 0.2, 0.1]`). `totalPoints = pointsLong + pointsShort`. Engine logic unchanged from the previous per-side leaderboard; only the response shape and display merge.
+- `stepCount > 0` is required to receive points (Phase 8.m guard).
+- Empty assets (no progress at all) return as empty arrays. Assets listed in `config.assetList` are always present as keys, even when empty.
 
 ---
 
@@ -1131,6 +1282,47 @@ Returns a single wallet's raffle eligibility, ticket count, and winner status.
 **Response:** Same shape as a single entry in the `GET /api/raffle/:tournamentId` response.
 
 **Errors:** `404` if the wallet has no raffle entry.
+
+---
+
+## Price Endpoints
+
+### Get Token USD Prices
+
+```
+GET /api/prices/usd?symbols=A,B,C&mints=mintA,mintB,mintC&statics=,,0.05
+```
+
+Live USD price feed used by the multi-token prize display (post-2026-05-15 batch). Cascades per symbol with a Pyth Benchmarks lookup first, Jupiter v3 lite-api fallback, then an admin-supplied static price if both feeds return null.
+
+**Query parameters:**
+- `symbols` (required): comma-separated, order-preserving list of token tickers.
+- `mints` (optional): parallel array of SPL token mint pubkeys. Empty slot means use the server-side default mint for that symbol. Admin-supplied mint takes precedence so admins can add any SPL token without a code change.
+- `statics` (optional): parallel array of fallback USD prices per token. Empty slot means no fallback. Used only when both Pyth + Jupiter return null. Per-request, not cached server-side.
+
+**Cascade per symbol:**
+
+1. Pyth Benchmarks via the prize-token-symbol map (covers JTO, USDC, and most major Solana tokens, though not ADX as of 2026-05-15).
+2. Jupiter price v3 (`lite-api.jup.ag/price/v3?ids=<mint>`) via mint lookup. Admin-supplied mint overrides the server-side default. Required for ADX, since Pyth doesn't index it. Mint-based lookup is mandatory: Jupiter v3 rejects symbol-only queries, and the ADX symbol is shared by two distinct tokens.
+3. Admin-supplied static USD. Used only if both feeds returned null.
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "ADX":  { "usd": 0.000833, "source": "jupiter" },
+    "JTO":  { "usd": 0.514,    "source": "pyth" },
+    "USDC": { "usd": 0.9998,   "source": "pyth" }
+  }
+}
+```
+
+`source` indicates which tier answered: `'pyth'`, `'jupiter'`, `'static'`, or `null` (all three returned null, frontend renders `—`).
+
+**Cache:** 60s TTL per symbol. Only Pyth + Jupiter results are memoized. Statics are pass-through (not cached) since they are fixed in admin config.
+
+**Cache key:** `mint || symbol:<symbol>`. Two tournaments using different mints for the same symbol don't collide.
 
 ---
 

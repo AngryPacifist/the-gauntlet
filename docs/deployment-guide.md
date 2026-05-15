@@ -141,15 +141,16 @@ adrena-the-gauntlet/
 │   │       │   ├── index.ts          # Database connection pool
 │   │       │   └── migrate.ts        # Migration script (raw SQL)
 │   │       ├── routes/
-│   │       │   ├── tournaments.ts    # Tournament CRUD (list, get, create, edit, delete) + Forge leaderboard
+│   │       │   ├── tournaments.ts    # Tournament CRUD + Forge leaderboard + payouts endpoint
 │   │       │   ├── registration.ts   # Wallet registration
 │   │       │   ├── admin.ts          # Admin actions (start, score, advance, cancel, raffle, analytics)
 │   │       │   ├── brackets.ts       # Bracket details, trader profiles, leaderboard, analytics
 │   │       │   ├── seasons.ts        # Season CRUD + lifecycle (start, advance, complete)
 │   │       │   ├── categories.ts     # Daily category leaderboards + manual scoring + wallet breakdown
-│   │       │   ├── quests.ts         # Leverage Master quest progress
+│   │       │   ├── quests.ts         # Leverage Master quest progress + LM leaderboard (per-asset merged)
 │   │       │   ├── raffle.ts         # Raffle results, verification, per-wallet info
-│   │       │   └── leaderboard.ts    # Cumulative leaderboard (Phase 5 item 20)
+│   │       │   ├── leaderboard.ts    # Cumulative leaderboard (Phase 5 item 20)
+│   │       │   └── prices.ts         # Token USD prices (Pyth Benchmarks > Jupiter > admin static cascade)
 │   │       └── services/
 │   │           ├── tournament-manager.ts  # Tournament lifecycle logic
 │   │           ├── scoring-engine.ts      # CPI computation

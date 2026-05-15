@@ -513,38 +513,75 @@ The bracket format also creates natural social dynamics: traders in the same bra
 
 ## Reward Structure
 
-### Prize Distribution Model
+### Multi-token prize distribution (post-2026-05-15)
 
-Tournament prizes are distributed based on final standing. The recommended structure for a standard 3-round Gauntlet:
+Tournament prizes are configured at create time via the admin form's Sponsors section. Each sponsor contributes one or more tokens (symbol + amount + optional mint + optional static USD fallback). The full prize pool composition lives on `tournament.config.prizeTable`:
 
-| Placement | Share | Example ($5,000 pool) |
-|-----------|-------|----------------------|
-| 1st       | 40%   | $2,000               |
-| 2nd       | 25%   | $1,250               |
-| 3rd       | 15%   | $750                 |
-| Finalists (remaining) | 20% split | Variable |
+```
+prizeTable = {
+  skillPrizes:  [25000, 18000, 14000, 10000, 8000, 5000, 5000],  // rank-weight ratios
+  rafflePrizes: [5000, 5000, 5000],                              // rank-weight ratios
+  tokens: [
+    { sponsor: "Adrena Foundation", symbol: "ADX",  amount: 100000, mint: "AuQa..." },
+    { sponsor: "Jito Labs",         symbol: "JTO",  amount: 30000,  mint: "jtoj..." }
+  ],
+  // legacy fields kept for backward compat:
+  totalPool: 130000,
+  currency:  "ADX"
+}
+```
 
-The prize pool can be funded in USDC, ADX, or a combination. For ADX-denominated prizes, the current market rate at tournament completion determines dollar equivalence.
+`skillPrizes` and `rafflePrizes` are interpreted as rank-weight ratios. Per-rank share of every token equals `(weight / totalWeight) × token.amount` where `totalWeight = sum(skillPrizes) + sum(rafflePrizes)`. Every winner gets a proportional slice of every token. Conservation holds per token (per-token total across all skill + raffle payouts equals that token's pool amount).
+
+For single-sponsor single-token tournaments (e.g. T1's 100K ADX), these arrays can still be read as literal token amounts because the math is identical.
+
+### Live USD display
+
+The prize-pool USD display is computed live via a 3-tier cascade per token:
+
+1. Pyth Benchmarks (covers most major Solana tokens via `Crypto.<SYMBOL>/USD`)
+2. Jupiter v3 lite-api by mint (required for tokens Pyth doesn't index, e.g. ADX)
+3. Admin-supplied static USD per token (used only when both feeds return null)
+
+If all three return null, the frontend renders `—` for that token's USD contribution but still shows the token amount and sponsor name. See `docs/api-reference.md` for the `/api/prices/usd` endpoint contract.
+
+### Recommended skill distribution shapes
+
+For a standard Forge tournament with ~100K USD pool:
+
+| Placement | Share | Example (100K pool, top 7) |
+|-----------|-------|---------------------------|
+| 1st       | 25%   | 25,000                    |
+| 2nd       | 18%   | 18,000                    |
+| 3rd       | 14%   | 14,000                    |
+| 4th       | 10%   | 10,000                    |
+| 5th       | 8%    | 8,000                     |
+| 6th-7th   | 5% each | 5,000 each              |
+| Raffle (3 slots) | 5% each | 5,000 each         |
+
+`skillPrizes.length` does not need to match the top-% field count exactly. When the actual top % count exceeds the configured `skillPrizes.length`, the engine extends the curve via geometric decay (using the existing tail's decay ratio, clamped to (0, 1]) so every top-% wallet gets a non-zero prize. When the count is fewer than `skillPrizes.length`, a pro-rata scale boosts active wallets to consume the full pool. The same math applies to multi-token via the weight-ratio reinterpretation.
 
 ### MrRewards Integration
 
-Adrena's `MrRewards` repository contains a keeper service that processes reward distributions automatically. The integration path:
+Adrena's `MrRewards` keeper processes reward distributions automatically. The integration path:
 
-1. **On tournament completion**, the engine produces a ranked finalists list with wallet addresses and placements.
-2. **A reward insertion script** writes rows to the `rewards` table in Adrena's rewards database:
-   ```
-   INSERT INTO rewards (wallet, amount, token, source, tournament_id, placement)
-   ```
-3. **The MrRewards keeper** picks up pending reward rows and executes SPL token transfers to each wallet automatically.
-
-This means prize distribution requires no manual token transfers — the existing Adrena infrastructure handles it. The only new code needed is a post-tournament script that maps placements to reward amounts and inserts the rows.
+1. On tournament completion, the engine produces the final payout list via `GET /api/tournaments/:id/payouts`. Each row has both `amountADX` (legacy, single-currency sum) and `tokens[]` (multi-token source of truth).
+2. MrRewards polls this endpoint. `complete: true` on the response when the tournament is `completed` AND has rows. That's the trigger signal.
+3. For T1 and any single-sponsor ADX tournament: `amountADX` works as before. MrRewards can keep using it.
+4. For multi-token tournaments (T2+): MrRewards consumes `tokens[]` directly. `amountADX` becomes informational only.
+5. MrRewards' keeper executes the SPL token transfers to each wallet automatically. No manual transfers needed.
 
 ### Manual Distribution (Fallback)
 
-If MrRewards integration is not available, prizes can be distributed manually:
-1. Export the final standings from the leaderboard endpoint (`GET /api/brackets/leaderboard/:tournamentId`)
-2. Transfer tokens to each winner's wallet using any Solana wallet
-3. Document the transactions in the tournament's audit trail
+If MrRewards is unavailable, prizes can be distributed manually:
+
+1. Pull the payout list from `GET /api/tournaments/:id/payouts` (skill + raffle rows in one response).
+2. For each row, transfer the token amounts from `tokens[]` to the wallet.
+3. Document the transaction signatures in the tournament's audit trail.
+
+### Raffle prize visibility
+
+Raffle winners post-draw have their slot's USD value rendered on the General Leaderboard PRIZE column too (alongside the dedicated raffle page). Pre-draw raffle-tier wallets show `—`. The leaderboard reads from the same `/payouts` endpoint, filtering for `category === 'raffle'` rows.
 
 ---
 
