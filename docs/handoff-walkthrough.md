@@ -175,7 +175,7 @@ All schema mutations are idempotent via custom DO blocks in `migrate.ts`. No Dri
 9. **Admin selects a future Bitcoin block hash** (announced via mempool.space before mining), passes it to `POST /api/admin/raffle/:id/draw`. Mulberry32 PRNG draws weighted winners. Audit trail in `raffle_draws`.
 10. **`GET /api/tournaments/:id/payouts`** flips `complete: true`. MrRewards keeper picks up the row, distributes tokens. `GET /api/raffle/:id/verify` lets anyone re-run the draw against the stored block hash.
 
-## Multi-token prize distribution (post-2026-05-15)
+## Multi-token prize distribution
 
 The prize structure has evolved from single-currency to per-sponsor multi-token. Existing T1 has been migrated; new tournaments configure tokens at create time.
 
@@ -279,7 +279,7 @@ Quest point tables:
 - 2-day: `[0.3, 0.25, 0.2, 0.15, 0.1]` for top 5
 - Leverage Master: `[0.5, 0.4, 0.3, 0.2, 0.1]` per side per asset for top 5
 
-Phase 8.m guard: `score > 0` is required to receive points. Wallets tied at score=0 don't share the top-N points slot.
+`score > 0` is required to receive points. Wallets tied at score=0 don't share the top-N points slot (prevents baseline-inflation when many wallets register but don't trade a given category).
 
 ### Raffle
 
@@ -362,7 +362,7 @@ When adding new one-offs: `_<purpose>.ts` naming, `import 'dotenv/config'` at to
 |------------------------------------------------------|-----------------------------------------------------|
 | Scoring stopped or scores look stale                 | `services/scheduler.ts`, check cron job logs        |
 | CPI numbers look wrong                               | `services/scoring-engine.ts`, then `final-score.ts` |
-| Quest categories all zero                            | `services/category-engine.ts`, OHLC cache, Phase 8.m score>0 guard |
+| Quest categories all zero                            | `services/category-engine.ts`, OHLC cache, the `score > 0` points-gate |
 | Leverage Master rows missing                         | `services/quest-engine.ts`, `quest_progress` table  |
 | Raffle draw fails verification                       | `services/raffle-engine.ts:verifyDraw`, eligible-pool filter consistency |
 | Multi-token prize display shows `—`                  | `routes/prices.ts` cascade, browser console for fetch errors |
@@ -407,13 +407,13 @@ These are noted in the project's CLAUDE.md and various brain docs. None block ha
 - Registration-free Forge: ZeDef wants any active Adrena trader auto-included. Currently requires explicit registration.
 - Fallen Fighters UX: eliminated traders aren't notified they're being scored for consolation.
 - CORS lockdown: currently open. Restrict to production frontend domain.
-- Cumulative leaderboard caching: currently on-demand compute. Phase 6 will add caching when needed.
+- Cumulative leaderboard caching: currently on-demand compute. A TTL cache layer is the natural next step if load demands it.
 
 ## Contact + handoff context
 
 - Solo builder: OUTIS (Discord username).
 - ZeDef (Adrena team): primary design + product feedback throughout development. 13+ rounds of iterative feedback.
-- br0wnD3v (Adrena team): MrRewards keeper integration. Has been consuming the payouts endpoint since Day 49.
+- br0wnD3v (Adrena team): MrRewards keeper integration. Has been consuming the payouts endpoint since it went live.
 - call2aamir (Adrena team): oracle / runtime questions.
 - mcg26623 (Adrena team): launch coordination.
 
