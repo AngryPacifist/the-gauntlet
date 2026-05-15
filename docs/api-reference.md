@@ -592,7 +592,7 @@ Each row carries both a legacy `amountADX` field (sum of any ADX token amounts i
 GET /api/leaderboard
 ```
 
-Bundled cumulative leaderboard payload powering the standalone `/leaderboard` page. Public, no auth. On-demand compute (a TTL cache layer is the natural next step if load demands it). Aggregates three views:
+Bundled cumulative leaderboard payload powering the standalone `/leaderboard` page. Public, no auth. On-demand compute, memoized via a 5-min TTL cache at the service layer. Aggregates three views:
 
 - **Tournament tab**: Top 10 of the current active tournament (or most-recent completed if none active). Format-agnostic, works for both Forge (rank_only) and Gauntlet (bracket).
 - **Season tab**: Current active season's full standings (or most-recent completed/final season).
@@ -655,7 +655,6 @@ X-Admin-Secret: <your-admin-secret>
     "format": "bracket",  // 'bracket' (Gauntlet, default) | 'rank_only' (Forge, skips bracket creation)
     "bracketSize": 16,
     "roundDurations": [48, 48, 48],
-    "leveragePenaltyThreshold": 30,  // legacy, no longer used by Risk score
     "supportedAssetCount": 4
   }
 }

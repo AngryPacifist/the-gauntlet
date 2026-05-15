@@ -1,14 +1,14 @@
 // ============================================================================
 // Tournament API Routes
 //
-// POST   /api/tournaments              — Create a new tournament (admin-protected)
-// GET    /api/tournaments              — List all tournaments
-// GET    /api/tournaments/:id          — Get tournament state
-// PUT    /api/tournaments/:id          — Update tournament (admin, registration only)
-// DELETE /api/tournaments/:id          — Delete tournament (admin, full cascade)
-// GET    /api/tournaments/:id/brackets — Get all brackets for active round
-// GET    /api/tournaments/:id/forge    — The Forge merged leaderboard
-// GET    /api/tournaments/:id/payouts  — Final payout list (skill + raffle), for external distribution systems (e.g. MrRewards)
+// POST   /api/tournaments              Create a new tournament (admin-protected)
+// GET    /api/tournaments              List all tournaments
+// GET    /api/tournaments/:id          Get tournament state
+// PUT    /api/tournaments/:id          Update tournament (admin, registration only)
+// DELETE /api/tournaments/:id          Delete tournament (admin, full cascade)
+// GET    /api/tournaments/:id/brackets Get all brackets for active round
+// GET    /api/tournaments/:id/forge    The Forge merged leaderboard
+// GET    /api/tournaments/:id/payouts  Final payout list (skill + raffle), for external distribution systems (e.g. MrRewards)
 // ============================================================================
 
 import { Router } from 'express';
@@ -21,7 +21,7 @@ import { tournaments, rounds, brackets, bracketEntries, registrations, scoreSnap
 import { eq, desc, asc, and, inArray } from 'drizzle-orm';
 import { resolveConfig, type TournamentConfig } from '../types.js';
 
-// Phase 8.q geometric-decay extension (mirrors FE prizesByRank in
+// Geometric-decay extension of skillPrizes (mirrors FE prizesByRank in
 // leaderboard/[id]/page.tsx). When K (top% wallet count) exceeds the
 // configured skillPrizes.length, extend the curve so every slot pays out.
 function extendSkillPrizes(skillPrizes: number[], K: number): number[] {
@@ -42,7 +42,7 @@ function extendSkillPrizes(skillPrizes: number[], K: number): number[] {
 
 const router = Router();
 
-// POST /api/tournaments — Create a new tournament (requires admin secret)
+// POST /api/tournaments: Create a new tournament (requires admin secret)
 router.post('/', async (req, res) => {
     try {
         // Admin auth check
@@ -75,7 +75,7 @@ router.post('/', async (req, res) => {
     }
 });
 
-// GET /api/tournaments — List all tournaments
+// GET /api/tournaments: List all tournaments
 router.get('/', async (_req, res) => {
     try {
         const allTournaments = await db
@@ -93,7 +93,7 @@ router.get('/', async (_req, res) => {
     }
 });
 
-// GET /api/tournaments/:id — Get tournament state (with rounds, registration counts)
+// GET /api/tournaments/:id: Get tournament state (with rounds, registration counts)
 router.get('/:id', async (req, res) => {
     try {
         const id = parseInt(req.params.id, 10);
@@ -118,7 +118,7 @@ router.get('/:id', async (req, res) => {
     }
 });
 
-// PUT /api/tournaments/:id — Update tournament name/config (admin, registration status only)
+// PUT /api/tournaments/:id: Update tournament name/config (admin, registration status only)
 router.put('/:id', async (req, res) => {
     try {
         const secret = req.headers['x-admin-secret'] as string;
@@ -199,7 +199,7 @@ router.put('/:id', async (req, res) => {
     }
 });
 
-// DELETE /api/tournaments/:id — Delete tournament (admin, full cascade)
+// DELETE /api/tournaments/:id: Delete tournament (admin, full cascade)
 router.delete('/:id', async (req, res) => {
     try {
         const secret = req.headers['x-admin-secret'] as string;
@@ -276,7 +276,7 @@ router.delete('/:id', async (req, res) => {
         await db.delete(dailyCategoryScores).where(eq(dailyCategoryScores.tournamentId, id));
 
         // 10. Delete trade cache entries (no FK, but tied to tournament context)
-        // Note: tradeCache doesn't have a tournamentId column — it's wallet-scoped,
+        // Note: tradeCache doesn't have a tournamentId column; it's wallet-scoped,
         // not tournament-scoped. Skipping to avoid deleting cache shared across tournaments.
 
         // 11. Delete the tournament
@@ -293,7 +293,7 @@ router.delete('/:id', async (req, res) => {
     }
 });
 
-// GET /api/tournaments/:id/brackets — Get brackets for a round (defaults to most recent)
+// GET /api/tournaments/:id/brackets: Get brackets for a round (defaults to most recent)
 router.get('/:id/brackets', async (req, res) => {
     try {
         const tournamentId = parseInt(req.params.id, 10);
@@ -361,7 +361,7 @@ router.get('/:id/brackets', async (req, res) => {
     }
 });
 // --------------------------------------------------------------------------
-// GET /api/tournaments/:id/forge — The Forge merged leaderboard (CPI + quests + raffle)
+// GET /api/tournaments/:id/forge: The Forge merged leaderboard (CPI + quests + raffle)
 //
 // Returns all participants with CPI sub-scores, quest points, raffle tickets,
 // and top 30% status. Powers "The Forge" competition page.
@@ -386,12 +386,11 @@ router.get('/:id/forge', async (req, res) => {
             return;
         }
 
-        const { resolveConfig } = await import('../types.js');
         const { computeFinalScores } = await import('../services/final-score.js');
         const config = resolveConfig(tournament.config);
         const results = await computeFinalScores(tournamentId, config);
 
-        // Compute top-% threshold (item 26 — was inline `* 0.3`; now config-driven)
+        // Compute top-% threshold (config-driven via config.topPercentCutoff).
         const top30Index = Math.ceil(results.length * config.topPercentCutoff);
 
         // Tie-aware competition ranking: tied wallets share the same rank
@@ -411,10 +410,9 @@ router.get('/:id/forge', async (req, res) => {
                 questPoints: r.questPoints,
                 finalScore: r.finalScore,
                 raffleTickets: r.raffleTickets,
-                // Phase 8.m: gate TOP 30% on positive finalScore. Prevents
-                // the "all 15 wallets labeled TOP 30%" symptom when many
-                // wallets tie at finalScore=0 and rank <= cutoff. ZeDef T1
-                // day-1 observation Day 42.
+                // Gate TOP 30% on positive finalScore. Prevents
+                // the "all wallets labeled TOP 30%" symptom when many
+                // wallets tie at finalScore=0 and rank <= cutoff.
                 isTopPercent: currentRank <= top30Index && r.finalScore > 0,
             };
         });
@@ -443,16 +441,16 @@ router.get('/:id/forge', async (req, res) => {
 });
 
 // GET /api/tournaments/:id/payouts
-// Returns the final payout list for a tournament — skill prizes + raffle
+// Returns the final payout list for a tournament: skill prizes + raffle
 // winners with their ADX amounts. Designed for external distribution
 // systems (e.g., MrRewards / Adrena Prize Distribution worker) to ingest
 // the determinate result post-tournament.
 //
 // Data is computed on-demand from raffle_results (skill rank order by
 // finalScore DESC) + raffle_draws latest row (raffle winner array order).
-// Pro-rata scale via Phase 8.q extension when K > skillPrizes.length.
+// Pro-rata scale via the skill-prize geometric extension when K > skillPrizes.length.
 //
-// Response includes `complete: boolean` — true only when tournament status
+// Response includes `complete: boolean`, true only when tournament status
 // is 'completed' AND payout rows exist. Clients can poll this and act
 // when complete flips to true.
 router.get('/:id/payouts', async (req, res) => {
@@ -492,10 +490,10 @@ router.get('/:id/payouts', async (req, res) => {
         const skillPrizes = prizeTable.skillPrizes;
         const rafflePrizes = prizeTable.rafflePrizes;
 
-        // Post-T1 batch: tokens[] is the multi-token source of truth. For
-        // pre-migration tournaments (T1 before _migrate-t1-to-multi-token.ts
-        // runs), synthesize a virtual single-sponsor entry from the legacy
-        // currency + totalPool so the same code path handles both.
+        // tokens[] is the multi-token source of truth. For pre-migration
+        // tournaments (legacy single-currency only), synthesize a virtual
+        // single-sponsor entry from the legacy currency + totalPool so the
+        // same code path handles both shapes.
         const tokens = prizeTable.tokens && prizeTable.tokens.length > 0
             ? prizeTable.tokens
             : [{ sponsor: 'Adrena', symbol: prizeTable.currency, amount: prizeTable.totalPool, mint: undefined as string | undefined }];
@@ -542,7 +540,7 @@ router.get('/:id/payouts', async (req, res) => {
             }));
         }
 
-        // Competition ranking (1224) — wallets tied at the same finalScore
+        // Competition ranking (1224): wallets tied at the same finalScore
         // share a rank. Match the FE's prizesByRank tie-handling in
         // leaderboard/[id]/page.tsx: for a group of N wallets tied at rank R,
         // the per-wallet weight share is (extendedPrizes[R-1] + ... +

@@ -13,7 +13,7 @@ export default function ForgeIndexPage() {
         async function redirect() {
             try {
                 const all = await listTournaments();
-                // Only consider Forge (rank_only) tournaments — /forge must never resolve to a Gauntlet
+                // Only consider Forge (rank_only) tournaments; /forge must never resolve to a Gauntlet
                 const forgeOnly = all.filter((t) => t.config?.format === 'rank_only');
                 if (forgeOnly.length === 0) {
                     setError('No Forge tournaments found.');

@@ -1,20 +1,20 @@
 'use client';
 
 // ============================================================================
-// Admin Landing — Phase 5 item 19
+// Admin Landing
 //
 // Command center index for /admin. Sub-routes:
-//   - /admin/tournaments   — Tournament CRUD + lifecycle + raffle + categories
-//   - /admin/seasons       — Season CRUD + lifecycle
-//   - /admin/registrations — View registered wallets per tournament (NEW)
-//   - /admin/analytics     — Analytics + daily metrics + anomaly detection
+//   - /admin/tournaments   : Tournament CRUD + lifecycle + raffle + categories
+//   - /admin/seasons       : Season CRUD + lifecycle
+//   - /admin/registrations : View registered wallets per tournament
+//   - /admin/analytics     : Analytics + daily metrics + anomaly detection
 //
-// Admin secret stored in localStorage (key 'adrena_admin_secret') — shared across
+// Admin secret stored in localStorage (key 'adrena_admin_secret'), shared across
 // all admin sub-routes. Each sub-route reads on mount; this landing provides the
 // canonical entry point. Modal-internal-draft pattern preserved on Create modals
-// in tournaments + seasons sub-routes (Phase 4 admin UX fix).
+// in tournaments + seasons sub-routes.
 //
-// Admin is URL-only — not in nav (item 18 already shipped that change).
+// Admin is URL-only, not in nav.
 // ============================================================================
 
 import { useEffect, useState } from 'react';
@@ -89,7 +89,7 @@ export default function AdminLandingPage() {
                 </p>
             </header>
 
-            {/* Authentication — shared via localStorage across all admin sub-routes */}
+            {/* Authentication, shared via localStorage across all admin sub-routes */}
             <section className={styles.section}>
                 <h2 className={styles.sectionTitle}>Authentication</h2>
                 <div className={styles.secretRow}>

@@ -28,18 +28,17 @@ import type {
     TournamentConfig,
 } from '../types.js';
 import { DEFAULT_TOURNAMENT_CONFIG } from '../types.js';
-// Round 2: filter logic centralized in services/scoring-filters.ts.
-// `filterByAssetList` retained as a name for minimal callsite churn but
-// now delegates to the single-source helper which also applies
-// minPositionCollateral + minTradeDurationSec floors (closes the previous
+// Filter logic centralized in services/scoring-filters.ts.
+// `filterByAssetList` retained as a local name for callsite stability but
+// delegates to the single-source helper, which also applies
+// minPositionCollateral + minTradeDurationSec floors (closes the prior
 // asymmetry where category engines accepted positions that CPI rejected).
 import { filterPositionsForScoring as filterByAssetList } from './scoring-filters.js';
 
 // --------------------------------------------------------------------------
-// Constants: migrated to TournamentConfig (Phase 3 item 13 + item 17, 2026-04-22).
-// Scoring parameters are now config-driven via the `config: TournamentConfig`
-// parameter on each engine function. Defaults mirror the old hardcoded values
-// (see `DEFAULT_TOURNAMENT_CONFIG` in types.ts).
+// Scoring parameters are config-driven via the `config: TournamentConfig`
+// parameter on each engine function. Defaults live in `DEFAULT_TOURNAMENT_CONFIG`
+// (types.ts) and mirror what used to be hardcoded module constants.
 // --------------------------------------------------------------------------
 
 // --------------------------------------------------------------------------
@@ -126,11 +125,11 @@ export function computeAllAroundScore(
     dateStr: string,
     config: TournamentConfig,
 ): AllAroundDetails {
-    // Phase 4 item 29-engine: filter by assetList first (if configured)
+    // Filter by assetList first (if configured), then narrow to the day.
     const assetFiltered = filterByAssetList(positions, config);
     const dayPositions = filterPositionsForDay(assetFiltered, dateStr);
 
-    // Phase 3 item 13 + 17: read from config (was hardcoded ALL_AROUND_MIN_TRADE_USD + ALL_AROUND_MAX_POINTS_PER_ASSET)
+    // Read scoring parameters from config (with defaults).
     const minTradeUsd = config.allAroundMinTradeUsd ?? DEFAULT_TOURNAMENT_CONFIG.allAroundMinTradeUsd;
     const maxPointsPerAsset = config.allAroundMaxPointsPerAsset ?? DEFAULT_TOURNAMENT_CONFIG.allAroundMaxPointsPerAsset;
 
@@ -225,7 +224,7 @@ export function computeFisherScores(
 ): Map<string, FisherDetails> {
     const results = new Map<string, FisherDetails>();
 
-    // Phase 3 item 17: read Fisher rank points from config (was hardcoded FISHER_RANK_POINTS = [3, 2, 1])
+    // Read Fisher rank points from config (default [3, 2, 1]).
     const fisherPoints = config.fisherRankPoints ?? DEFAULT_TOURNAMENT_CONFIG.fisherRankPoints;
 
     // Phase 1: Find each wallet's best long and best short for the day
@@ -233,7 +232,7 @@ export function computeFisherScores(
     const allShorts: FisherCandidate[] = [];
 
     for (const [wallet, positions] of walletPositions) {
-        // Phase 4 item 29-engine: assetList filter before per-day filter
+        // assetList filter before per-day filter
         const assetFiltered = filterByAssetList(positions, config);
         const dayPositions = filterPositionsForDay(assetFiltered, dateStr);
 
@@ -309,7 +308,7 @@ export function computeFisherScores(
         if (bestShort) allShorts.push(bestShort);
 
         // Initialize all wallets with empty details (populated after ranking).
-        // Phase 4 item 10 + D19: added longRank, shortRank, byAsset top-level fields.
+        // Includes longRank, shortRank, byAsset top-level fields.
         results.set(wallet, {
             longRank: null,
             shortRank: null,
@@ -322,9 +321,9 @@ export function computeFisherScores(
         });
     }
 
-    // Phase 4 item 10: populate byAsset per-wallet breakdown.
-    // For each wallet × asset, find best long + best short entry (using same
-    // deterministic tiebreaker as cross-wallet: proximity → ROI → position_id).
+    // Populate byAsset per-wallet breakdown. For each wallet × asset, find
+    // best long + best short entry (using same deterministic tiebreaker as
+    // cross-wallet: proximity → ROI → position_id).
     for (const [wallet, positions] of walletPositions) {
         const assetFiltered = filterByAssetList(positions, config);
         const dayPositions = filterPositionsForDay(assetFiltered, dateStr);
@@ -399,7 +398,7 @@ export function computeFisherScores(
             positionId: candidate.positionId,
         };
         existing.longPoints = pointsFromLong;
-        existing.longRank = rank;  // D19: top-level rank field for season-manager
+        existing.longRank = rank;  // top-level rank field consumed by season-manager
         existing.totalPoints += pointsFromLong;
     }
 
@@ -425,7 +424,7 @@ export function computeFisherScores(
             positionId: candidate.positionId,
         };
         existing.shortPoints = pointsFromShort;
-        existing.shortRank = rank;  // D19
+        existing.shortRank = rank;
         existing.totalPoints += pointsFromShort;
     }
 
@@ -437,10 +436,10 @@ export function computeFisherScores(
 //
 // Best stop-loss trade by ROI within a 2-day window. Tightest controlled loss wins.
 // SL detection: closed_by_sl_tp === true && pnl < 0
-// Minimum trade size: config.riskManagerMinSize USD (default 1000, test 500)
-// Score formula = (1 - |roi|) × 100  — applied at the scheduler row-emission layer,
-// not inside this engine (engine returns raw trade data; scheduler converts to score).
-// Raw negative ROI preserved in details for transparency.
+// Minimum trade size: config.riskManagerMinSize USD (default 1000).
+// Score formula = (1 - |roi|) × 100, applied at the scheduler row-emission
+// layer, not inside this engine (engine returns raw trade data; scheduler
+// converts to score). Raw negative ROI preserved in details for transparency.
 //
 // Determinism:
 // - Intra-wallet tiebreaker: ROI (highest = least negative) -> position_id (lower wins)
@@ -452,8 +451,7 @@ export function computeRiskManagerScores(
     endDate: string,
     config: TournamentConfig,
 ): Map<string, RiskManagerDetails> {
-    // Phase 4 item 11: RM minimum trade size filter + inversion fix.
-    // Config field default 1000 USD per D-value (test 500).
+    // RM minimum trade size filter (config field, default 1000 USD).
     const minSize = config.riskManagerMinSize ?? DEFAULT_TOURNAMENT_CONFIG.riskManagerMinSize;
 
     const results = new Map<string, RiskManagerDetails>();
@@ -463,7 +461,7 @@ export function computeRiskManagerScores(
         const assetFiltered = filterByAssetList(positions, config);
         const windowPositions = filterPositionsForWindow(assetFiltered, startDate, endDate);
 
-        // Phase 4 item 11: minSize filter applied here
+        // minSize filter applied here
         const slTrades = windowPositions.filter((p) =>
             p.status !== 'open' &&
             p.closed_by_sl_tp === true &&
@@ -471,7 +469,7 @@ export function computeRiskManagerScores(
             (p.exit_size ?? p.entry_size) >= minSize,
         );
 
-        // Phase 4 item 10c: per-asset best SL trade
+        // Per-asset best SL trade
         const byAsset: Record<string, {
             bestTrade: SLTPTradeDetail | null;
             candidateCount: number;
@@ -543,14 +541,14 @@ export function computeHumbleOneScores(
         const assetFiltered = filterByAssetList(positions, config);
         const windowPositions = filterPositionsForWindow(assetFiltered, startDate, endDate);
 
-        // TP-triggered closes with positive PnL (no minSize filter — HumbleOne keeps all)
+        // TP-triggered closes with positive PnL (no minSize filter; HumbleOne keeps all)
         const tpTrades = windowPositions.filter((p) =>
             p.status !== 'open' &&
             p.closed_by_sl_tp === true &&
             (p.pnl ?? 0) > 0,
         );
 
-        // Phase 4 item 10b: per-asset best TP trade
+        // Per-asset best TP trade
         const byAsset: Record<string, {
             bestTrade: SLTPTradeDetail | null;
             candidateCount: number;

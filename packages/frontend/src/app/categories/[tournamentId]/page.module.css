@@ -1,5 +1,5 @@
 /* ============================================================================
-   Categories Per-Tournament — Module CSS (Phase 8.i.5.D.4.5)
+   Categories Per-Tournament: Module CSS.
    ============================================================================ */
 
 .tabRow { display: flex; gap: var(--space-sm); margin-bottom: var(--space-lg); flex-wrap: wrap; }

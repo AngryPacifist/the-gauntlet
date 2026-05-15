@@ -11,15 +11,13 @@
 //   4. advanceRound: Rank traders, advance top half, track eliminated wallets
 //   5. completeTournament: Finalize results
 //
-// Changelog (ZeDef feedback, March 2026):
-//   - Registration: eligibility barrier removed. Anyone with a valid wallet
-//     can register. Quality filters move to prize distribution time.
-//   - Round durations: configurable per-round via roundDurations[] array
+// Behavioral notes:
+//   - Registration is zero-barrier; anyone with a valid Solana wallet can
+//     register. Quality filters move to prize distribution time.
+//   - Round durations are configurable per-round via roundDurations[].
 //   - Fallen Fighters: at main completion, all eliminated wallets enter a
 //     single consolation pool scored over the final round's time window.
-//   - Config: supportedAssetCount passed to scoring engine.
-//     leveragePenaltyThreshold retained in config type for backward compat
-//     but no longer consumed (replaced by drawdown metric April 2026).
+//   - Risk score uses drawdown metric (leverage is not penalized).
 // ============================================================================
 
 import { eq, and, ne } from 'drizzle-orm';
@@ -84,7 +82,7 @@ export async function createTournament(
 // 2. Register a wallet for a tournament
 //
 // Zero-barrier registration: anyone with a valid Solana wallet can register.
-// No eligibility checks (trade history, recency) — those move to prize time.
+// No eligibility checks (trade history, recency); those move to prize time.
 // --------------------------------------------------------------------------
 export async function registerWallet(
     tournamentId: number,
@@ -207,18 +205,18 @@ export async function startTournament(
         throw new Error(`Cannot start tournament in "${tournament.status}" status`);
     }
 
-    // Phase 5 item 21: enforce singleton — only one tournament can be `active` at a time.
+    // Singleton enforcement: only one tournament can be `active` at a time.
     // This is the funnel for ALL `active` transitions in this function:
-    //   - rank_only branch (Forge — "The Forge" round): flips status to active before returning
-    //   - bracket branch (Gauntlet — Round 1 "First Blood"): flips status to active before returning
+    //   - rank_only branch (Forge "The Forge" round): flips status to active before returning
+    //   - bracket branch (Gauntlet "First Blood" Round 1): flips status to active before returning
     // season-manager paths (startSeason / advanceWeek / qualifyForFinal) only CREATE tournaments
     // in registration status; they don't activate. So this single guard covers every path.
     //
-    // Race-safety (D-21.1): app-level check only. Single-operator admin makes the race window
+    // Race-safety: app-level check only. Single-operator admin makes the race window
     // microseconds; if two starts collide, the second sees status='active' on the first and
     // 409s out cleanly via the thrown error.
     //
-    // `ne(tournaments.id, tournamentId)` excludes the subject tournament — defensive, since the
+    // `ne(tournaments.id, tournamentId)` excludes the subject tournament; defensive, since the
     // status check above already guarantees it's in registration (not active), but explicit
     // self-exclusion is robust against future status-flow changes.
     const [activeOther] = await db
@@ -241,7 +239,7 @@ export async function startTournament(
 
     const config = resolveConfig(tournament.config);
 
-    // Get all registrations — no eligibility filter
+    // Get all registrations (no eligibility filter)
     const allRegs = await db
         .select()
         .from(registrations)
@@ -252,6 +250,7 @@ export async function startTournament(
     }
 
     // --- Rank-only mode (The Forge): one round, one bracket, all wallets ---
+
     if (config.format === 'rank_only') {
         const wallets = allRegs.map((r) => r.wallet);
         const now = new Date();
@@ -505,7 +504,7 @@ export async function computeRoundScores(roundId: number): Promise<number> {
                     `[TournamentManager] Error scoring wallet ${entry.wallet}:`,
                     error instanceof Error ? error.message : error,
                 );
-                // Continue scoring other entries — don't let one failure stop the round
+                // Continue scoring other entries; don't let one failure stop the round
             }
         }
     }

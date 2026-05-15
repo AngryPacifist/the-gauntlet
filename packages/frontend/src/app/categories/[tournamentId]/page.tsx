@@ -1,11 +1,9 @@
 'use client';
 
 // ============================================================================
-// Daily Categories — Per-tournament page
-// Phase 8.i.5.D.4.5: inline-style cleanup. Local tabBtnStyle/thStyle/tdStyle
-// helpers dropped; module classes from page.module.css. Per-category accent
-// colors stay inline (5 distinct category brand colors — intentional, not
-// part of the Adrena palette migration).
+// Daily Categories: per-tournament page.
+//
+// Per-category accent colors stay inline (5 distinct category brand colors).
 // ============================================================================
 
 import { useEffect, useState, use, useMemo } from 'react';
@@ -25,7 +23,7 @@ import { Compass, Target, TrendingUp, Shield, Trophy, Calendar, Zap } from 'luci
 import Link from 'next/link';
 import styles from './page.module.css';
 
-// Phase 4: base tabs (non-LM). LM tabs are per-asset, appended dynamically below.
+// Base tabs (non-LM). LM tabs are per-asset, appended dynamically below.
 interface CategoryTab {
     slug: CategorySlug;
     label: string;
@@ -77,10 +75,10 @@ const BASE_CATEGORY_TABS: CategoryTab[] = [
     },
 ];
 
-// Phase 8 item (c.5c): normalize URL tab slug. With aggregated LM tabs, old
-// bookmarks like ?tab=leverage_master_SOL_long no longer match any tab in the
-// new categoryTabs array (which uses leverage_master_SOL). Map legacy per-side
-// slugs to aggregated form + capture the side for the in-tab toggle's default.
+// Normalize URL tab slug. With aggregated LM tabs, old bookmarks like
+// ?tab=leverage_master_SOL_long no longer match any tab in the categoryTabs
+// array (which uses leverage_master_SOL). Map legacy per-side slugs to
+// aggregated form + capture the side for the in-tab toggle's default.
 function normalizeLmTab(raw: string): { tab: string; initialSide: 'long' | 'short' } {
     const m = raw.match(/^leverage_master_(.+)_(long|short)$/);
     if (m && m[1] !== 'long' && m[1] !== 'short') {
@@ -115,7 +113,7 @@ export default function CategoriesPage({ params }: { params: Promise<{ tournamen
                 });
             }
         } else {
-            // Legacy fallback: pre-Phase-4 tournaments still use 2-tab per-side layout
+            // Legacy fallback: older tournaments still use 2-tab per-side layout
             tabs.push(
                 { slug: 'leverage_master_long' as CategorySlug, label: 'Leverage (Long)', icon: Zap, color: '#e84393', colorBg: 'rgba(232, 67, 147, 0.1)', description: 'Leverage ladders for long positions.' },
                 { slug: 'leverage_master_short' as CategorySlug, label: 'Leverage (Short)', icon: Zap, color: '#0984e3', colorBg: 'rgba(9, 132, 227, 0.1)', description: 'Leverage ladders for short positions.' },
@@ -124,12 +122,12 @@ export default function CategoriesPage({ params }: { params: Promise<{ tournamen
         return tabs;
     }, [tournament?.config?.assetList]);
 
-    // Phase 8 item (c.5c): normalize legacy per-side URLs to aggregated form
+    // Normalize legacy per-side URLs to aggregated form
     const rawInitialTab = searchParams.get('tab') || 'all_around';
     const { tab: normalizedInitialTab, initialSide: normalizedInitialSide } = normalizeLmTab(rawInitialTab);
     const [tab, setTab] = useState<CategorySlug>(normalizedInitialTab as CategorySlug);
     const [leaderboard, setLeaderboard] = useState<CategoryLeaderboardEntry[]>([]);
-    // Phase 8 item (c.5c): aggregated LM tabs need TWO leaderboards (long + short).
+    // Aggregated LM tabs need TWO leaderboards (long + short).
     // Track them separately; non-LM tabs continue to use single `leaderboard` state.
     const [longLeaderboard, setLongLeaderboard] = useState<CategoryLeaderboardEntry[]>([]);
     const [shortLeaderboard, setShortLeaderboard] = useState<CategoryLeaderboardEntry[]>([]);
@@ -146,10 +144,9 @@ export default function CategoriesPage({ params }: { params: Promise<{ tournamen
     const [questData, setQuestData] = useState<QuestProgressDetails | null>(null);
 
     const activeTab = categoryTabs.find(t => t.slug === tab) ?? categoryTabs[0];
-    // Phase 4 item 30 + Phase 8 item (c.5c): leverage tabs are aggregated
-    // per-asset (`leverage_master_SOL`) via tab generation; legacy per-side
-    // URLs are normalized to aggregated form via `normalizeLmTab` above so
-    // old bookmarks still land on the right tab.
+    // Leverage tabs are aggregated per-asset (`leverage_master_SOL`) via tab
+    // generation; legacy per-side URLs are normalized to aggregated form via
+    // `normalizeLmTab` above so old bookmarks still land on the right tab.
     const isLeverageTab = tab.startsWith('leverage_master_');
     const leverageTabAsset = isLeverageTab
         ? (() => {
@@ -158,8 +155,8 @@ export default function CategoriesPage({ params }: { params: Promise<{ tournamen
             if (aggMatch && aggMatch[1] !== 'long' && aggMatch[1] !== 'short') {
                 return aggMatch[1];
             }
-            // Legacy per-side (defensive — should be normalized away by normalizeLmTab,
-            // but keep for in-flight state during refactor)
+            // Legacy per-side (defensive: should be normalized away by normalizeLmTab,
+            // but keep for in-flight state).
             const sideMatch = tab.match(/^leverage_master_(.+)_(long|short)$/);
             if (sideMatch && sideMatch[1] !== 'long' && sideMatch[1] !== 'short') {
                 return sideMatch[1];
@@ -174,7 +171,7 @@ export default function CategoriesPage({ params }: { params: Promise<{ tournamen
         }
     }, [tournamentId, tab]);
 
-    // Phase 4: fetch tournament config for dynamic tabs
+    // Fetch tournament config for dynamic tabs
     useEffect(() => {
         if (!isNaN(tournamentId)) {
             getTournament(tournamentId).then(setTournament).catch(() => setTournament(null));
@@ -201,7 +198,7 @@ export default function CategoriesPage({ params }: { params: Promise<{ tournamen
     async function loadLeaderboard() {
         try {
             setLoading(true);
-            // Phase 8 item (c.5c): aggregated LM tabs need TWO leaderboards.
+            // Aggregated LM tabs need TWO leaderboards.
             if (isLeverageTab && leverageTabAsset) {
                 const [longData, shortData] = await Promise.all([
                     getCategoryLeaderboard(tournamentId, `leverage_master_${leverageTabAsset}_long` as CategorySlug),
@@ -225,8 +222,8 @@ export default function CategoriesPage({ params }: { params: Promise<{ tournamen
 
     async function loadDailyScores() {
         try {
-            // Phase 8 item (c.5c): for aggregated LM tab, daily-breakdown reads
-            // the side selected via the in-tab toggle (`leverageActiveSide`).
+            // For aggregated LM tab, daily-breakdown reads the side selected
+            // via the in-tab toggle (`leverageActiveSide`).
             const effectiveSlug: CategorySlug = isLeverageTab && leverageTabAsset
                 ? (`leverage_master_${leverageTabAsset}_${leverageActiveSide}` as CategorySlug)
                 : tab;
@@ -305,7 +302,7 @@ export default function CategoriesPage({ params }: { params: Promise<{ tournamen
                 ) : error ? (
                     <p style={{ color: 'var(--status-danger)' }}>{error}</p>
                 ) : isLeverageTab && leverageTabAsset ? (
-                    // Phase 8 item (c.5c): aggregated per-asset display — Long + Short stacked
+                    // Aggregated per-asset display: Long + Short stacked
                     <div className={styles.lmAggregatedSplit}>
                         <LeverageSubLeaderboard sideLabel="Long" entries={longLeaderboard} accentColor={activeTab.color} />
                         <LeverageSubLeaderboard sideLabel="Short" entries={shortLeaderboard} accentColor={activeTab.color} />
@@ -390,7 +387,7 @@ export default function CategoriesPage({ params }: { params: Promise<{ tournamen
                             </p>
                         )}
 
-                        {/* Phase 8 item (c.5c): show BOTH long + short badge grids */}
+                        {/* Show BOTH long + short badge grids */}
                         <div className={styles.lmBadgeGroupHeading}>Long ladder</div>
                         <LeverageBadgeGrid
                             steps={(() => {
@@ -433,7 +430,7 @@ export default function CategoriesPage({ params }: { params: Promise<{ tournamen
                     <Calendar size={18} />
                     Daily Breakdown
                 </h2>
-                {/* Phase 8 item (c.5c): for aggregated LM tab, side toggle */}
+                {/* For aggregated LM tab, side toggle */}
                 {isLeverageTab && leverageTabAsset && (
                     <div className={styles.lmSideToggleRow}>
                         <button
@@ -515,7 +512,7 @@ function getRankStyle(index: number): React.CSSProperties {
     return {};
 }
 
-// ---- Phase 8 item (c.5c): Aggregated per-side leaderboard inside an LM tab ----
+// ---- Aggregated per-side leaderboard inside an LM tab ----
 function LeverageSubLeaderboard({
     sideLabel, entries, accentColor,
 }: {
@@ -567,15 +564,14 @@ function LeverageSubLeaderboard({
 }
 
 // ---- Leverage Master Badge Grid ----
-// Phase 7.a: const LEVERAGE_LABELS removed — labels are now generated per render
-// from the stepValues prop (per-asset ladder: e.g. [10,20,...,100] for crypto,
-// [1.5,2,2.5,3,3.5,4,4.5] for sub-10x RWA). Falls back to legacy crypto labels
-// when stepValues is undefined (pre-Phase-7 tournaments).
+// Labels are generated per render from the stepValues prop (per-asset ladder:
+// e.g. [10,20,...,100] for crypto, [1.5,2,2.5,3,3.5,4,4.5] for sub-10x RWA).
+// Falls back to legacy crypto labels when stepValues is undefined.
 
 function LeverageBadgeGrid({ steps, stepValues, color }: { steps: boolean[]; stepValues?: number[]; color: string }) {
     const completedCount = steps.filter(Boolean).length;
     const total = steps.length;
-    // Phase 7.a: per-asset step values when present; default to crypto 10x ladder labels otherwise.
+    // Per-asset step values when present; default to crypto 10x ladder labels otherwise.
     const labels = stepValues && stepValues.length === total
         ? stepValues.map((v) => `${v}x`)
         : Array.from({ length: total }, (_, i) => `${(i + 1) * 10}x`);

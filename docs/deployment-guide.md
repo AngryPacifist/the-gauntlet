@@ -177,7 +177,6 @@ adrena-the-gauntlet/
 │               │   ├── seasons/page.tsx            # Season CRUD + lifecycle
 │               │   ├── registrations/page.tsx     # Tournament-scoped registration browser
 │               │   └── analytics/page.tsx          # Per-tournament analytics + daily metrics + anomalies
-│               ├── register/page.tsx # Public registration
 │               ├── forge/page.tsx    # Forge index (auto-redirect)
 │               ├── forge/[tournamentId]/page.tsx  # Forge leaderboard + quest tabs
 │               ├── tournament/[id]/page.tsx           # Tournament detail

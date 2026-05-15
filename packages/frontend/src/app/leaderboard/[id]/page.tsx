@@ -1,11 +1,11 @@
 'use client';
 
 // ============================================================================
-// Per-Tournament Leaderboard
-// Phase 8.i.5.D.4.1: full inline-style + Slate-palette migration to module
-// classes from page.module.css. Logic untouched. All helpers preserved verbatim
-// including parseLeverageMasterSlug (Day 41 commit 399cbd7 — centralized LM
-// slug parser; do NOT inline the regex back).
+// Per-Tournament Leaderboard.
+//
+// Note: parseLeverageMasterSlug centralizes parsing of `leverage_master_*`
+// slugs. Do NOT inline that regex back; it has accumulated defensive
+// edge-case behavior.
 // ============================================================================
 
 import { useState, useEffect, use, useCallback, useMemo } from 'react';
@@ -63,10 +63,10 @@ const QUEST_LABELS: Record<string, string> = {
     leverage_master_short: 'Leverage Master (Short)',
 };
 
-// Phase 8 fix: single source of truth for parsing leverage_master_* category slugs.
+// Single source of truth for parsing leverage_master_* category slugs.
 // Schema: 'leverage_master_<ASSET>_<SIDE>' (per-asset) | 'leverage_master_<SIDE>' (legacy).
 // Returns { side, asset } where asset is undefined for legacy slugs OR if the captured
-// asset literally equals 'long'/'short' (defensive — preserves the malformed-input
+// asset literally equals 'long'/'short' (defensive: preserves the malformed-input
 // behavior that the prior `(.+)?_?` regex in CategoryLeaderboard tolerated by accident).
 function parseLeverageMasterSlug(category: string): {
     side: 'long' | 'short' | null;
@@ -85,8 +85,8 @@ function parseLeverageMasterSlug(category: string): {
     return { side: null, asset: undefined };
 }
 
-// Phase 4 item 30: returns human label for a category slug.
-// Phase 8 fix: parsing logic delegated to parseLeverageMasterSlug for consistency.
+// Returns human label for a category slug.
+// Parsing logic is delegated to parseLeverageMasterSlug for consistency.
 function getQuestLabel(category: string): string {
     if (QUEST_LABELS[category]) return QUEST_LABELS[category];
     const { side, asset } = parseLeverageMasterSlug(category);
@@ -106,8 +106,8 @@ const CPI_COMPONENTS = [
 type PageTab = 'general' | 'quests';
 type QuestPeriod = 'daily' | '2day' | 'weekly';
 
-// Phase 4 item 30: PERIOD_CATEGORIES.weekly is now per-asset when assetList is populated.
-// Legacy fallback (undefined/empty assetList) → static 2-slug list for pre-Phase-4 data.
+// PERIOD_CATEGORIES.weekly is per-asset when assetList is populated.
+// Legacy fallback (undefined/empty assetList) → static 2-slug list for older data.
 function getPeriodCategories(
     period: QuestPeriod,
     assetList?: Array<{ symbol: string }>,
@@ -160,13 +160,13 @@ function shortWallet(wallet: string): string {
 }
 
 // --------------------------------------------------------------------------
-// Multi-token prize helpers (post-T1 batch Item 1)
+// Multi-token prize helpers.
 //
 // resolveTokens: extract the tokens[] array from a prizeTable, synthesizing
 // a single-sponsor virtual entry from legacy { currency, totalPool } when
-// `tokens` is absent (pre-migration T1 fallback). Return type matches the
+// `tokens` is absent (single-currency fallback). Return type matches the
 // full schema (mint? + staticUsdPrice?) so callers can pass directly to
-// getTokenUSDPrices for Forks A + B flow-through.
+// getTokenUSDPrices.
 // --------------------------------------------------------------------------
 type ResolvedToken = {
     sponsor: string;
@@ -256,12 +256,12 @@ function rankBadgeClass(rank: number): string {
     return '';
 }
 
-// Phase 8.q: extend skillPrizes via geometric decay so K > skillPrizes.length
-// fields still distribute the full pool to all top% wallets. Decay ratio is
-// derived from the curve's existing tail (last two values' ratio), clamped to
-// (0, 1] to prevent curve inversion when admin configures a non-monotonic
-// curve. Floor at 1 ADX prevents underflow at very large K (cumulative decay
-// can produce sub-1 values; we want every slot non-zero). At K ≤ skillPrizes
+// Extend skillPrizes via geometric decay so K > skillPrizes.length fields
+// still distribute the full pool to all top% wallets. Decay ratio is derived
+// from the curve's existing tail (last two values' ratio), clamped to (0, 1]
+// to prevent curve inversion when admin configures a non-monotonic curve.
+// Floor at 1 prevents underflow at very large K (cumulative decay can
+// produce sub-1 values; we want every slot non-zero). At K ≤ skillPrizes
 // length: returns the original array (no allocation).
 function extendSkillPrizes(skillPrizes: number[], K: number): number[] {
     if (K <= skillPrizes.length) return skillPrizes;
@@ -288,10 +288,10 @@ export default function LeaderboardPage({ params }: { params: Promise<{ id: stri
     const tournamentId = parseInt(resolvedParams.id, 10);
 
     const [data, setData] = useState<ForgeLeaderboard | null>(null);
-    // Round 3 nav-cap: tournamentState fetched in parallel with the forge leaderboard
-    // for completed/cancelled tournaments — its rounds[].endTime drives the
-    // Quest-Leaderboards date-navigator cap so users don't land on / navigate to
-    // post-tournament dates that show empty or partial-day data.
+    // tournamentState is fetched in parallel with the forge leaderboard for
+    // completed/cancelled tournaments; its rounds[].endTime drives the
+    // Quest-Leaderboards date-navigator cap so users don't land on or navigate
+    // to post-tournament dates that show empty or partial-day data.
     const [tournamentState, setTournamentState] = useState<TournamentState | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -309,12 +309,12 @@ export default function LeaderboardPage({ params }: { params: Promise<{ id: stri
     const [questScores, setQuestScores] = useState<Map<string, DailyCategoryScore[]>>(new Map());
     const [questLoading, setQuestLoading] = useState(false);
     const [expandedRules, setExpandedRules] = useState<Set<string>>(new Set());
-    // Round 2 (LM-2 + LM-3): live LM leaderboard from quest_progress (not week-boundary).
-    // Replaces dailyCategoryScores dependency for the Quest Leaderboards Weekly tab so
-    // step progress shows mid-week — matches the c.5+a.2 expanded-row LM display.
+    // Live LM leaderboard from quest_progress (not week-boundary). Drives the
+    // Quest Leaderboards Weekly tab so step progress shows mid-week, matching
+    // the expanded-row LM display.
     const [lmLeaderboard, setLmLeaderboard] = useState<LeverageMasterLeaderboard | null>(null);
 
-    // Registration modal state (Item 3)
+    // Registration modal state
     const [showRegModal, setShowRegModal] = useState(false);
     const [walletInput, setWalletInput] = useState('');
     const [registering, setRegistering] = useState(false);
@@ -342,8 +342,8 @@ export default function LeaderboardPage({ params }: { params: Promise<{ id: stri
         load();
     }, [tournamentId]);
 
-    // Round 3 nav-cap: the max date the Quest-Leaderboards navigator should allow.
-    // For active tournaments: today (existing behavior). For completed/cancelled:
+    // Max date the Quest-Leaderboards navigator should allow.
+    // For active tournaments: today. For completed/cancelled:
     // (round endTime UTC date - 1 day) = last full UTC day of trading. Hides
     // partial-end-day fragments + empty Week N+1 from the navigator entirely.
     const maxQuestDate = useMemo(() => {
@@ -389,7 +389,7 @@ export default function LeaderboardPage({ params }: { params: Promise<{ id: stri
         setQuestLoading(false);
     }, [tournamentId]);
 
-    // Round 2 (LM-2 + LM-3): fetch live LM leaderboard for the Weekly tab.
+    // Fetch live LM leaderboard for the Weekly tab.
     // Passes questDate so backend resolves the displayed week (supports the
     // Weekly date navigator).
     const loadLmLeaderboard = useCallback(async (date: string) => {
@@ -404,7 +404,7 @@ export default function LeaderboardPage({ params }: { params: Promise<{ id: stri
     useEffect(() => {
         if (activeTab === 'quests') {
             loadQuestScores(questPeriod, questDate);
-            // Round 2: also fetch live LM leaderboard when Weekly tab is active.
+            // Also fetch live LM leaderboard when Weekly tab is active.
             if (questPeriod === 'weekly') {
                 loadLmLeaderboard(questDate);
             }
@@ -546,9 +546,9 @@ export default function LeaderboardPage({ params }: { params: Promise<{ id: stri
                     </div>
                     {isForge && <RegisterButton status={data.tournament.status} onClick={() => setShowRegModal(true)} />}
                 </div>
-                {/* Fork D: PrizeInfo header renders on BOTH Forge and Gauntlet
-                   tournaments — Gauntlet is also a prized contest with the
-                   same topPercentCutoff semantics. Splits inside PrizeInfo
+                {/* PrizeInfo header renders on BOTH Forge and Gauntlet
+                   tournaments, since Gauntlet is also a prized contest with
+                   the same topPercentCutoff semantics. Splits inside PrizeInfo
                    conditionally render per weight (Skill / Raffle hidden
                    when their respective weight is 0). */}
                 {data.tournament.config.prizeTable && (
@@ -569,7 +569,7 @@ export default function LeaderboardPage({ params }: { params: Promise<{ id: stri
                 ))}
             </div>
 
-            {/* Fallen Fighters info — shown for bracket tournaments */}
+            {/* Fallen Fighters info: shown for bracket tournaments */}
             {data.tournament.config?.format === 'bracket' && (
                 <div className={styles.ffCard}>
                     <Info size={18} className={styles.ffCardIcon} />
@@ -659,10 +659,10 @@ function GeneralLeaderboard({
     tournamentId, entries, expandedWallet, breakdown, breakdownLoading,
     searchQuery, onSearch, onToggle, isForge, prizeTable, topPercentCutoff, assetList,
 }: GeneralLeaderboardProps) {
-    // Post-T1 batch (Item 1): per-rank token amounts. Map<rank, perWalletTokens[]>.
-    // USD is computed live in PrizeCellMultiToken from tokens × usdPrices (don't
-    // store stale USD here; tokens are amount-denominated, USD is a derived view
-    // that updates per Pyth/Jupiter/static poll).
+    // Per-rank token amounts. Map<rank, perWalletTokens[]>. USD is computed live
+    // in PrizeCellMultiToken from tokens × usdPrices (don't store stale USD here;
+    // tokens are amount-denominated, USD is a derived view that updates per
+    // Pyth/Jupiter/static poll).
     const prizesByRank = useMemo<Map<number, Array<{ symbol: string; amount: number }>>>(() => {
         const map = new Map<number, Array<{ symbol: string; amount: number }>>();
         if (!prizeTable) return map;
@@ -673,9 +673,9 @@ function GeneralLeaderboard({
         const skillWeight = prizeTable.skillPrizes.reduce((a, b) => a + b, 0);
         if (totalWeight === 0) return map;
 
-        // Phase 8.n + 8.q: pro-rata scale + geometric-decay extension so every
-        // top% wallet gets a non-zero share. Post-multi-token interpretation:
-        // each rank gets a fraction of totalWeight, applied to every token.
+        // Pro-rata scale + geometric-decay extension so every top% wallet gets
+        // a non-zero share. Each rank gets a fraction of totalWeight, applied
+        // to every token.
         const rankCounts = new Map<number, number>();
         for (const e of entries) {
             if (!e.isTopPercent) continue;
@@ -698,9 +698,9 @@ function GeneralLeaderboard({
         return map;
     }, [entries, prizeTable]);
 
-    // Forks A+B: dedupe price-fetch tokens by symbol (first-occurrence wins
-    // for mint + staticUsdPrice). Multi-sponsor tournaments with the same
-    // token query Pyth/Jupiter once.
+    // Dedupe price-fetch tokens by symbol (first-occurrence wins for mint +
+    // staticUsdPrice). Multi-sponsor tournaments with the same token query
+    // Pyth/Jupiter once.
     const tokens = useMemo(() => prizeTable ? resolveTokens(prizeTable) : [], [prizeTable]);
     const priceFetchTokens = useMemo(() => {
         const seen = new Map<string, { symbol: string; mint?: string; staticUsdPrice?: number }>();
@@ -722,11 +722,11 @@ function GeneralLeaderboard({
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [JSON.stringify(priceFetchTokens)]);
 
-    // S4 path B: fetch payouts.rows to surface raffle prizes on the leaderboard
-    // PRIZE column. Skill rows derive from prizesByRank above (live); we pull
-    // only raffle rows from /payouts. Pre-draw: /payouts returns no raffle rows
-    // → rafflePrizesByWallet stays empty → raffle-tier wallets render `—` (current
-    // behavior preserved).
+    // Fetch payouts.rows to surface raffle prizes on the leaderboard PRIZE
+    // column. Skill rows derive from prizesByRank above (live); we pull only
+    // raffle rows from /payouts. Pre-draw: /payouts returns no raffle rows →
+    // rafflePrizesByWallet stays empty → raffle-tier wallets render `—`
+    // (current behavior preserved).
     const [rafflePayoutRows, setRafflePayoutRows] = useState<PayoutRow[] | null>(null);
     useEffect(() => {
         let cancelled = false;
@@ -745,7 +745,7 @@ function GeneralLeaderboard({
         const map = new Map<string, { drawPosition: number; tokens: Array<{ symbol: string; amount: number }> }>();
         if (!rafflePayoutRows) return map;
         for (const r of rafflePayoutRows) {
-            if (r.drawPosition == null) continue;  // defensive — raffle rows always have drawPosition
+            if (r.drawPosition == null) continue;  // defensive: raffle rows always have drawPosition
             map.set(r.wallet, {
                 drawPosition: r.drawPosition,
                 tokens: r.tokens.map((t) => ({ symbol: t.symbol, amount: t.amount })),
@@ -817,7 +817,7 @@ function GeneralLeaderboard({
 }
 
 // --------------------------------------------------------------------------
-// Forge Row — expandable with CPI + quest breakdown bars
+// Forge Row: expandable with CPI + quest breakdown bars
 // --------------------------------------------------------------------------
 
 interface ForgeRowProps {
@@ -841,7 +841,7 @@ function ForgeRow({
     topPercentCutoff, assetList,
 }: ForgeRowProps) {
     const rankClass = rankBadgeClass(entry.rank);
-    // Post-T1 batch (Item 1 + S4 path B): 3-way prize column branch.
+    // 3-way prize column branch.
     const skillTokens = entry.isTopPercent && prizeTable ? prizesByRank.get(entry.rank) : undefined;
     const raffleEntry = !entry.isTopPercent ? rafflePrizesByWallet.get(entry.wallet) : undefined;
 
@@ -979,12 +979,10 @@ function HorizontalBar({ label, value, max, color }: HorizontalBarProps) {
 }
 
 // --------------------------------------------------------------------------
-// Trader Statistics Panel (Phase post-T1 item 2A/B)
+// Trader Statistics Panel
 //
 // Consolidates ROI / Liquidations · Max DD / Profitable Days · Win Rate /
 // Trades · Volume into a dedicated middle panel in the expanded row.
-// Replaces the small subtext under each CPI bar (CPIBarWithDetails);
-// CPI column now calls HorizontalBar directly with no wrapper.
 //
 // Empty state (cpiDetails === null): renders 4 '—' placeholder rows so the
 // panel still has shape. All-zero trade counts: renders the literal zeros
@@ -1058,15 +1056,15 @@ function TraderStatisticsPanel({ cpiDetails }: {
 // --------------------------------------------------------------------------
 
 // --------------------------------------------------------------------------
-// LM Split-Background Grid (post-T1 batch Item 2-2)
+// LM Split-Background Grid
 //
 // Renders one cell per leverage step with a two-tone background:
 //   - left half = green when Long achieved at that step
 //   - right half = red when Short achieved
 //   - grey when neither
-// Used by BOTH the General Leaderboard expanded row (replacing the old
-// lmCompactGroup text strip) AND the Weekly tab merged-row table.
-// Inline component by design — both consumers live in this same file.
+// Used by BOTH the General Leaderboard expanded row AND the Weekly tab
+// merged-row table. Inline component by design; both consumers live in
+// this same file.
 // --------------------------------------------------------------------------
 function LMSplitBgGrid({
     stepLabels, stepsCompletedLong, stepsCompletedShort,
@@ -1125,7 +1123,7 @@ function QuestBreakdownBars({ breakdown }: { breakdown: WalletBreakdown }) {
 //
 // Renders the per-asset LM progress strip. Lives outside QuestBreakdownBars
 // so it can occupy a row of its own in the grid (grid-column: 1 / -1 via
-// .lmExpandedGroup) — gives each asset's step cells the horizontal room to
+// .lmExpandedGroup), giving each asset's step cells the horizontal room to
 // stay on one line instead of wrapping inside a narrow column.
 // --------------------------------------------------------------------------
 function LeverageMasterBreakdown({
@@ -1220,9 +1218,9 @@ function QuestLeaderboards({
     // view even after a tournament went 'completed' (scheduler scoring stops
     // on status flip; chip was unaware).
     const isLive = isToday && tournamentStatus === 'active';
-    // Round 3 nav-cap: for completed/cancelled tournaments the rightmost
-    // reachable date is maxQuestDate (= round endDate - 1 day). For active
-    // tournaments maxQuestDate === todayUTC() so semantics are unchanged.
+    // For completed/cancelled tournaments the rightmost reachable date is
+    // maxQuestDate (= round endDate - 1 day). For active tournaments
+    // maxQuestDate === todayUTC() so semantics are unchanged.
     const isAtMax = questDate === maxQuestDate;
     const isCompleted = tournamentStatus === 'completed' || tournamentStatus === 'cancelled';
     const todayBtnLabel = isCompleted ? 'Latest' : 'Today';
@@ -1278,10 +1276,10 @@ function QuestLeaderboards({
                     Loading quest data...
                 </div>
             ) : questPeriod === 'weekly' && assetList?.length ? (
-                // Phase 8 item (c.5b) + Round 2 (LM-2 + LM-3): aggregate per-asset
-                // cards. Round 2: data sourced from /api/quests/:tournamentId/leaderboard
-                // (live quest_progress) instead of getDailyScores (week-boundary
-                // dailyCategoryScores rows). Mid-week step progress now visible.
+                // Aggregate per-asset cards. Data sourced from
+                // /api/quests/:tournamentId/leaderboard (live quest_progress) instead
+                // of getDailyScores (week-boundary dailyCategoryScores rows).
+                // Mid-week step progress is visible.
                 assetList.map((asset) => {
                     const entries = lmLeaderboard?.byAsset[asset.symbol] ?? [];
                     return (
@@ -1333,7 +1331,7 @@ interface CategoryLeaderboardProps {
 }
 
 function CategoryLeaderboard({ category, scores, isRulesExpanded, onToggleRules, isForge, searchedWallet, assetListLength, assetList }: CategoryLeaderboardProps) {
-    // Phase 8 fix: slug parsing centralized via parseLeverageMasterSlug.
+    // Slug parsing is centralized via parseLeverageMasterSlug.
     const { side: lmSide, asset: lmAsset } = parseLeverageMasterSlug(category);
     const lmAssetConfig = lmAsset ? assetList?.find((a) => a.symbol === lmAsset) : undefined;
     const questInfo: QuestDescription | undefined = lmSide
@@ -1465,11 +1463,11 @@ function CategoryLeaderboard({ category, scores, isRulesExpanded, onToggleRules,
 }
 
 // --------------------------------------------------------------------------
-// Leverage Master — Merged per-asset card (post-T1 batch Item 2-2)
+// Leverage Master: Merged per-asset card.
 //
 // One table per asset showing both Long + Short progression per wallet in
 // a single row. Progress column uses split-background cells (green = Long,
-// red = Short, grey = neither). Replaces the prior dual sub-tables.
+// red = Short, grey = neither).
 // --------------------------------------------------------------------------
 
 interface LeverageMasterAssetCardProps {
@@ -1599,7 +1597,7 @@ function LMMergedRow({
 }
 
 // --------------------------------------------------------------------------
-// Status Badge — tournament lifecycle indicator in the Forge header
+// Status Badge: tournament lifecycle indicator in the Forge header.
 // --------------------------------------------------------------------------
 
 function StatusBadge({ status }: { status: string }) {
@@ -1620,7 +1618,7 @@ function StatusBadge({ status }: { status: string }) {
 }
 
 // --------------------------------------------------------------------------
-// Register Button — opens wallet-input modal on the Forge page
+// Register Button: opens wallet-input modal on the Forge page.
 // --------------------------------------------------------------------------
 
 function RegisterButton({ status, onClick }: {
@@ -1643,7 +1641,7 @@ function RegisterButton({ status, onClick }: {
 }
 
 // --------------------------------------------------------------------------
-// Register Modal — wallet input + submit for Forge registration
+// Register Modal: wallet input + submit for Forge registration.
 // --------------------------------------------------------------------------
 
 function RegisterModal({
@@ -1712,23 +1710,23 @@ function RegisterModal({
 }
 
 // --------------------------------------------------------------------------
-// Prize Info — multi-token header for Forge + Gauntlet (Fork D)
+// Prize Info: multi-token header for Forge + Gauntlet.
 // --------------------------------------------------------------------------
 //
 // Renders: USD live total + "Sponsored by X · Y" + "Distributed in ADX, JTO" +
 // per-split (Skill / Raffle) USD breakdowns. Each split is conditional on
 // its respective weight > 0 (hides $0 Raffle on skill-only configs).
 //
-// USD is computed live via the Pyth → Jupiter → admin static cascade
-// (Forks A+B). If all sources fail for a token, that token contributes 0 to
-// the USD total but its token amount + sponsor still display in the tooltip.
+// USD is computed live via the Pyth → Jupiter → admin static cascade.
+// If all sources fail for a token, that token contributes 0 to the USD
+// total but its token amount + sponsor still display in the tooltip.
 
 function PrizeInfo({ prizeTable, topPercentCutoff }: {
     prizeTable: NonNullable<ForgeLeaderboard['tournament']['config']['prizeTable']>;
     topPercentCutoff?: number;
 }) {
     const tokens = resolveTokens(prizeTable);
-    // Forks A+B: dedupe by symbol — first-occurrence wins for mint + static.
+    // Dedupe by symbol: first-occurrence wins for mint + static.
     const priceFetchTokens = useMemo(() => {
         const seen = new Map<string, { symbol: string; mint?: string; staticUsdPrice?: number }>();
         for (const t of tokens) {
@@ -1786,10 +1784,10 @@ function PrizeInfo({ prizeTable, topPercentCutoff }: {
                 <div className={styles.prizeSubtitle}>Distributed in {symbolsDisplay}</div>
             </div>
             <div className={styles.prizeSplits}>
-                {/* Fork D refinement: conditionally render each split based on
-                    its weight. Forge tournaments typically have both skill +
-                    raffle; Gauntlet tournaments often have skill-only. Hiding
-                    the empty split avoids "$0 Raffle" wart on Gauntlet. */}
+                {/* Conditionally render each split based on its weight. Forge
+                    tournaments typically have both skill + raffle; Gauntlet
+                    tournaments often have skill-only. Hiding the empty split
+                    avoids "$0 Raffle" wart on Gauntlet. */}
                 {skillWeight > 0 && (
                     <div className={styles.prizeSplit}>
                         <div className={styles.prizeSplitLabel}>
@@ -1814,11 +1812,11 @@ function PrizeInfo({ prizeTable, topPercentCutoff }: {
 }
 
 // --------------------------------------------------------------------------
-// PrizeCellMultiToken — per-row PRIZE column for both skill + raffle.
+// PrizeCellMultiToken: per-row PRIZE column for both skill + raffle.
 //
-// Renders USD live + token-breakdown tooltip. For raffle rows (S4 path B),
-// `drawPosition` is provided so the tooltip prefixes "Raffle slot #N".
-// If usdPrices is still loading or `tokens` is empty, renders `—`.
+// Renders USD live + token-breakdown tooltip. For raffle rows, `drawPosition`
+// is provided so the tooltip prefixes "Raffle slot #N". If usdPrices is
+// still loading or `tokens` is empty, renders `—`.
 // --------------------------------------------------------------------------
 function PrizeCellMultiToken({
     tokens, usdPrices, drawPosition,
@@ -1843,7 +1841,7 @@ function PrizeCellMultiToken({
 }
 
 // --------------------------------------------------------------------------
-// CPI Explanation — expandable "How Scoring Works" panel on the General tab
+// CPI Explanation: expandable "How Scoring Works" panel on the General tab.
 // --------------------------------------------------------------------------
 
 function CPIExplanation() {

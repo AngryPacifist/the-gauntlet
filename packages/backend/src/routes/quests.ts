@@ -1,10 +1,10 @@
 // ============================================================================
 // Quest API Routes (public)
 //
-// GET /api/quests/:tournamentId/leaderboard  — Round 2 LM-2/3: per-asset,
-//   per-side LM leaderboard from quest_progress (live, not week-boundary)
+// GET /api/quests/:tournamentId/leaderboard  Per-asset merged LM leaderboard
+//   from quest_progress (live state; mid-week step progress visible).
 //   Optional: ?week=N or ?date=YYYY-MM-DD
-// GET /api/quests/:tournamentId/:wallet      — Quest progress (badge grid data)
+// GET /api/quests/:tournamentId/:wallet      Quest progress (badge grid data)
 //   Optional query: ?week=N for specific week
 // ============================================================================
 
@@ -17,8 +17,8 @@ import { getQuestProgress } from '../services/quest-engine.js';
 
 const router = Router();
 
-// Round 2: LM quest-points table mirrors final-score.ts:LEVERAGE_QUEST_POINTS.
-// Top 5 per (asset, side) earn points. Phase 8.m guard: stepCount > 0 required.
+// LM quest-points table mirrors final-score.ts:LEVERAGE_QUEST_POINTS.
+// Top 5 per (asset, side) earn points. Guard: stepCount > 0 required.
 const LEVERAGE_QUEST_POINTS = [0.5, 0.4, 0.3, 0.2, 0.1];
 
 // --------------------------------------------------------------------------
@@ -27,7 +27,7 @@ const LEVERAGE_QUEST_POINTS = [0.5, 0.4, 0.3, 0.2, 0.1];
 // Per-asset merged LM leaderboard from quest_progress (live state). Each
 // entry combines both Long + Short progression for a single wallet so the
 // FE Weekly tab + General Leaderboard expanded row can render one row per
-// wallet with split-background per-step badges (post-T1 batch Item 2-2).
+// wallet with split-background per-step badges.
 //
 // Response shape:
 // {
@@ -48,9 +48,9 @@ const LEVERAGE_QUEST_POINTS = [0.5, 0.4, 0.3, 0.2, 0.1];
 // Sort: (longCount + shortCount) DESC, max(L, S) DESC, wallet ASC.
 // Competition ranking (1224): tied wallets share rank, next rank skips.
 //
-// Points: engine UNCHANGED — top 5 per (asset, side) earn from
-// LEVERAGE_QUEST_POINTS [0.5, 0.4, 0.3, 0.2, 0.1]; Phase 8.m guard
-// requires stepCount > 0. Display sums pointsLong + pointsShort per wallet.
+// Points: engine UNCHANGED. Top 5 per (asset, side) earn from
+// LEVERAGE_QUEST_POINTS [0.5, 0.4, 0.3, 0.2, 0.1]; guard requires
+// stepCount > 0. Display sums pointsLong + pointsShort per wallet.
 //
 // Week resolution priority: ?week=N > ?date=YYYY-MM-DD > current week.
 // --------------------------------------------------------------------------
@@ -176,7 +176,7 @@ router.get('/:tournamentId/leaderboard', async (req, res) => {
                 if (sides.long) longList.push({ wallet, stepCount: sides.long.stepCount, points: 0 });
                 if (sides.short) shortList.push({ wallet, stepCount: sides.short.stepCount, points: 0 });
             }
-            // Per-side rank: stepCount DESC, wallet ASC. Phase 8.m: stepCount > 0 required for points.
+            // Per-side rank: stepCount DESC, wallet ASC. stepCount > 0 required for points.
             longList.sort((a, b) => b.stepCount - a.stepCount || a.wallet.localeCompare(b.wallet));
             shortList.sort((a, b) => b.stepCount - a.stepCount || a.wallet.localeCompare(b.wallet));
             let lcRank = 0;
@@ -248,7 +248,7 @@ router.get('/:tournamentId/leaderboard', async (req, res) => {
 });
 
 // --------------------------------------------------------------------------
-// GET /api/quests/:tournamentId/:wallet — Badge grid data
+// GET /api/quests/:tournamentId/:wallet: Badge grid data
 //
 // Returns the wallet's Leverage Master quest progress for the current
 // or specified week. Used by the frontend badge grid component.
@@ -280,7 +280,7 @@ router.get('/:tournamentId/:wallet', async (req, res) => {
         const progress = await getQuestProgress(tournamentId, wallet, weekNumber);
 
         if (!progress) {
-            // Phase 4 item 30: new shape is {byAsset: Record<symbol, {...}>, weekNumber}.
+            // Shape: {byAsset: Record<symbol, {...}>, weekNumber}.
             // Empty byAsset = no progress yet (frontend handles empty state).
             res.json({
                 success: true,

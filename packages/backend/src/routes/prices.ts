@@ -3,36 +3,36 @@
 //
 // GET /api/prices/usd?symbols=A,B,C&mints=mintA,mintB,mintC&statics=,,0.05
 //
-//   symbols  (required) — comma-separated, order-preserving
-//   mints    (optional) — Fork A: parallel array, empty slot = use server-
-//                         side KNOWN_PRIZE_TOKEN_MINT[symbol]. Admin-supplied
-//                         mint takes precedence (lets admin add a new prize
-//                         token without modifying server-side maps).
-//   statics  (optional) — Fork B: parallel array, empty slot = no static for
-//                         that symbol. Numeric USD-per-token; used ONLY if
-//                         Pyth + Jupiter both return null. Per-request, not
-//                         cached server-side (the static is fixed in admin
-//                         config; no point memoizing).
+//   symbols  (required): comma-separated, order-preserving
+//   mints    (optional): parallel array, empty slot = use server-side
+//                        KNOWN_PRIZE_TOKEN_MINT[symbol]. Admin-supplied
+//                        mint takes precedence (lets admin add a new prize
+//                        token without modifying server-side maps).
+//   statics  (optional): parallel array, empty slot = no static for that
+//                        symbol. Numeric USD-per-token; used ONLY if Pyth
+//                        + Jupiter both return null. Per-request, not
+//                        cached server-side (the static is fixed in admin
+//                        config; no point memoizing).
 //
 // Cascade per symbol:
 //   1. Pyth Benchmarks via PRIZE_TOKEN_PYTH_SYMBOL map (separate from
 //      types.ts:ADRENA_TO_PYTH_SYMBOL which is the trading-asset map).
 //      Covers JTO, USDC empirically. NOT ADX (Pyth doesn't index it).
-//   2. Jupiter price v3 (lite-api.jup.ag/price/v3) via mint lookup. Admin-
-//      supplied mint (Fork A) > KNOWN_PRIZE_TOKEN_MINT[symbol] > null.
+//   2. Jupiter price v3 (lite-api.jup.ag/price/v3) via mint lookup.
+//      Admin-supplied mint > KNOWN_PRIZE_TOKEN_MINT[symbol] > null.
 //      Mint-based query is mandatory: Jupiter v3 rejects symbol-only
 //      queries, and the ADX symbol is shared by two distinct tokens.
-//   3. Admin-supplied static (Fork B). Used only if both feeds returned
-//      null. Pass-through from tokens[].staticUsdPrice in tournament config.
+//   3. Admin-supplied static. Used only if both feeds returned null.
+//      Pass-through from tokens[].staticUsdPrice in tournament config.
 //
-// If all three return null: response sends {usd: null, source: null} and FE
-// renders `—` per adjacent "price-feed failure UX" decision.
+// If all three return null, response sends {usd: null, source: null} and FE
+// renders `—`.
 //
 // Server-side cache (60s TTL): only memoizes Pyth/Jupiter network calls.
-// Statics are NOT cached — they're per-request and don't involve I/O. Cache
+// Statics are NOT cached; they're per-request and don't involve I/O. Cache
 // key is `mint || symbol:<symbol>` so admin-supplied mints don't collide
 // with server-side defaults (two tournaments could use different mints for
-// the same symbol — cache them independently).
+// the same symbol; cache them independently).
 // ============================================================================
 
 import { Router } from 'express';
@@ -40,23 +40,22 @@ import { Router } from 'express';
 const router = Router();
 
 // Pyth Benchmarks symbol map for PRIZE tokens (distinct from trading-asset
-// map in types.ts:ADRENA_TO_PYTH_SYMBOL). ADX intentionally omitted — Pyth
-// returns "Symbol doesn't exist" for Crypto.ADX/USD (empirically verified
-// 2026-05-15). Extend this map as Adrena adds new prize tokens that Pyth
-// indexes.
+// map in types.ts:ADRENA_TO_PYTH_SYMBOL). ADX intentionally omitted; Pyth
+// returns "Symbol doesn't exist" for Crypto.ADX/USD (empirically verified).
+// Extend this map as Adrena adds new prize tokens that Pyth indexes.
 const PRIZE_TOKEN_PYTH_SYMBOL: Record<string, string> = {
     JTO: 'Crypto.JTO/USD',
     USDC: 'Crypto.USDC/USD',
 };
 
-// SPL token mints for Jupiter v3 mint-based queries — server-side defaults
+// SPL token mints for Jupiter v3 mint-based queries: server-side defaults
 // for well-known prize tokens. Admin-supplied mints (via ?mints=) override.
-// Empirically verified 2026-05-15 via Jupiter token-search:
+// Empirically verified via Jupiter token-search:
 //   - ADX: Adrena Governance Token, isVerified=true
 //   - JTO: liquidity confirmed
 //   - USDC: stablecoin
-// Extending this map is optional for handover; admin can add new tokens
-// directly via tokens[].mint without a code change (Fork A).
+// Extending this map is optional; admin can add new tokens directly via
+// tokens[].mint without a code change.
 const KNOWN_PRIZE_TOKEN_MINT: Record<string, string> = {
     ADX: 'AuQaustGiaqxRvj2gtCdrd22PBzTn8kM3kEPEkZCtuDw',
     JTO: 'jtojtomepa8beP8AuQc6eXt5FriJwfFMwQx2v2f9mCL',
@@ -85,7 +84,7 @@ async function fetchPythPrice(symbol: string): Promise<number | null> {
     } catch { return null; }
 }
 
-// Fork A: takes optional adminMint that overrides KNOWN_PRIZE_TOKEN_MINT.
+// Takes optional adminMint that overrides KNOWN_PRIZE_TOKEN_MINT.
 // Returns null if neither source has a mint for this symbol.
 async function fetchJupiterPrice(symbol: string, adminMint?: string): Promise<number | null> {
     const mint = adminMint || KNOWN_PRIZE_TOKEN_MINT[symbol];
@@ -94,8 +93,8 @@ async function fetchJupiterPrice(symbol: string, adminMint?: string): Promise<nu
         const url = `${JUPITER_BASE}?ids=${encodeURIComponent(mint)}`;
         const res = await fetch(url);
         if (!res.ok) return null;
-        // Jupiter v3 response shape: { "<mint>": { usdPrice: number, ... } }
-        // (NOT v2's { data: { "<id>": { price: number } } } — that endpoint is 404).
+        // Jupiter v3 response shape: { "<mint>": { usdPrice: number, ... } }.
+        // The v2 endpoint ({ data: { "<id>": { price: number } } }) is 404; v3 is required.
         const data = await res.json() as Record<string, { usdPrice?: number }>;
         const entry = data[mint];
         return entry?.usdPrice ?? null;
@@ -113,7 +112,7 @@ router.get('/usd', async (req, res) => {
             res.status(400).json({ success: false, error: 'symbols query param required (comma-separated)' });
             return;
         }
-        // Parallel arrays — preserve empty slots to maintain index alignment.
+        // Parallel arrays: preserve empty slots to maintain index alignment.
         // Trim only (don't filter Boolean) so `?mints=mint1,,mint3` works.
         const mints = mintsParam ? mintsParam.split(',').map((s) => s.trim()) : [];
         const statics = staticsParam ? staticsParam.split(',').map((s) => s.trim()) : [];
@@ -152,7 +151,7 @@ router.get('/usd', async (req, res) => {
                 continue;
             }
 
-            // Final fallback (Fork B / G2): admin static.
+            // Final fallback: admin static.
             if (!isNaN(adminStatic) && adminStatic > 0) {
                 result[symbol] = { usd: adminStatic, source: 'static' };
             } else {

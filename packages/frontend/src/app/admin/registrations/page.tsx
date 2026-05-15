@@ -1,8 +1,7 @@
 'use client';
 
 // ============================================================================
-// Admin Registrations — Phase 5 item 19 sub-route + Phase 8 late-reg form
-// + Phase 8.i Custom Select migration (Site 4) + class refactor
+// Admin Registrations: per-tournament wallet browser + late-registration form.
 // ============================================================================
 
 import { useEffect, useState } from 'react';

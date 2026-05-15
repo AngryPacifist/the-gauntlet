@@ -1,5 +1,13 @@
 # Testing Report
 
+> **Historical reference (pre-March-2026 engine state).** This document
+> describes validation runs against an earlier version of the engine, before
+> the March-2026 rewrite. It uses the older multi-round consolation chain
+> (`Redemption Arc → Last Stand → Final Reckoning`), references the removed
+> `leveragePenaltyThreshold` field, and uses `T1` to mean the March-8
+> backtest, not the May-2026 live tournament. Treat as archive only. For
+> current behavior, see `competition-design.md`.
+
 ## Overview
 
 Two validation cycles were conducted on the Gauntlet engine, each testing a different axis:

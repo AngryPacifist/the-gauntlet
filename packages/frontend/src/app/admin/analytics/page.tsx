@@ -1,12 +1,8 @@
 'use client';
 
 // ============================================================================
-// Admin Analytics — Phase 5 item 19 sub-route
-// Phase 8.i.5.D.4.2: inline-style cleanup. Slate-palette literals + repeating
-// table inline styles → module classes from admin/page.module.css.
-//
-// Tournament analytics + daily position metrics + quest anomaly detection.
-// Extracted from monolithic /admin/page.tsx (pre-Phase-5).
+// Admin Analytics: tournament analytics + daily position metrics + quest
+// anomaly detection.
 //
 // Admin secret: shared via localStorage (key 'adrena_admin_secret').
 // Daily metrics + anomaly endpoints are admin-protected; analytics is public.

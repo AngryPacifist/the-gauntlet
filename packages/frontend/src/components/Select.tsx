@@ -1,5 +1,5 @@
 // ============================================================================
-// Custom Select / Combobox Component (Phase 8.i.5.D.6)
+// Custom Select / Combobox Component
 //
 // Fully-styled dark-theme replacement for native <select> elements. Solves
 // the blank-text-display bug (native <select> with `appearance: none` and

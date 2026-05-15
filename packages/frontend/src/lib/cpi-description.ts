@@ -1,13 +1,13 @@
 // ============================================================================
-// CPI Description — user-facing "How Scoring Works" copy for the Forge page
+// CPI Description: user-facing "How Scoring Works" copy for the Forge page.
 //
 // Renders in the General Leaderboard tab as an expandable panel above the
 // search input. Explains tournament mechanics + CPI formula + sub-scores.
 //
 // INTENTIONALLY DOES NOT PUBLISH specific anti-gaming thresholds
-// (min collateral, min duration) or exact normalization math — users should
+// (min collateral, min duration) or exact normalization math: users should
 // not be able to optimize for just-above-threshold positions. Same rationale
-// will apply to quest-descriptions.ts in Phase 4 item 12.
+// applies to quest-descriptions.ts.
 // ============================================================================
 
 export interface CPISection {

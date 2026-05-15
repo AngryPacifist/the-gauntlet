@@ -1,9 +1,7 @@
 'use client';
 
 // ============================================================================
-// Cumulative Leaderboard Page — Phase 5 item 20
-// Phase 8.i.5.D.4.7: TabButton + Th/Td React wrappers refactored to module classes.
-// Inline orange-fallback dropped (5.D.5.2).
+// Cumulative Leaderboard Page (Tournament / Season / All-Time tabs).
 // ============================================================================
 
 import { useEffect, useState } from 'react';

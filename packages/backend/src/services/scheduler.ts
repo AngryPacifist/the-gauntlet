@@ -9,7 +9,7 @@
 //      (Bottom Fisher = longs near low, Top-Tick Traveler = shorts near high)
 //      scores for all registered wallets in active tournaments
 //   4. Hourly provisional category scoring: every hour, compute provisional
-//      scores using intraday OHLC — overwrites safely via upsert, finalized
+//      scores using intraday OHLC; overwrites safely via upsert, finalized
 //      by the midnight job
 //
 // Updated to handle multiple active rounds per tournament (main + consolation).
@@ -132,7 +132,7 @@ async function checkRoundAdvancement(): Promise<void> {
                     // Compute final scores before advancing
                     await computeRoundScores(activeRound.id);
 
-                    // Advance to next round — pass the round type so main/consolation
+                    // Advance to next round; pass the round type so main/consolation
                     // are handled independently
                     const result = await advanceRound(tournament.id, roundType);
 
@@ -184,13 +184,11 @@ async function scoreDailyCategories(): Promise<void> {
         const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
         const yesterdayStr = yesterday.toISOString().slice(0, 10);
 
-        // Round 2: rolling re-score window. Each midnight tick scores yesterday
+        // Rolling re-score window. Each midnight tick scores yesterday
         // (canonical) + yesterday-1 + yesterday-2 (rescore). Catches cross-day
         // closes whose entry-day daily-category attribution would otherwise
-        // be missed (entry-day finalized when the trade was still open). Replaces
-        // the manual `_backfill-t1-categories.ts` workflow with an automated
-        // 3-day rolling window. Days older than 3 are not rescored — diminishing
-        // returns vs cost.
+        // be missed (entry-day finalized when the trade was still open).
+        // Days older than 3 are not rescored; diminishing returns vs cost.
         const datesToScore: Date[] = [
             new Date(yesterday.getTime() - 2 * 24 * 60 * 60 * 1000),  // yesterday-2
             new Date(yesterday.getTime() - 1 * 24 * 60 * 60 * 1000),  // yesterday-1
@@ -198,7 +196,7 @@ async function scoreDailyCategories(): Promise<void> {
         ];
 
         for (const tournament of activeTournaments) {
-            // Phase 3: resolve config once per tournament for engine threading
+            // Resolve config once per tournament for engine threading
             const config = resolveConfig(tournament.config);
             const seasonId = tournament.seasonId ?? null;
 
@@ -251,7 +249,7 @@ async function scoreDailyCategories(): Promise<void> {
                     `on ${dateStr}${isCanonical ? '' : ' (rolling rescore)'}`,
                 );
 
-                // Phase 7.b D28: per-tournament daily OHLC batch
+                // Per-tournament daily OHLC batch (assetList scopes the fetch)
                 const ohlcData = await fetchDailyOHLCBatch(dateStr, config.assetList);
 
                 // All Around
@@ -287,10 +285,9 @@ async function scoreDailyCategories(): Promise<void> {
                 );
 
                 // Award daily-category season points only on the canonical
-                // (yesterday) pass. Sentinel rows in season-manager.ts:619-638
-                // already enforce single-award per (tournament, scoreDate), so
-                // this is defense-in-depth — also keeps log noise down on
-                // rescore passes.
+                // (yesterday) pass. Sentinel rows in season-manager already
+                // enforce single-award per (tournament, scoreDate), so this is
+                // defense-in-depth; also keeps log noise down on rescore passes.
                 if (isCanonical && seasonId !== null) {
                     await awardDailyFisherPoints(tournament.id, seasonId, dateStr);
                     await awardDailyAllAroundPoints(tournament.id, seasonId, dateStr);
@@ -298,7 +295,7 @@ async function scoreDailyCategories(): Promise<void> {
             }
 
             // --- LM Quest Progress + week-boundary leaderboard ---
-            // LM block runs ONCE per tick (not per date) — quest_progress is
+            // LM block runs ONCE per tick (not per date); quest_progress is
             // week-keyed not date-keyed. evaluateLeverageProgress is idempotent
             // (only flips stepsCompleted false→true). isLastDay anchored to
             // yesterday (canonical) per existing semantics.
@@ -319,13 +316,13 @@ async function scoreDailyCategories(): Promise<void> {
             }
 
             // --- 2-Day Engagement Categories: Risk Manager + Humble One ---
-            // Phase 8.o: 2-day scoring moved to hourly job exclusively. Hourly
-            // already rescores RM/HO every hour against current positions, so
-            // cross-day closes get attributed implicitly without a separate
-            // rolling window here.
+            // 2-day scoring lives in the hourly job exclusively. Hourly already
+            // rescores RM/HO every hour against current positions, so cross-day
+            // closes get attributed implicitly without a separate rolling
+            // window here.
 
-            // Phase 8.o: 2-day season points key on windowStart (odd-day anchor)
-            // and only fire on even-day window completion (canonical pass only).
+            // 2-day season points key on windowStart (odd-day anchor) and only
+            // fire on even-day window completion (canonical pass only).
             if (seasonId !== null) {
                 const tournamentConfig = tournament.config as Record<string, unknown>;
                 if (tournamentConfig?.award2DayCategorySeasonPoints) {
@@ -381,7 +378,7 @@ async function scoreHourlyCategories(): Promise<void> {
         // Today in UTC (the day currently in progress)
         const dateStr = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
 
-        // Phase 7.b D28: intraday batch fetch moved INSIDE per-tournament loop below
+        // Intraday batch fetch lives INSIDE the per-tournament loop below
         // so each tournament passes its own assetList to fetchIntradayOHLCBatch.
 
         for (const tournament of activeTournaments) {
@@ -390,10 +387,11 @@ async function scoreHourlyCategories(): Promise<void> {
                 `on ${dateStr}`,
             );
 
-            // Phase 3: resolve config once per tournament for engine threading
+            // Resolve config once per tournament for engine threading
             const config = resolveConfig(tournament.config);
 
-            // Phase 7.b D28: per-tournament intraday OHLC batch (moved from outside loop)
+            // Per-tournament intraday OHLC batch (must be inside the loop so each tournament's
+            // assetList scopes the fetch)
             const intradayOhlc = await fetchIntradayOHLCBatch(dateStr, config.assetList);
 
             // Get all registered wallets
@@ -454,7 +452,7 @@ async function scoreHourlyCategories(): Promise<void> {
             );
 
             // --- 2-Day Engagement Categories: Risk Manager + Humble One ---
-            // Phase 8.o: scored every day. Hourly job is the sole writer for these
+            // Scored every day. Hourly job is the sole writer for these
             // categories (midnight job no longer scores them). Convention details
             // in the inner comment block below.
 
@@ -478,13 +476,12 @@ async function scoreHourlyCategories(): Promise<void> {
                 );
                 const dayNumber = daysSinceStart + 1;
 
-                // Phase 8.o: always score 2-day categories. windowStart = today on
-                // odd days (provisional, partial window [today, today]), yesterday
-                // on even days (authoritative, full window [yesterday, today]).
+                // Always score 2-day categories. windowStart = today on odd days
+                // (provisional, partial window [today, today]), yesterday on
+                // even days (authoritative, full window [yesterday, today]).
                 // Both writes share scoreDate=windowStart → authoritative upserts
                 // provisional via PK (tournamentId, wallet, category, scoreDate).
-                // Conservation: 1 row per window per wallet, identical to old
-                // even-day-only logic in final state.
+                // Conservation: 1 row per window per wallet.
                 if (dayNumber >= 1) {
                     const windowStartDate = dayNumber % 2 === 0
                         ? new Date(today.getTime() - 24 * 60 * 60 * 1000)
@@ -507,7 +504,7 @@ async function scoreHourlyCategories(): Promise<void> {
                     const engagementRows: CategoryScoreRow[] = [];
 
                     for (const [wallet, details] of riskManagerResults) {
-                        // Phase 4 item 11: inversion fix (see midnight job for full reasoning).
+                        // Inversion fix (see midnight job for full reasoning).
                         engagementRows.push({
                             wallet, category: 'risk_manager',
                             score: details.bestTrade
@@ -529,8 +526,8 @@ async function scoreHourlyCategories(): Promise<void> {
                     );
                 }
 
-                // Leverage Master: evaluate progress (idempotent, steps only false→true)
-                // No leaderboard computation — that only happens at week boundary (midnight job)
+                // Leverage Master: evaluate progress (idempotent, steps only false→true).
+                // No leaderboard computation; that only happens at week boundary (midnight job).
                 const weekInfo = computeCurrentQuestWeek(firstRound.startTime, dateStr);
                 if (weekInfo) {
                     for (const [wallet, positions] of walletPositions) {
@@ -543,7 +540,7 @@ async function scoreHourlyCategories(): Promise<void> {
                 }
             }
 
-            // Intentionally NO season point awards — only the midnight job does this.
+            // Intentionally NO season point awards; only the midnight job does this.
             // Awarding here would insert sentinel rows that block midnight's award.
 
             console.log(
@@ -611,7 +608,7 @@ export function startScheduler(): void {
     hourlyCategoryTask = cron.schedule('0 * * * *', scoreHourlyCategories, { timezone: 'UTC' });
 
     console.log(
-        '[Scheduler] Started — score refresh every 15 min, advancement check every 1 min, ' +
+        '[Scheduler] Started: score refresh every 15 min, advancement check every 1 min, ' +
         'daily categories at midnight UTC, hourly provisional updates every hour',
     );
 }

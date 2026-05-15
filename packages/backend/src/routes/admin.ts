@@ -1,15 +1,15 @@
 // ============================================================================
 // Admin API Routes (protected by ADMIN_SECRET)
 //
-// POST /api/admin/start               — Start a tournament (close reg, create brackets)
-// POST /api/admin/score/:roundId      — Trigger score computation for a round
-// POST /api/admin/advance             — Advance to next round (eliminate + promote)
-// POST /api/admin/cancel/:id          — Cancel a tournament
-// POST /api/admin/raffle/:id/compute  — Compute raffle tickets for a tournament
-// POST /api/admin/raffle/:id/draw     — Execute deterministic raffle draw
-// POST /api/admin/raffle/:id/reset    — Reset raffle draw (clear winners + audit trail)
-// GET  /api/admin/analytics/:id/daily — Daily per-wallet position metrics
-// GET  /api/admin/analytics/:id/anomalies — Quest score streak detection
+// POST /api/admin/start                   Start a tournament (close reg, create brackets)
+// POST /api/admin/score/:roundId          Trigger score computation for a round
+// POST /api/admin/advance                 Advance to next round (eliminate + promote)
+// POST /api/admin/cancel/:id              Cancel a tournament
+// POST /api/admin/raffle/:id/compute      Compute raffle tickets for a tournament
+// POST /api/admin/raffle/:id/draw         Execute deterministic raffle draw
+// POST /api/admin/raffle/:id/reset        Reset raffle draw (clear winners + audit trail)
+// GET  /api/admin/analytics/:id/daily     Daily per-wallet position metrics
+// GET  /api/admin/analytics/:id/anomalies Quest score streak detection
 // ============================================================================
 
 import { Router } from 'express';
@@ -44,7 +44,7 @@ router.use((req, res, next) => {
     next();
 });
 
-// POST /api/admin/start — Start tournament (close registration, create brackets)
+// POST /api/admin/start: Start tournament (close registration, create brackets)
 router.post('/start', async (req, res) => {
     try {
         const { tournamentId } = req.body as { tournamentId: number };
@@ -65,7 +65,7 @@ router.post('/start', async (req, res) => {
     }
 });
 
-// POST /api/admin/score/:roundId — Trigger score computation
+// POST /api/admin/score/:roundId: Trigger score computation
 router.post('/score/:roundId', async (req, res) => {
     try {
         const roundId = parseInt(req.params.roundId, 10);
@@ -85,7 +85,7 @@ router.post('/score/:roundId', async (req, res) => {
     }
 });
 
-// POST /api/admin/advance — Advance to next round
+// POST /api/admin/advance: Advance to next round
 router.post('/advance', async (req, res) => {
     try {
         const { tournamentId, roundType } = req.body as { tournamentId: number; roundType?: 'main' | 'consolation' };
@@ -95,7 +95,7 @@ router.post('/advance', async (req, res) => {
             return;
         }
 
-        // roundType is optional — if omitted, the tournament manager auto-detects
+        // roundType is optional; if omitted, the tournament manager auto-detects
         const result = await advanceRound(tournamentId, roundType);
         res.json({ success: true, data: result });
     } catch (error) {
@@ -107,7 +107,7 @@ router.post('/advance', async (req, res) => {
     }
 });
 
-// POST /api/admin/cancel/:id — Cancel a tournament
+// POST /api/admin/cancel/:id: Cancel a tournament
 router.post('/cancel/:id', async (req, res) => {
     try {
         const tournamentId = parseInt(req.params.id, 10);
@@ -151,7 +151,7 @@ router.post('/cancel/:id', async (req, res) => {
     }
 });
 
-// POST /api/admin/raffle/:id/compute — Compute raffle tickets for a tournament
+// POST /api/admin/raffle/:id/compute: Compute raffle tickets for a tournament
 router.post('/raffle/:id/compute', async (req, res) => {
     try {
         const tournamentId = parseInt(req.params.id, 10);
@@ -182,7 +182,7 @@ router.post('/raffle/:id/compute', async (req, res) => {
     }
 });
 
-// POST /api/admin/raffle/:id/draw — Execute deterministic raffle draw
+// POST /api/admin/raffle/:id/draw: Execute deterministic raffle draw
 router.post('/raffle/:id/draw', async (req, res) => {
     try {
         const tournamentId = parseInt(req.params.id, 10);
@@ -217,7 +217,7 @@ router.post('/raffle/:id/draw', async (req, res) => {
     }
 });
 
-// POST /api/admin/raffle/:id/reset — Reset raffle draw (clear winners + audit trail)
+// POST /api/admin/raffle/:id/reset: Reset raffle draw (clear winners + audit trail)
 router.post('/raffle/:id/reset', async (req, res) => {
     try {
         const tournamentId = parseInt(req.params.id, 10);
@@ -285,7 +285,7 @@ router.get('/analytics/:tournamentId/daily', async (req, res) => {
         let totalTrades = 0;
         let activeTraders = 0;
 
-        // Parallel batch fetch — concurrency limit of 10 to avoid API rate issues
+        // Parallel batch fetch: concurrency limit of 10 to avoid API rate issues
         const BATCH_SIZE = 10;
         const walletList = regs.map((r) => r.wallet);
 
@@ -456,7 +456,7 @@ router.get('/analytics/:tournamentId/anomalies', async (req, res) => {
                         if (currentIdx === lastIdx + 1) {
                             streak.push(date);
                         } else {
-                            // Gap — check if previous streak was long enough
+                            // Gap; check if previous streak was long enough
                             if (streak.length >= STREAK_THRESHOLD) {
                                 anomalies.push({
                                     wallet, category,
@@ -522,28 +522,18 @@ router.get('/analytics/:tournamentId/anomalies', async (req, res) => {
 });
 
 // --------------------------------------------------------------------------
-// GET /api/admin/tradable-assets — Phase 8.k: static-mirror from adrena-abi
+// GET /api/admin/tradable-assets: static-mirror from adrena-abi
 //
 // Returns the canonical 9 tradable Adrena symbols with Pyth Lazer feed_id,
 // SPL token mint (main-pool only, sourced from src/lib.rs:46-50 constants in
-// the abi repo), synthetic-custody PDA (commodities-pool RWAs only — D45
-// keeps these informational pending empirical T1 confirmation), pool name,
-// and trading-hours profile (sessioned flag). Data sourced from a pinned
-// snapshot of github.com/AdrenaFoundation/adrena-abi — see
+// the abi repo), synthetic-custody PDA (commodities-pool RWAs only), pool
+// name, and trading-hours profile (sessioned flag). Data sourced from a
+// pinned snapshot of github.com/AdrenaFoundation/adrena-abi; see
 // services/adrena-canonical.ts for sync notes + commit hash.
 //
-// Phase history:
-//   - Pre-Phase-8.h: /liquidity-info proxy (only 4 custodies; broke SOL/BTC/RWA
-//     selection post-Apr-29 relaunch).
-//   - Phase 8.h: backend joined /last-trading-prices (9 symbols) + /liquidity-info
-//     (4 mints) at request time. Two-HTTP-call dependency on Adrena API uptime
-//     per /admin/tradable-assets call.
-//   - Phase 8.j: defensive ?pool_name=main-pool against br0wnD3v's announced
-//     multi-pool /liquidity-info shape change.
-//   - Phase 8.k (this): static-mirror eliminates runtime HTTP entirely.
-//     Survives any future Adrena API shape changes. Faster. Deterministic.
-//     Surfaces RWA synthetic-custody mints (previously hidden behind
-//     ?pool_name=main-pool filter).
+// Static-mirror chosen over runtime HTTP joins so the endpoint survives
+// Adrena API shape changes and avoids a runtime dependency on Adrena's
+// uptime for admin tournament-creation.
 //
 // Admin-protected by the router.use() middleware at top of file.
 // --------------------------------------------------------------------------

@@ -454,7 +454,6 @@ All parameters are configurable per tournament:
 | `roundDurations`           | [72, 48, 48] | Duration of each round in hours (per-round array)   |
 | `minPositionCollateral`    | 25           | Minimum collateral (USD) for a position to count    |
 | `minTradeDurationSec`      | 120          | Minimum duration (seconds) for a position to count  |
-| `leveragePenaltyThreshold` | 30           | Legacy, no longer used by Risk score (retained for backward compat) |
 | `supportedAssetCount`      | 4            | Number of tradeable assets (for Activity variety)   |
 | `useHistoricalWindow`      | false        | Use historical window instead of round dates        |
 | `historicalWindowDays`     | 90           | Days for historical window (for backtesting)        |

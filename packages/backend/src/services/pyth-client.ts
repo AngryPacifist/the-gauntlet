@@ -4,16 +4,16 @@
 // Fetches daily + intraday OHLC candle data for proximity scoring categories
 // (Bottom Fisher, Top-Tick, All Around, Risk Manager, Humble One).
 //
-// PRIMARY (Phase 8.f, post call2aamir 2026-05-02):
+// PRIMARY:
 //   https://benchmarks.pyth.network/v1/shims/tradingview/history
 //   No API key. Rate limit: 90 requests / 10 seconds. Public + stable.
 //
-// FALLBACK (Phase 7.b → demoted by 8.f):
-//   https://www.adrena.trade/api/oracle-bars (Adrena's Pyth Lazer Next.js proxy)
-//   Internal-only per call2aamir 2026-05-02. Kept as degraded-mode fallback
-//   when Pyth Benchmarks fails (rate limit, outage, network error).
+// FALLBACK:
+//   https://www.adrena.trade/api/oracle-bars (Adrena's Pyth Lazer Next.js proxy).
+//   Internal-only API; kept as degraded-mode fallback when Pyth Benchmarks
+//   fails (rate limit, outage, network error).
 //
-// Daily bars are immutable once the day ends — cached permanently in the
+// Daily bars are immutable once the day ends; cached permanently in the
 // pyth_ohlc_cache table to avoid redundant calls.
 // ============================================================================
 
@@ -24,17 +24,17 @@ import { ADRENA_TO_PYTH_SYMBOL } from '../types.js';
 import { ADRENA_TO_LAZER_FEED_ID } from './adrena-canonical.js';
 import type { OHLCBar } from '../types.js';
 
-// Phase 8.f: PRIMARY OHLC source — Pyth Benchmarks (public, stable).
+// PRIMARY OHLC source: Pyth Benchmarks (public, stable).
 // 90 req/10s rate limit; 200ms throttle in batch fns keeps us well under.
 const PYTH_BENCHMARKS_BASE = 'https://benchmarks.pyth.network';
 
-// Phase 7.b D35 (still applies post-8.f): throttle between batched fetches.
-// Was for Vercel-WAF protection on Lazer; Benchmarks is public so could be
-// shorter, but 200ms is safe and identical batches keep behavior predictable.
+// Throttle between batched fetches. Originally for Vercel-WAF protection on
+// the Lazer fallback; Benchmarks is public so it could be shorter, but 200ms
+// is safe and keeps batch behavior predictable.
 const BATCH_THROTTLE_MS = 200;
 
-// Phase 7.b → demoted by 8.f: FALLBACK OHLC source — Adrena's Pyth Lazer proxy.
-// Internal-only per call2aamir 2026-05-02. Used only when Benchmarks fails.
+// FALLBACK OHLC source: Adrena's Pyth Lazer proxy. Internal-only API;
+// used only when Benchmarks fails.
 const ADRENA_LAZER_BASE = 'https://www.adrena.trade/api/oracle-bars';
 
 // --------------------------------------------------------------------------
@@ -110,10 +110,10 @@ function dateToUnixRange(dateStr: string): { from: number; to: number } {
 }
 
 // --------------------------------------------------------------------------
-// Phase 7.b: fetch + parse OHLC from a TradingView UDF URL.
+// Fetch + parse OHLC from a TradingView UDF URL.
 //
 // Shared between Adrena Pyth Lazer (/api/oracle-bars) and Pyth Benchmarks
-// (TradingView shim) — both return identical UDF response shape (s, t, o, h, l, c, v).
+// (TradingView shim); both return identical UDF response shape (s, t, o, h, l, c, v).
 //
 // Aggregation:
 //   - 'daily' = take first bar from response (one-bar-per-day query)
@@ -170,7 +170,7 @@ async function fetchOHLCFromUrl(
         };
     } catch (error) {
         console.error(
-            `[PythClient] ${contextLabel}: fetch error —`,
+            `[PythClient] ${contextLabel}: fetch error:`,
             error instanceof Error ? error.message : error,
         );
         return null;
@@ -178,12 +178,9 @@ async function fetchOHLCFromUrl(
 }
 
 // --------------------------------------------------------------------------
-// Phase 8.f (post call2aamir 2026-05-02): dispatch helper — try Pyth
-// Benchmarks first (PRIMARY), fall back to Adrena Pyth Lazer proxy on null.
-//
-// Reverses Phase 7.b dispatch order. Adrena confirmed /api/oracle-bars is
-// internal-only Next.js API — keep as fallback for redundancy but don't
-// rely on as production primary.
+// Dispatch helper: try Pyth Benchmarks first (PRIMARY), fall back to
+// Adrena Pyth Lazer proxy on null. The Lazer proxy is an internal Next.js
+// API; kept as fallback for redundancy but not relied on as primary.
 // --------------------------------------------------------------------------
 async function fetchOHLCWithFallback(
     adrenaSymbol: string,
@@ -207,7 +204,7 @@ async function fetchOHLCWithFallback(
         if (bar) return bar;
         console.warn(
             `[PythClient] Benchmarks null for ${adrenaSymbol} (${pythSymbol}); ` +
-            `falling back to Adrena Lazer proxy (Phase 8.f)`,
+            `falling back to Adrena Lazer proxy`,
         );
     }
 
@@ -216,7 +213,7 @@ async function fetchOHLCWithFallback(
     if (feedId == null) {
         if (!pythSymbol) {
             console.warn(
-                `[PythClient] No Benchmarks symbol AND no Lazer feed_id for "${adrenaSymbol}" — skipping`,
+                `[PythClient] No Benchmarks symbol AND no Lazer feed_id for "${adrenaSymbol}"; skipping`,
             );
         }
         return null;
@@ -236,16 +233,16 @@ async function fetchOHLCWithFallback(
 // --------------------------------------------------------------------------
 // Fetch a single daily OHLC bar from Pyth for a given Adrena symbol + date
 //
-// Phase 7.b: tries Adrena Pyth Lazer proxy first; D33 fallback to Pyth Benchmarks.
-// Checks DB cache first. If not cached, fetches and caches.
+// Checks DB cache first. If not cached, dispatches Pyth Benchmarks (primary)
+// then Adrena Lazer proxy (fallback) and caches the result.
 // Returns null if no mapping is found or both fetches fail.
 // --------------------------------------------------------------------------
 export async function fetchDailyOHLC(
     adrenaSymbol: string,
     dateStr: string,
-    feedIdOverride?: number,  // Phase 7.b
+    feedIdOverride?: number,
 ): Promise<OHLCBar | null> {
-    // 1. Check DB cache (cache key: adrenaSymbol — D34, no schema migration)
+    // 1. Check DB cache (cache key: adrenaSymbol).
     const [cached] = await db
         .select()
         .from(pythOhlcCache)
@@ -266,14 +263,14 @@ export async function fetchDailyOHLC(
         };
     }
 
-    // 2. Fetch via dispatch (Lazer → Pyth Benchmarks fallback per D33)
+    // 2. Fetch via dispatch (Pyth Benchmarks primary, Lazer fallback).
     const range = dateToUnixRange(dateStr);
     const bar = await fetchOHLCWithFallback(adrenaSymbol, range, 'daily', feedIdOverride);
     if (!bar) {
         return null;
     }
 
-    // 3. Cache the result (immutable — daily bar won't change)
+    // 3. Cache the result (immutable; daily bar won't change).
     try {
         await db.insert(pythOhlcCache).values({
             symbol: adrenaSymbol,
@@ -306,10 +303,10 @@ export async function fetchDailyOHLC(
 // --------------------------------------------------------------------------
 export async function fetchDailyOHLCBatch(
     dateStr: string,
-    assetList?: Array<{ symbol: string; feed_id?: number }>,  // Phase 7.b D27
+    assetList?: Array<{ symbol: string; feed_id?: number }>,
 ): Promise<Map<string, OHLCBar>> {
     const results = new Map<string, OHLCBar>();
-    // Phase 7.b: prefer caller's assetList; fall back to known Lazer mapping.
+    // Prefer caller's assetList; fall back to known Lazer mapping.
     const targets = assetList?.length
         ? assetList.map((a) => ({ symbol: a.symbol, feed_id: a.feed_id }))
         : Object.keys(ADRENA_TO_LAZER_FEED_ID).map((s) => ({ symbol: s, feed_id: undefined as number | undefined }));
@@ -320,7 +317,7 @@ export async function fetchDailyOHLCBatch(
         if (bar) {
             results.set(target.symbol, bar);
         }
-        // D35: throttle between fetches to stay under Vercel WAF (skip after last)
+        // Throttle between fetches to stay under Vercel WAF (skip after last).
         if (i < targets.length - 1) {
             await sleep(BATCH_THROTTLE_MS);
         }
@@ -351,7 +348,7 @@ export async function fetchDailyOHLCBatch(
 export async function fetchIntradayOHLC(
     adrenaSymbol: string,
     dateStr: string,
-    feedIdOverride?: number,  // Phase 7.b
+    feedIdOverride?: number,
 ): Promise<OHLCBar | null> {
     // 1. Build time range: midnight UTC of dateStr → now
     const from = Math.floor(new Date(dateStr + 'T00:00:00Z').getTime() / 1000);
@@ -363,8 +360,8 @@ export async function fetchIntradayOHLC(
         return null;
     }
 
-    // 2. Fetch via dispatch (Lazer → Pyth Benchmarks fallback per D33).
-    // Intentionally NO cache write — intraday data is provisional and changes hourly.
+    // 2. Fetch via dispatch (Pyth Benchmarks primary, Lazer fallback).
+    // Intentionally NO cache write; intraday data is provisional and changes hourly.
     const bar = await fetchOHLCWithFallback(adrenaSymbol, { from, to }, 'intraday', feedIdOverride);
     if (bar) {
         console.log(
@@ -383,10 +380,10 @@ export async function fetchIntradayOHLC(
 // --------------------------------------------------------------------------
 export async function fetchIntradayOHLCBatch(
     dateStr: string,
-    assetList?: Array<{ symbol: string; feed_id?: number }>,  // Phase 7.b D27
+    assetList?: Array<{ symbol: string; feed_id?: number }>,
 ): Promise<Map<string, OHLCBar>> {
     const results = new Map<string, OHLCBar>();
-    // Phase 7.b: prefer caller's assetList; fall back to known Lazer mapping.
+    // Prefer caller's assetList; fall back to known Lazer mapping.
     const targets = assetList?.length
         ? assetList.map((a) => ({ symbol: a.symbol, feed_id: a.feed_id }))
         : Object.keys(ADRENA_TO_LAZER_FEED_ID).map((s) => ({ symbol: s, feed_id: undefined as number | undefined }));
@@ -397,7 +394,7 @@ export async function fetchIntradayOHLCBatch(
         if (bar) {
             results.set(target.symbol, bar);
         }
-        // D35: throttle between fetches to stay under Vercel WAF (skip after last)
+        // Throttle between fetches to stay under Vercel WAF (skip after last).
         if (i < targets.length - 1) {
             await sleep(BATCH_THROTTLE_MS);
         }

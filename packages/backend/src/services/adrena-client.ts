@@ -2,12 +2,11 @@
 // Adrena API Client
 //
 // Wraps the Adrena public API at datapi.adrena.trade for trader position data.
-// Sole endpoint after Phase 8.k: GET /position (trade history per wallet).
+// Sole endpoint: GET /position (trade history per wallet).
 //
-// Static asset metadata (mints, feed_ids, sessioned flags) moved to
-// services/adrena-canonical.ts — synced from github.com/AdrenaFoundation/adrena-abi.
-// Pre-8.k getCustodies() and getTradingPrices() were deleted; admin/tradable-assets
-// now reads the static-mirror, no other consumers existed (full audit 2026-05-04).
+// Static asset metadata (mints, feed_ids, sessioned flags) lives in
+// services/adrena-canonical.ts (synced from github.com/AdrenaFoundation/adrena-abi).
+// admin/tradable-assets reads the static-mirror; no runtime HTTP needed for that data.
 //
 // Reference: resources/adrena-api-reference.md
 // ============================================================================
@@ -36,12 +35,12 @@ export class AdrenaClient {
     }
 
     // --------------------------------------------------------------------------
-    // GET /position — Fetch trade history for a wallet
+    // GET /position: Fetch trade history for a wallet
     //
     // Returns ALL positions (open + closed + liquidated) for the given wallet.
     // The `limit` param caps the number of results returned.
     //
-    // API response shape (verified 2026-04-01 — 34 fields per position):
+    // API response shape (34 fields per position):
     // {
     //   "success": true,
     //   "data": [

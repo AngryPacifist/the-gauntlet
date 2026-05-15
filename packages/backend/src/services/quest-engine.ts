@@ -1,27 +1,27 @@
 // ============================================================================
-// Quest Engine — Leverage Master Quest System
+// Quest Engine: Leverage Master Quest System
 //
-// Tracks progressive completion of leverage tiers (10x–100x) per (asset, side).
-// Phase 4 item 30: ladders are per-asset. Each (wallet, asset, side) has its
-// own independent 10-step progression per week.
+// Tracks progressive completion of leverage tiers (10x–100x for crypto, custom
+// ladders for RWAs) per (asset, side). Each (wallet, asset, side) has its
+// own independent step progression per week.
 //
 // Integration:
 //   scheduler.ts calls evaluateLeverageProgress() daily for each wallet.
 //   At week boundaries, computeLeverageMasterLeaderboard() writes scores
 //   to daily_category_scores as 'leverage_master_${symbol}_long' / '_short'
 //   when config.assetList is populated, falling back to the legacy 2-slug
-//   shape ('leverage_master_long' / '_short') for pre-Phase-4 tournaments.
-//   final-score.ts then picks these up in the weekly category loop.
+//   shape ('leverage_master_long' / '_short') for tournaments without an
+//   assetList. final-score.ts then picks these up in the weekly category loop.
 //
 // Determinism guarantees:
-//   - Step completion: boolean[10] output is order-independent (no position ordering dependency)
+//   - Step completion: boolean[N] output is order-independent (no position ordering dependency)
 //   - Leaderboard: ORDER BY step_count DESC, wallet ASC (fully deterministic)
 //   - Steps are permanent per week: once earned, never removed
 //
-// Anti-gaming filters (config-driven per Phase 3 item 14):
+// Anti-gaming filters (config-driven):
 //   - config.minPositionCollateral (entry_collateral_amount ?? collateral_amount)
 //   - config.minTradeDurationSec (open positions check time since entry)
-//   - entry_leverage is immutable (set at open) — opening is the accomplishment
+//   - entry_leverage is immutable (set at open); opening is the accomplishment
 // ============================================================================
 
 import { eq, and, desc, asc } from 'drizzle-orm';
@@ -32,22 +32,20 @@ import type { AdrenaPosition, LeverageStep, QuestProgressDetails, CategoryScoreR
 import { DEFAULT_TOURNAMENT_CONFIG } from '../types.js';
 
 // --------------------------------------------------------------------------
-// Constants: migrated to TournamentConfig (Phase 3 item 14, 2026-04-22).
-// MIN_POSITION_COLLATERAL + MIN_TRADE_DURATION_SEC are now config-driven via
-// `config.minPositionCollateral` + `config.minTradeDurationSec` (same names as
-// already-existing TournamentConfig fields). LEVERAGE_STEPS stays as a module
-// constant (D1 — game design, no admin use case).
+// MIN_POSITION_COLLATERAL + MIN_TRADE_DURATION_SEC are config-driven via
+// `config.minPositionCollateral` + `config.minTradeDurationSec` (same names
+// as the matching TournamentConfig fields). LEVERAGE_STEPS stays as a
+// module constant (game design, no admin use case).
 // --------------------------------------------------------------------------
 
 /**
  * Leverage step windows: ±2x tolerance per step uniformly.
  * No overlap between consecutive steps (gap = 6x between windows).
  *
- * Round 2: step 100 max relaxed from 100 → 102 to match the ±2 tolerance
- * applied to every other rung. Adrena's protocol max is 100x but reported
- * `entry_leverage` drifts slightly above 100x due to fee/calculation
- * precision after entry; trader intent at 100x should not be rejected
- * for sub-2x precision noise.
+ * Step 100 max is 102 to match the ±2 tolerance applied to every other
+ * rung. Adrena's protocol max is 100x but reported `entry_leverage` drifts
+ * slightly above 100x due to fee/calculation precision after entry; trader
+ * intent at 100x should not be rejected for sub-2x precision noise.
  */
 export const LEVERAGE_STEPS: LeverageStep[] = [
     { step: 10,  min: 8,   max: 12  },
@@ -62,8 +60,8 @@ export const LEVERAGE_STEPS: LeverageStep[] = [
     { step: 100, min: 98,  max: 102 },  // ±2 tolerance like every other rung
 ];
 
-// Phase 7.a: build LeverageStep[] from per-asset values + tolerance.
-// Used when assetList entry has lmSteps configured. Tolerance default = 2 (D24).
+// Build LeverageStep[] from per-asset values + tolerance. Used when an
+// assetList entry has lmSteps configured. Tolerance default = 2.
 export function buildLeverageSteps(stepValues: number[], tolerance: number = 2): LeverageStep[] {
     return stepValues.map(step => ({
         step,
@@ -90,7 +88,7 @@ function positionCompletesStep(
     // 1. Direction check
     if (position.side !== side) return false;
 
-    // Phase 3 item 14: read anti-gaming filters from config
+    // Read anti-gaming filters from config.
     const minCollateral = config.minPositionCollateral ?? DEFAULT_TOURNAMENT_CONFIG.minPositionCollateral;
     const minDurationSec = config.minTradeDurationSec ?? DEFAULT_TOURNAMENT_CONFIG.minTradeDurationSec;
 
@@ -119,7 +117,7 @@ function positionCompletesStep(
         // If no duration info available (shouldn't happen), let it pass
     }
 
-    // 4. Leverage window check (entry_leverage is immutable — set at open)
+    // 4. Leverage window check (entry_leverage is immutable; set at open)
     const lev = position.entry_leverage;
     return lev >= step.min && lev <= step.max;
 }
@@ -149,13 +147,13 @@ export async function evaluateLeverageProgress(
         return entryDate >= weekStart && entryDate <= weekEnd;
     });
 
-    // Phase 4 item 30: iterate per (asset, side). Falls back to symbol-only when
-    // config.assetList is undefined/empty (D5 — pre-Phase-4 tournaments).
+    // Iterate per (asset, side). Falls back to a single virtual asset
+    // when config.assetList is undefined/empty.
     const assetList = config.assetList?.length
         ? config.assetList
         : [{ symbol: '__legacy__', mint: undefined, joinedAt: weekStart }];
 
-    // Build per-asset result map (item 30 new shape)
+    // Build per-asset result map.
     const byAsset: Record<string, {
         long: boolean[];
         short: boolean[];
@@ -164,7 +162,7 @@ export async function evaluateLeverageProgress(
     }> = {};
 
     for (const assetEntry of assetList) {
-        // Filter weekPositions to this asset only (D16 match-by-mint-when-present)
+        // Filter weekPositions to this asset only (match by mint when present, symbol fallback).
         const assetPositions = weekPositions.filter((p) =>
             assetEntry.symbol === '__legacy__'
                 ? true
@@ -173,8 +171,8 @@ export async function evaluateLeverageProgress(
 
         const assetKey = assetEntry.symbol === '__legacy__' ? '__legacy__' : assetEntry.symbol;
 
-        // Phase 7.a D24: resolve per-asset ladder. lmSteps + lmTolerance from assetEntry,
-        // falls back to module-level LEVERAGE_STEPS (10x crypto ladder, ±2x tolerance).
+        // Resolve per-asset ladder. lmSteps + lmTolerance from assetEntry, fall
+        // back to module-level LEVERAGE_STEPS (10x crypto ladder, ±2x tolerance).
         const stepsForAsset: LeverageStep[] = assetEntry.lmSteps && assetEntry.lmSteps.length > 0
             ? buildLeverageSteps(assetEntry.lmSteps, assetEntry.lmTolerance ?? 2)
             : LEVERAGE_STEPS;
@@ -245,7 +243,7 @@ export async function evaluateLeverageProgress(
 //
 // Runs at week boundary (last day of quest week). Reads all quest_progress
 // for the given week, ranks by stepCount per (asset, side) combination, and
-// saves to daily_category_scores. Phase 4 item 30: emits per-asset categories
+// saves to daily_category_scores. Emits per-asset categories
 // 'leverage_master_${symbol}_long' / '_short' when config.assetList is populated;
 // falls back to legacy 'leverage_master_long' / '_short' for empty assetList.
 //
@@ -267,8 +265,8 @@ export async function computeLeverageMasterLeaderboard(
         const assetKey = assetEntry.symbol === '__legacy__' ? '__legacy__' : assetEntry.symbol;
 
         for (const side of SIDES) {
-            // Phase 4 item 30: per-asset category slug
-            // (legacy key renders as 'leverage_master_long' / '_short' for pre-Phase-4 backfills)
+            // Per-asset category slug.
+            // Legacy key renders as 'leverage_master_long' / '_short' for legacy backfills.
             const category = assetKey === '__legacy__'
                 ? `leverage_master_${side}`
                 : `leverage_master_${assetKey}_${side}`;
@@ -277,7 +275,7 @@ export async function computeLeverageMasterLeaderboard(
                 .select({
                     wallet: questProgress.wallet,
                     stepCount: questProgress.stepCount,
-                    stepTotal: questProgress.stepTotal,  // Phase 7.a D25
+                    stepTotal: questProgress.stepTotal,
                 })
                 .from(questProgress)
                 .where(and(
@@ -295,7 +293,7 @@ export async function computeLeverageMasterLeaderboard(
                     wallet: r.wallet,
                     category,
                     score: r.stepCount,
-                    // Phase 7.a D25: stepCountTotal lets frontend render `${count}/${total}` without config lookup
+                    // stepCountTotal lets frontend render `${count}/${total}` without a config lookup.
                     details: { weekNumber, side, asset: assetKey, stepCount: r.stepCount, stepCountTotal: r.stepTotal },
                 }));
 
@@ -322,7 +320,7 @@ export async function getQuestProgress(
     wallet: string,
     weekNumber?: number,
 ): Promise<QuestProgressDetails | null> {
-    // Phase 4 item 30: new shape with byAsset map. Queries all rows for the
+    // byAsset map shape. Queries all rows for the
     // (tournament, wallet, week) combo and groups by asset.
     const conditions = [
         eq(questProgress.tournamentId, tournamentId),
@@ -351,8 +349,8 @@ export async function getQuestProgress(
     }> = {};
 
     for (const r of weekRows) {
-        // Phase 7.a: use r.stepTotal for variable-length array initialization.
-        // Both long + short for same asset share the same stepTotal (per-asset config).
+        // Use r.stepTotal for variable-length array initialization.
+        // Both long + short for the same asset share the same stepTotal (per-asset config).
         if (!byAsset[r.asset]) {
             byAsset[r.asset] = {
                 long: Array(r.stepTotal).fill(false),

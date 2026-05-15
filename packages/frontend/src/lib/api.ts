@@ -1,5 +1,5 @@
 // ============================================================================
-// Frontend API Client — talks to our Express backend at /api
+// Frontend API Client: talks to our Express backend at /api
 //
 // IMPORTANT: Field names must match what Drizzle ORM returns.
 // Drizzle maps DB column names (snake_case) to JS property names (camelCase).
@@ -8,8 +8,8 @@
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || '';
 
-// Direct backend URL — bypasses Next.js rewrite proxy (which has a 30s timeout)
-// Used for admin endpoints that may take longer (e.g. raffle compute hits Adrena API)
+// Direct backend URL: bypasses Next.js rewrite proxy (which has a 30s timeout).
+// Used for admin endpoints that may take longer (e.g. raffle compute hits Adrena API).
 // In production, use the same API_BASE (no proxy to bypass). Locally, hit backend directly.
 const BACKEND_DIRECT = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
@@ -50,11 +50,11 @@ async function apiFetch<T>(
     return json.data;
 }
 
-// --- Tournament Types (camelCase — matches Drizzle output) ---
+// --- Tournament Types (camelCase, matches Drizzle output) ---
 
 // Mirrors backend TournamentConfig in packages/backend/src/types.ts.
-// Phase 3 (2026-04-22): expanded with scoring/raffle config fields + assetList.
-// leveragePenaltyThreshold removed (D4 — unused per tournament-manager.ts:21-22).
+// Includes scoring/raffle config fields + assetList.
+// leveragePenaltyThreshold removed (unused per tournament-manager.ts:21-22).
 export interface TournamentConfig {
     format: 'bracket' | 'rank_only';
     bracketSize: number;
@@ -75,11 +75,11 @@ export interface TournamentConfig {
             sponsor: string;
             symbol: string;
             amount: number;
-            mint?: string;             // Fork A: admin-supplied mint for Jupiter
-            staticUsdPrice?: number;   // Fork B: G2 third-tier fallback
+            mint?: string;             // admin-supplied mint for Jupiter
+            staticUsdPrice?: number;   // static-USD fallback when feeds return null
         }>;
     };
-    // Phase 3 additions — config-driven scoring/raffle constants
+    // Config-driven scoring/raffle constants
     topPercentCutoff: number;
     allAroundMinTradeUsd: number;
     allAroundMaxPointsPerAsset: number;
@@ -423,10 +423,10 @@ export interface DailyCategoryScore {
     computedAt: string;
 }
 
-// Phase 4 item 30: LM slugs become per-asset (leverage_master_${symbol}_${side}).
+// LM slugs are per-asset (leverage_master_${symbol}_${side}).
 // Template literal captures the per-asset shape; legacy literals preserved for
-// pre-Phase-4 tournaments (engines emit `leverage_master_long` / `_short` when
-// assetList is empty per D5 fallback).
+// older tournaments (engines emit `leverage_master_long` / `_short` when
+// assetList is empty as a fallback).
 export type CategorySlug =
     | 'all_around'
     | 'top_tick_traveler'
@@ -512,10 +512,10 @@ export async function getDailyScores(
 
 // --- Quest API Functions ---
 
-// Phase 4 item 30: per-asset LM ladders. Keys = asset symbols from config.assetList.
-// Phase 7.a: boolean array length is now per-asset variable (matches asset.lmSteps?.length
+// Per-asset LM ladders. Keys = asset symbols from config.assetList.
+// Boolean array length is per-asset variable (matches asset.lmSteps?.length
 // or default 10). Step values for rendering are resolved client-side from
-// tournament.config.assetList — not exposed here.
+// tournament.config.assetList, not exposed here.
 export interface QuestProgressDetails {
     byAsset: Record<string, {
         long: boolean[];
@@ -537,10 +537,9 @@ export async function getQuestProgress(
     return apiFetch<QuestProgressDetails>(url);
 }
 
-// Post-T1 batch (Item 2-2): per-asset merged LM leaderboard. Each entry
-// combines both Long + Short progression for a single wallet. Backend at
-// /api/quests/:tournamentId/leaderboard. Engine awards points per-side
-// (unchanged); display sums total per wallet.
+// Per-asset merged LM leaderboard. Each entry combines both Long + Short
+// progression for a single wallet. Backend at /api/quests/:tournamentId/leaderboard.
+// Engine awards points per-side (unchanged); display sums total per wallet.
 export interface LeverageMasterMergedEntry {
     wallet: string;
     longCount: number;
@@ -720,9 +719,9 @@ export async function adminGetAnomalies(
     });
 }
 
-// Phase 8.k: static-mirror from adrena-abi (post-8.h enriched shape, post-8.j
-// defensive query — both subsumed). Backend reads services/adrena-canonical.ts
-// which is a pinned snapshot of github.com/AdrenaFoundation/adrena-abi.
+// Tradable assets via static-mirror from adrena-abi. Backend reads
+// services/adrena-canonical.ts, which is a pinned snapshot of
+// github.com/AdrenaFoundation/adrena-abi.
 //   - mint: main-pool standard SPL token mint (undefined for SOL + BTC + all 3 RWAs)
 //   - synthetic_custody_mint: commodities-pool RWA synthetic-custody PDA (XAU/XAG/WTI only)
 //   - pool_name: 'main-pool' | 'commodities-pool'
@@ -744,7 +743,7 @@ export async function adminGetTradableAssets(
 }
 
 // --------------------------------------------------------------------------
-// The Forge — Merged Leaderboard
+// The Forge: Merged Leaderboard
 // --------------------------------------------------------------------------
 
 export interface ForgeEntry {
@@ -778,8 +777,8 @@ export async function getForgeLeaderboard(
 // Per-Wallet Quest Breakdown
 // --------------------------------------------------------------------------
 
-// Phase 8 item (c.1-4): mirrors backend CPIDetails for the expanded row's
-// CPI Breakdown panel. Granular inputs displayed under each sub-bar.
+// Mirrors backend CPIDetails for the expanded row's CPI Breakdown panel.
+// Granular inputs displayed under each sub-bar.
 export interface CPIDetails {
     totalPnl: number;
     totalExposureUsd: number;
@@ -814,10 +813,10 @@ export async function getWalletBreakdown(
 }
 
 // --------------------------------------------------------------------------
-// Cumulative Leaderboard (Phase 5 item 20)
+// Cumulative Leaderboard
 //
-// Bundled payload for the /leaderboard page — current tournament (slim, top 10)
-// + current season standings + all-time cross-tournament aggregation.
+// Bundled payload for the /leaderboard page: current tournament (slim, top 10),
+// current season standings, and all-time cross-tournament aggregation.
 // --------------------------------------------------------------------------
 
 export interface CumulativeTournamentEntry {
@@ -863,11 +862,11 @@ export async function getCumulativeLeaderboard(): Promise<CumulativeLeaderboardD
 }
 
 // --------------------------------------------------------------------------
-// Token Prices (USD) — Pyth → Jupiter → admin static cascade.
+// Token Prices (USD): Pyth → Jupiter → admin static cascade.
 // `source` field tells the FE which tier answered ('pyth' | 'jupiter' |
-// 'static' | null). Forks A+B: takes the full token entries so admin-
-// supplied mints (forward-compat) and statics (G2 third tier) flow
-// through as parallel-array query params.
+// 'static' | null). Takes the full token entries so admin-supplied mints
+// (forward-compat) and statics (fallback) flow through as parallel-array
+// query params.
 // --------------------------------------------------------------------------
 export interface TokenUSDPrice {
     usd: number | null;
@@ -876,8 +875,8 @@ export interface TokenUSDPrice {
 
 export interface PriceFetchToken {
     symbol: string;
-    mint?: string;            // Fork A: admin-supplied mint overrides server default
-    staticUsdPrice?: number;  // Fork B: G2 third-tier fallback when both feeds null
+    mint?: string;            // admin-supplied mint overrides server default
+    staticUsdPrice?: number;  // static-USD fallback when both feeds null
 }
 
 export async function getTokenUSDPrices(
@@ -885,7 +884,7 @@ export async function getTokenUSDPrices(
 ): Promise<Record<string, TokenUSDPrice>> {
     if (tokens.length === 0) return {};
     const symbols = tokens.map((t) => t.symbol).join(',');
-    // Parallel arrays — empty slots preserved (don't filter); index alignment
+    // Parallel arrays: empty slots preserved (don't filter); index alignment
     // with `symbols` is what the route uses to pair them up.
     const mints = tokens.map((t) => t.mint ?? '').join(',');
     const statics = tokens
@@ -896,10 +895,10 @@ export async function getTokenUSDPrices(
 }
 
 // --------------------------------------------------------------------------
-// Payouts endpoint — final distribution list (skill + raffle).
-// Consumed by S4 path B to surface raffle prizes on the leaderboard PRIZE
-// column post-draw. Also consumed by external distribution systems
-// (e.g. MrRewards) — keep `amountADX` field for backward compat.
+// Payouts endpoint: final distribution list (skill + raffle).
+// Used by the leaderboard PRIZE column to surface raffle prizes post-draw.
+// Also consumed by external distribution systems; the `amountADX` field is
+// kept for backward compat with single-currency consumers.
 // --------------------------------------------------------------------------
 export interface PayoutToken {
     symbol: string;

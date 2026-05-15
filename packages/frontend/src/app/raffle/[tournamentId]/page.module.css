@@ -1,5 +1,5 @@
 /* ============================================================================
-   Raffle Per-Tournament — Module CSS (Phase 8.i.5.D.4.6)
+   Raffle Per-Tournament: Module CSS.
    ============================================================================ */
 
 .errorCard { margin-top: var(--space-2xl); padding: var(--space-xl); text-align: center; color: var(--status-danger); }

@@ -23,14 +23,14 @@ import {
     computeHumbleOneScores,
     saveDailyCategoryScores,
 } from '../services/category-engine.js';
-import type { AdrenaPosition, AllAroundDetails, CategoryScoreRow } from '../types.js';
+import type { AdrenaPosition, CategoryScoreRow } from '../types.js';
 import { resolveConfig } from '../types.js';
 import { createCache } from '../services/cache.js';
 
 const router = Router();
 const adrenaClient = new AdrenaClient();
 
-// Phase 6 — TTL cache for wallet breakdown endpoint.
+// TTL cache for wallet breakdown endpoint.
 // Cache key = `${tournamentId}:${wallet}`. Backing data updates at 15-min scheduler
 // cadence; 5-min TTL stays just under that.
 interface WalletBreakdownData {
@@ -46,14 +46,14 @@ const walletBreakdownCache = createCache<WalletBreakdownData>();
 // --------------------------------------------------------------------------
 // Category validation
 // --------------------------------------------------------------------------
-// Phase 4 item 30: LM slugs are runtime-computed per-asset (leverage_master_${symbol}_${side}).
+// LM slugs are runtime-computed per-asset (leverage_master_${symbol}_${side}).
 // VALID_NON_LM_CATEGORIES covers the 5 static slugs; LM is validated via prefix match.
 const VALID_NON_LM_CATEGORIES = [
     'all_around', 'top_tick_traveler', 'bottom_fisher',
     'risk_manager', 'humble_one',
 ] as const;
 
-// Legacy LM slugs (backward compat with pre-Phase-4 data) + new per-asset slugs both match.
+// Legacy LM slugs (backward compat with the older single-ladder shape) + new per-asset slugs both match.
 const LM_SLUG_RE = /^leverage_master_([A-Z0-9_]+_)?(long|short)$/;
 
 function isValidCategory(category: string): boolean {
@@ -93,7 +93,7 @@ router.post('/score', async (req, res) => {
             return;
         }
 
-        // Phase 3: fetch tournament + resolve config (hoisted from below — needed for engine threading)
+        // Fetch tournament + resolve config (hoisted from below; needed for engine threading)
         const [tournament] = await db
             .select()
             .from(tournaments)
@@ -106,7 +106,7 @@ router.post('/score', async (req, res) => {
         }
         const config = resolveConfig(tournament.config);
 
-        // Phase 7.b: pass assetList so engine queries only the configured assets.
+        // Pass assetList so engine queries only the configured assets.
         const ohlcData = await fetchDailyOHLCBatch(date, config.assetList);
 
         // Get registered wallets and their positions
@@ -160,10 +160,10 @@ router.post('/score', async (req, res) => {
             [...allAroundRows, ...topTickRows, ...bottomFisherRows],
         );
 
-        // Phase 8.o: 2-day window scoring inputs. Always scores when tournament
-        // has started (dayNumber >= 1). windowStart = requested date on odd days
-        // (provisional), requested date - 1 on even days (authoritative). scoreDate
-        // = windowStart so authoritative writes upsert provisional via shared key.
+        // 2-day window scoring inputs. Always scores when tournament has started
+        // (dayNumber >= 1). windowStart = requested date on odd days (provisional),
+        // requested date - 1 on even days (authoritative). scoreDate = windowStart
+        // so authoritative writes upsert provisional via the shared key.
         const [firstRound] = await db
             .select({ startTime: rounds.startTime })
             .from(rounds)
@@ -198,7 +198,7 @@ router.post('/score', async (req, res) => {
 
                 const engagementRows: CategoryScoreRow[] = [];
                 for (const [wallet, details] of riskManagerResults) {
-                    // Phase 4 item 11: inversion fix. Score = (1 - |roi|) × 100 (tightest controlled loss wins).
+                    // Score = (1 - |roi|) × 100 (tightest controlled loss wins).
                     engagementRows.push({
                         wallet, category: 'risk_manager',
                         score: details.bestTrade
@@ -246,7 +246,7 @@ router.post('/score', async (req, res) => {
 });
 
 // --------------------------------------------------------------------------
-// GET /api/categories/:tournamentId/wallet/:wallet — All quest scores for one wallet
+// GET /api/categories/:tournamentId/wallet/:wallet: All quest scores for one wallet
 //
 // Returns cumulative scores across all 7 categories for a single wallet.
 // Used by The Forge expanded row "Quests Breakdown" panel.
@@ -269,7 +269,7 @@ router.get('/:tournamentId/wallet/:wallet', async (req, res) => {
             return;
         }
 
-        // Phase 6: TTL cache check — 5-min default. Cold path is ~111 sequential DB
+        // TTL cache check, 5-min default. Cold path is ~111 sequential DB
         // queries (11 aggregations + ~100 in computeQuestPoints), so cache hit is
         // the difference between 8-15s and ~0ms.
         const cacheKey = `${tournamentId}:${wallet}`;
@@ -279,8 +279,8 @@ router.get('/:tournamentId/wallet/:wallet', async (req, res) => {
             return;
         }
 
-        // Phase 4 item 30: LM slugs computed per-asset from config.assetList.
-        // Hoist tournament fetch + config resolution — needed by both the categories array and computeQuestPoints below.
+        // LM slugs computed per-asset from config.assetList.
+        // Hoist tournament fetch + config resolution; needed by both the categories array and computeQuestPoints below.
         const [tournament] = await db
             .select()
             .from(tournaments)
@@ -299,11 +299,11 @@ router.get('/:tournamentId/wallet/:wallet', async (req, res) => {
                 categories.push(`leverage_master_${a.symbol}_short`);
             }
         } else {
-            // Legacy fallback: pre-Phase-4 tournaments use the static 2-slug shape
+            // Legacy fallback: tournaments without a configured assetList use the static 2-slug shape
             categories.push('leverage_master_long', 'leverage_master_short');
         }
 
-        // Phase 6.g: collapse 11 per-category aggregations into one GROUP BY query.
+        // Collapse 11 per-category aggregations into one GROUP BY query.
         // Postgres computes SUM and MAX in the same row; we pick the right one in JS
         // via SUM_CATEGORIES.has(). Categories with no data don't appear in `aggRows`
         // → fall through to the default {0, 0}.
@@ -337,18 +337,18 @@ router.get('/:tournamentId/wallet/:wallet', async (req, res) => {
             }
         }
 
-        // Phase 4: tournament + config already fetched above — reuse locals.
-        // Phase 6.g: switch to batched computeAllQuestPoints (1 SQL query) instead
-        // of per-wallet computeQuestPoints (~89 queries). Same scoring semantics —
-        // computeFinalScores already uses this batched path (final-score.ts:391).
+        // Tournament + config already fetched above; reuse locals.
+        // Use the batched computeAllQuestPoints (1 SQL query) instead of per-wallet
+        // computeQuestPoints (~89 queries). Same scoring semantics;
+        // computeFinalScores already uses this batched path (see computeAllQuestPoints in final-score.ts).
         const { computeAllQuestPoints } = await import('../services/final-score.js');
         const allPoints = await computeAllQuestPoints(tournamentId, config);
         const totalQuestPoints = allPoints.get(wallet) ?? 0;
 
-        // Phase 8 item (c.1-4): compute CPI granular details on-demand for the
-        // expanded row's CPI breakdown panel. Re-fetches positions (5-min
-        // AdrenaClient cache) and runs computeCPIWithDetails. ~negligible
-        // cost relative to the existing per-row breakdown query work.
+        // Compute CPI granular details on-demand for the expanded row's CPI
+        // breakdown panel. Re-fetches positions (5-min AdrenaClient cache) and
+        // runs computeCPIWithDetails. ~negligible cost relative to the existing
+        // per-row breakdown query work.
         let cpiDetails: import('../types.js').CPIDetails | null = null;
         try {
             const positions = await adrenaClient.getPositions(wallet);
@@ -368,10 +368,9 @@ router.get('/:tournamentId/wallet/:wallet', async (req, res) => {
             );
         }
 
-        // Phase 8 item (a.2)+(c.5): fetch latest-week LM step progress so the
-        // expanded row can show "L: 3/10  S: 2/10" per asset (instead of just
-        // showing leaderboard score 0.0 mid-week). One DB query per wallet
-        // expansion; fast.
+        // Fetch latest-week LM step progress so the expanded row can show
+        // "L: 3/10  S: 2/10" per asset (instead of just showing leaderboard
+        // score 0.0 mid-week). One DB query per wallet expansion; fast.
         let questProgress: import('../types.js').QuestProgressDetails | null = null;
         try {
             const { getQuestProgress } = await import('../services/quest-engine.js');
@@ -392,7 +391,7 @@ router.get('/:tournamentId/wallet/:wallet', async (req, res) => {
             questProgress,
         };
 
-        // Phase 6: write-through cache.
+        // Write-through cache.
         walletBreakdownCache.set(cacheKey, data);
 
         res.json({ success: true, data });
@@ -479,9 +478,9 @@ router.get('/:tournamentId/:category/:date', async (req, res) => {
             return;
         }
 
-        // Phase 8.o: 2-day categories store rows at windowStart (odd-day anchor).
-        // Map any requested date inside a 2-day window to that window's windowStart
-        // so the frontend's date picker behaves transparently across odd/even days.
+        // 2-day categories store rows at windowStart (odd-day anchor). Map any
+        // requested date inside a 2-day window to that window's windowStart so
+        // the frontend's date picker behaves transparently across odd/even days.
         let lookupDate = dateStr;
         if (category === 'risk_manager' || category === 'humble_one') {
             const [firstRound] = await db

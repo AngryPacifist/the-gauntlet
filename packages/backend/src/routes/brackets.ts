@@ -1,10 +1,10 @@
 // ============================================================================
 // Brackets + Trader Profile + Analytics API Routes
 //
-// GET /api/brackets/:id                  — Get bracket details with entries
-// GET /api/traders/:wallet               — Get trader profile across a tournament
-// GET /api/brackets/analytics/:id        — Post-tournament aggregate analytics
-// GET /api/leaderboard/:id               — Get leaderboard for a tournament
+// GET /api/brackets/:id                          Get bracket details with entries
+// GET /api/brackets/traders/:wallet              Get trader profile across a tournament
+// GET /api/brackets/analytics/:id                Post-tournament aggregate analytics
+// GET /api/brackets/leaderboard/:id              Get leaderboard for a tournament
 // ============================================================================
 
 import { Router } from 'express';
@@ -18,7 +18,7 @@ import { eq, asc, desc, count, and } from 'drizzle-orm';
 
 const router = Router();
 
-// GET /api/brackets/:id — Get a single bracket with its entries
+// GET /api/brackets/:id: Get a single bracket with its entries
 router.get('/:id', async (req, res) => {
     try {
         const bracketId = parseInt(req.params.id, 10);
@@ -43,7 +43,7 @@ router.get('/:id', async (req, res) => {
     }
 });
 
-// GET /api/traders/:wallet?tournamentId=X — Get trader profile
+// GET /api/brackets/traders/:wallet?tournamentId=X: Get trader profile
 router.get('/traders/:wallet', async (req, res) => {
     try {
         const { wallet } = req.params;
@@ -73,7 +73,7 @@ router.get('/traders/:wallet', async (req, res) => {
     }
 });
 
-// GET /api/brackets/analytics/:tournamentId — Post-tournament analytics
+// GET /api/brackets/analytics/:tournamentId: Post-tournament analytics
 router.get('/analytics/:tournamentId', async (req, res) => {
     try {
         const tournamentId = parseInt(req.params.tournamentId, 10);
@@ -231,7 +231,7 @@ router.get('/analytics/:tournamentId', async (req, res) => {
             }
         }
 
-        // Score distribution — bucket all scored entries into 10-point ranges
+        // Score distribution: bucket all scored entries into 10-point ranges
         const scoredAll = allEntries.filter(e => e.cpiScore > 0);
         const buckets = Array.from({ length: 10 }, (_, i) => ({
             bucket: `${i * 10}-${(i + 1) * 10}`,
@@ -242,7 +242,7 @@ router.get('/analytics/:tournamentId', async (req, res) => {
             buckets[idx].count++;
         }
 
-        // Component insights — advanced vs eliminated averages
+        // Component insights: advanced vs eliminated averages
         const advancedEntries = scoredAll.filter(e => e.advanced);
         const eliminatedEntries = scoredAll.filter(e => e.eliminated);
 
@@ -383,7 +383,7 @@ router.get('/analytics/:tournamentId', async (req, res) => {
     }
 });
 
-// GET /api/leaderboard/:tournamentId — Overall leaderboard (all wallets, best CPI)
+// GET /api/brackets/leaderboard/:tournamentId: Overall leaderboard (all wallets, best CPI)
 router.get('/leaderboard/:tournamentId', async (req, res) => {
     try {
         const tournamentId = parseInt(req.params.tournamentId, 10);
@@ -453,7 +453,7 @@ router.get('/leaderboard/:tournamentId', async (req, res) => {
                             advanced: entry.advanced,
                         });
                     } else if (entryIsScored) {
-                        // This entry has real scores — use them (later round wins)
+                        // This entry has real scores; use them (later round wins)
                         walletScores.set(entry.wallet, {
                             wallet: entry.wallet,
                             cpiScore: entry.cpiScore,
@@ -466,7 +466,7 @@ router.get('/leaderboard/:tournamentId', async (req, res) => {
                             advanced: entry.advanced,
                         });
                     } else {
-                        // Unscored entry in a later round — keep existing scores
+                        // Unscored entry in a later round; keep existing scores
                         // but update the lastRound and status to reflect current position
                         walletScores.set(entry.wallet, {
                             ...existing,

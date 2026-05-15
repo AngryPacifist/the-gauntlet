@@ -1,5 +1,5 @@
 // ============================================================================
-// Final Score — CPI + Quest Points Join
+// Final Score: CPI + Quest Points Join
 //
 // Combines a trader's bracket CPI score with their accumulated quest points
 // from daily categories. Used for:
@@ -14,7 +14,7 @@
 //   Multi-day (Risk Manager, Humble One): config.multidayQuestPoints
 //     (default [0.3, 0.25, 0.2, 0.15, 0.1])
 //   Weekly (Leverage Master): LEVERAGE_QUEST_POINTS module constant
-//     Phase 4 item 30: [0.5, 0.4, 0.3, 0.2, 0.1] per (asset, side) ladder.
+//     [0.5, 0.4, 0.3, 0.2, 0.1] per (asset, side) ladder.
 //
 // The computation replays each day's scores from daily_category_scores,
 // ranks within that day (tie-aware), assigns quest points, and sums.
@@ -33,28 +33,28 @@ import { DEFAULT_TOURNAMENT_CONFIG } from '../types.js';
 import { createCache } from './cache.js';
 
 // Quest point award tables:
-// - DAILY + MULTIDAY migrated to TournamentConfig (Phase 3 item 17, 2026-04-22).
-// - LEVERAGE stays module-constant (D1 — values changed in Phase 4 per Q3 resolution).
-// Phase 4 item 30 (Q3 resolution): per-asset LM scaling.
-// Old [1.5, 1.2, 1.0, 0.75, 0.50] (per-side ceiling 3.0 with 2 ladders).
-// New [0.5, 0.4, 0.3, 0.2, 0.1] — per-(asset, side) ladder with 2N ladders total;
-// ceiling math holds at 3.0 for N=3 assets (2N × 0.5 peak = 3.0).
+// - DAILY + MULTIDAY are config-driven via TournamentConfig
+//   (config.dailyQuestPoints / config.multidayQuestPoints).
+// - LEVERAGE is the module constant below.
+// Per-asset LM scaling: [0.5, 0.4, 0.3, 0.2, 0.1] per (asset, side) ladder
+// with 2N ladders total (long + short × N assets). Ceiling math: for N=3
+// assets, 2N × 0.5 peak = 3.0.
 const LEVERAGE_QUEST_POINTS = [0.5, 0.4, 0.3, 0.2, 0.1];
 
-// Phase 6 — TTL cache for the heaviest computation in the system.
-// Cache key = tournamentId. Config is frozen post-registration (PUT /:id rejects per
-// `routes/tournaments.ts:130-136`), so per-tournament keying is correct without
-// including config hash in the key.
+// TTL cache for the heaviest computation in the system.
+// Cache key = tournamentId. Config is frozen post-registration (the PUT
+// /:id route rejects edits after activation), so per-tournament keying is
+// correct without including a config hash in the key.
 const finalScoreCache = createCache<FinalScoreResult[]>();
 
 // Categories grouped by scoring period
 const DAILY_CATEGORIES = ['all_around', 'top_tick_traveler', 'bottom_fisher'];
 const MULTIDAY_CATEGORIES = ['risk_manager', 'humble_one'];
 
-// Phase 4 item 30: WEEKLY_CATEGORIES now runtime-computed from config.assetList.
+// WEEKLY_CATEGORIES is runtime-computed from config.assetList.
 // Per-asset slugs: leverage_master_${symbol}_${side}.
 // Legacy fallback when assetList is undefined/empty: the static 2-slug list
-// matches pre-Phase-4 data in `dailyCategoryScores`.
+// matches older data in `dailyCategoryScores`.
 function computeWeeklyCategories(config: TournamentConfig): string[] {
     if (!config.assetList?.length) {
         return ['leverage_master_long', 'leverage_master_short'];
@@ -200,7 +200,7 @@ export async function computeQuestPoints(
                 ? dailyPoints
                 : multidayPoints;
 
-            // Phase 8.m: score > 0 guard (mirror of computeAllQuestPoints).
+            // Score > 0 guard (mirror of computeAllQuestPoints).
             const walletScore = valid.find((v) => v.wallet === wallet)?.score ?? 0;
             if (rank < pointsTable.length && walletScore > 0) {
                 totalQuestPoints += pointsTable[rank];
@@ -212,7 +212,7 @@ export async function computeQuestPoints(
     // Leverage Master stores one score per wallet per week (scoreDate = week boundary).
     // Each stored entry represents that week's step count.
     // We rank ALL Leverage Master entries for this tournament by score, grouped by scoreDate.
-    // Phase 4 item 30: WEEKLY_CATEGORIES now config-driven
+    // WEEKLY_CATEGORIES is config-driven (per-asset slugs).
     const weeklyCategories = computeWeeklyCategories(config);
     for (const category of weeklyCategories) {
         const weekDates = await db
@@ -256,9 +256,8 @@ export async function computeQuestPoints(
             const rank = getCompetitionRank(valid, wallet);
             if (rank === -1) continue;
 
-            // Phase 8.m: score > 0 guard. For LM, score = stepCount; zero = no
-            // leverage steps completed, same baseline-inflation issue as daily
-            // categories.
+            // Score > 0 guard. For LM, score = stepCount; zero = no leverage
+            // steps completed, same baseline-inflation issue as daily categories.
             const walletScore = valid.find((v) => v.wallet === wallet)?.score ?? 0;
             if (rank < LEVERAGE_QUEST_POINTS.length && walletScore > 0) {
                 totalQuestPoints += LEVERAGE_QUEST_POINTS[rank];
@@ -327,18 +326,17 @@ export async function computeAllQuestPoints(
         } else if (MULTIDAY_CATEGORIES.includes(category)) {
             pointsTable = multidayPoints;
         } else if (category.startsWith('leverage_master_')) {
-            // Phase 4 item 30: any per-asset LM slug uses LEVERAGE_QUEST_POINTS table
+            // Any per-asset LM slug uses LEVERAGE_QUEST_POINTS table.
             pointsTable = LEVERAGE_QUEST_POINTS;
         } else {
             continue;
         }
 
         // Assign quest points using tie-aware competition ranking.
-        // Phase 8.m: score > 0 guard. Without it, wallets tied at score=0 (no
-        // actual participation in the category) all share the top-1 rank-points
-        // slot, producing a baseline 0.60 quest points for every registered
-        // wallet (3 daily categories × 0.2). Surfaced by ZeDef on T1 day-1
-        // leaderboard observation Day 42.
+        // Score > 0 guard. Without it, wallets tied at score=0 (no actual
+        // participation in the category) all share the top-1 rank-points slot,
+        // producing a baseline 0.60 quest points for every registered wallet
+        // (3 daily categories × 0.2).
         let competitionRank = 0;
         for (let i = 0; i < rows.length; i++) {
             if (i > 0 && rows[i].score !== rows[i - 1].score) {
@@ -364,7 +362,7 @@ export async function computeFinalScores(
     tournamentId: number,
     config: TournamentConfig,
 ): Promise<FinalScoreResult[]> {
-    // Phase 6: TTL cache check — 5-min default. Returns cached payload if fresh.
+    // TTL cache check (5-min default). Returns cached payload if fresh.
     const cacheKey = `final-score:${tournamentId}`;
     const cached = finalScoreCache.get(cacheKey);
     if (cached) return cached;
@@ -413,7 +411,7 @@ export async function computeFinalScores(
     // Batch quest point computation — 1 query for all wallets
     const questPointsMap = await computeAllQuestPoints(tournamentId, config);
 
-    // Phase 3 item 17 + F1: read ticket multipliers from config (was hardcoded 0.5 and 20).
+    // Read ticket multipliers from config (was previously hardcoded 0.5 and 20).
     const cpiMult = config.cpiTicketMultiplier ?? DEFAULT_TOURNAMENT_CONFIG.cpiTicketMultiplier;
     const questMult = config.questTicketMultiplier ?? DEFAULT_TOURNAMENT_CONFIG.questTicketMultiplier;
 
@@ -441,7 +439,7 @@ export async function computeFinalScores(
     // Sort by final score descending, wallet ascending (deterministic)
     results.sort((a, b) => b.finalScore - a.finalScore || a.wallet.localeCompare(b.wallet));
 
-    // Phase 6: write-through cache.
+    // Write-through cache.
     finalScoreCache.set(cacheKey, results);
     return results;
 }

@@ -1,9 +1,10 @@
 // ============================================================================
-// Cumulative Leaderboard API — Phase 5 item 20
+// Cumulative Leaderboard API
 //
-// GET /api/leaderboard — bundled cumulative payload (Tournament + Season + All-time)
+// GET /api/leaderboard: bundled cumulative payload (Tournament + Season + All-time)
 //
-// Public read-only. No auth. On-demand compute (D-20.4); Phase 6 will add caching.
+// Public read-only. No auth. Backed by a 5-min TTL cache at the service layer
+// (cumulative-leaderboard.ts) so the route itself is a thin pass-through.
 // ============================================================================
 
 import { Router } from 'express';

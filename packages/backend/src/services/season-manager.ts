@@ -12,7 +12,7 @@
 // Each weekly gauntlet is a full tournament (bracket → rounds → scoring).
 // The season tracks aggregate points across all weeks for qualification.
 //
-// Points scheme (per weekly tournament — additive stacking):
+// Points scheme (per weekly tournament; additive stacking):
 //   Winner: 25, 2nd: 18, 3rd: 15, 4th: 12, 5th: 10, Other Finalist: 8,
 //   Passing R1: +3, Passing R2: +5, FF 1st: +6, FF 2nd: +4, FF 3rd: +3, Other FF: +1
 //   Survival bonuses are conditional on actual rounds played.
@@ -233,7 +233,7 @@ async function awardWeeklyPoints(
 ): Promise<void> {
     // Idempotency guard: check if this tournament was already scored.
     // Uses a sentinel row in daily_category_scores (same pattern as Fisher/AllAround).
-    // scoreDate is a PostgreSQL date column — must use a valid date, not an arbitrary string.
+    // scoreDate is a PostgreSQL date column; must use a valid date, not an arbitrary string.
     // We use '1970-01-01' as a fixed sentinel date, scoped by tournamentId.
     const SENTINEL_WALLET = '__weekly_points_sentinel__';
     const SENTINEL_CATEGORY = 'weekly_points';
@@ -367,7 +367,7 @@ async function awardWeeklyPoints(
         }
     }
 
-    // Finalists survived all main rounds — survival bonus conditioned on actual rounds played
+    // Finalists survived all main rounds; survival bonus conditioned on actual rounds played.
     for (const finalist of finalists) {
         const current = walletPoints.get(finalist.wallet) ?? 0;
         let survivalBonus = 0;
@@ -534,9 +534,9 @@ export async function awardDailyFisherPoints(
     for (const row of fisherRows) {
         const details = row.details as FisherDetails;
 
-        // Phase 4 D19: read top-level rank fields (longRank/shortRank).
-        // Fallback to nested longEntry.rank/shortEntry.rank for pre-Phase-4 JSONB
-        // rows that lack the top-level fields (backward compat during rollout).
+        // Read top-level rank fields (longRank/shortRank).
+        // Fallback to nested longEntry.rank/shortEntry.rank for legacy JSONB
+        // rows that lack the top-level fields (backward compat).
         const longRank = details.longRank ?? details.longEntry?.rank ?? null;
         const shortRank = details.shortRank ?? details.shortEntry?.rank ?? null;
 

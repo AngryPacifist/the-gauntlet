@@ -1,5 +1,5 @@
 // ============================================================================
-// Raffle Engine — Deterministic Weighted Raffle Draw System
+// Raffle Engine: Deterministic Weighted Raffle Draw System
 //
 // Eligibility: ≥10 closed positions, not in top 30% by final score.
 // Tickets:     floor(CPI × 0.5) + floor(questPoints × 20)
@@ -20,13 +20,13 @@ import type { TournamentConfig } from '../types.js';
 import { DEFAULT_TOURNAMENT_CONFIG, resolveConfig } from '../types.js';
 
 // --------------------------------------------------------------------------
-// Constants: migrated to TournamentConfig (Phase 3 items 17 + 26, 2026-04-22).
-// - raffleMinClosedPositions (default 10) — eligibility threshold
-// - topPercentCutoff (default 0.30) — top-% excluded from raffle (was duplicated
-//   at routes/tournaments.ts:373, now unified per item 26)
-// - cpiTicketMultiplier (default 0.5)
-// - questTicketMultiplier (default 20)
-// All reads happen via `config.<field> ?? DEFAULT_TOURNAMENT_CONFIG.<field>` below.
+// Config-driven knobs (all reads use `config.<field> ?? DEFAULT_TOURNAMENT_CONFIG.<field>`):
+//   - raffleMinClosedPositions (default 10): eligibility threshold
+//   - topPercentCutoff (default 0.30): top-% excluded from raffle. Also
+//     consumed by the /forge endpoint in routes/tournaments.ts for top-cutoff
+//     gating.
+//   - cpiTicketMultiplier (default 0.5)
+//   - questTicketMultiplier (default 20)
 // --------------------------------------------------------------------------
 
 // --------------------------------------------------------------------------
@@ -34,6 +34,7 @@ import { DEFAULT_TOURNAMENT_CONFIG, resolveConfig } from '../types.js';
 //
 // Deterministic 32-bit PRNG. Given the same seed, always produces the
 // same sequence of floats in [0, 1).
+//
 // --------------------------------------------------------------------------
 
 function mulberry32(seed: number): () => number {

@@ -1,5 +1,5 @@
 // ============================================================================
-// Quest Descriptions — Human-Readable Copy for The Forge Competition Page
+// Quest Descriptions: human-readable copy for the Forge competition page.
 //
 // Each quest has a short tagline, an expanded description for the [+] rule
 // section, and a structured rules list for the detailed scoring breakdown.
@@ -12,7 +12,7 @@ export interface QuestDescription {
     rules: string[];
 }
 
-// Fallen Fighters — displayed as a banner/info block on the Forge page
+// Fallen Fighters: displayed as a banner/info block on the Forge page
 // during Gauntlet tournaments where elimination has occurred.
 export const FF_DESCRIPTION = {
     title: 'Fallen Fighters',
@@ -97,32 +97,33 @@ export const QUEST_DESCRIPTIONS: Record<string, QuestDescription> = {
     },
 };
 
-// Phase 4 item 30: LM descriptions are now parameterized per-(asset, side).
-// Rendered at display time from the tournament's assetList. Replaces the 2 static
-// entries (leverage_master_long / leverage_master_short) that existed pre-Phase-4.
+// LM descriptions are parameterized per-(asset, side). Rendered at display
+// time from the tournament's assetList. Replaces the 2 static entries
+// (leverage_master_long / leverage_master_short) that existed before per-asset
+// ladders.
 //
-// Reframing per item 12 coordination: LM now rewards "precision at leverage + asset breadth".
-// A SOL-only specialist caps at 1/N of the ceiling — full score requires topping ladders
-// across every config asset. The description reflects this explicitly so the diversification
-// requirement is visible upfront.
+// LM rewards "precision at leverage + asset breadth". A SOL-only specialist
+// caps at 1/N of the ceiling; full score requires topping ladders across
+// every config asset. The description reflects this explicitly so the
+// diversification requirement is visible upfront.
 export function getLeverageMasterDescription(
     side: 'long' | 'short',
-    assetSymbol?: string, // optional — narrows description to a specific asset tab
-    stepValues?: number[], // Phase 7.a: variable per-asset ladder text (sourced from tournament.config.assetList)
-    tolerance?: number,    // Phase 8 fix: per-asset lmTolerance (e.g. 0.2 for RWAs at 5x cap)
+    assetSymbol?: string, // optional: narrows description to a specific asset tab
+    stepValues?: number[], // variable per-asset ladder text (sourced from tournament.config.assetList)
+    tolerance?: number,    // per-asset lmTolerance (e.g. 0.2 for RWAs at 5x cap)
 ): QuestDescription {
     const sideLabel = side === 'long' ? 'Long' : 'Short';
     const sideArticle = side === 'long' ? 'long' : 'short';
     const assetScope = assetSymbol
         ? `for ${assetSymbol}`
         : 'across every supported asset';
-    // Phase 7.a: dynamic ladder description from per-asset stepValues; fallback to crypto default.
+    // Dynamic ladder description from per-asset stepValues; fallback to crypto default.
     const ladder = stepValues && stepValues.length > 0
         ? stepValues
         : [10, 20, 30, 40, 50, 60, 70, 80, 90, 100];
     const ladderText = ladder.map((v) => `${v}x`).join(', ');
     const ladderRange = `from ${ladder[0]}x up to ${ladder[ladder.length - 1]}x across ${ladder.length} defined steps`;
-    // Phase 8 fix: tolerance also dynamic; default 2 matches the engine default in buildLeverageSteps.
+    // Tolerance also dynamic; default 2 matches the engine default in buildLeverageSteps.
     const toleranceValue = tolerance ?? 2;
 
     return {

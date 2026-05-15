@@ -2,16 +2,16 @@
 // Season API Routes
 //
 // Public:
-//   GET /api/seasons              — List all seasons
-//   GET /api/seasons/:id          — Get season details + tournaments
-//   GET /api/seasons/:id/standings — Full standings leaderboard
+//   GET /api/seasons                List all seasons
+//   GET /api/seasons/:id            Get season details + tournaments
+//   GET /api/seasons/:id/standings  Full standings leaderboard
 //
 // Admin (protected by x-admin-secret):
-//   POST /api/seasons             — Create a season
-//   POST /api/seasons/:id/start   — Start the season (creates Week 1)
-//   POST /api/seasons/:id/advance — Advance to next week
-//   POST /api/seasons/:id/complete — Complete the season (after Final)
-//   POST /api/seasons/:id/carryover — Enroll Forge participants into this season
+//   POST /api/seasons               Create a season
+//   POST /api/seasons/:id/start     Start the season (creates Week 1)
+//   POST /api/seasons/:id/advance   Advance to next week
+//   POST /api/seasons/:id/complete  Complete the season (after Final)
+//   POST /api/seasons/:id/carryover Enroll Forge participants into this season
 // ============================================================================
 
 import { Router } from 'express';
@@ -56,7 +56,7 @@ function requireAdmin(req: any, res: any, next: any): void {
 // Public routes
 // --------------------------------------------------------------------------
 
-// GET /api/seasons — List all seasons
+// GET /api/seasons: List all seasons
 router.get('/', async (_req, res) => {
     try {
         const allSeasons = await db
@@ -74,7 +74,7 @@ router.get('/', async (_req, res) => {
     }
 });
 
-// GET /api/seasons/:id — Season details with tournaments
+// GET /api/seasons/:id: Season details with tournaments
 router.get('/:id', async (req, res) => {
     try {
         const seasonId = parseInt(req.params.id, 10);
@@ -99,7 +99,7 @@ router.get('/:id', async (req, res) => {
     }
 });
 
-// GET /api/seasons/:id/standings — Season standings leaderboard
+// GET /api/seasons/:id/standings: Season standings leaderboard
 router.get('/:id/standings', async (req, res) => {
     try {
         const seasonId = parseInt(req.params.id, 10);
@@ -123,7 +123,7 @@ router.get('/:id/standings', async (req, res) => {
 // Admin routes
 // --------------------------------------------------------------------------
 
-// POST /api/seasons — Create a season
+// POST /api/seasons: Create a season
 router.post('/', requireAdmin, async (req, res) => {
     try {
         const { name, config } = req.body as { name: string; config?: Partial<SeasonConfig> };
@@ -144,7 +144,7 @@ router.post('/', requireAdmin, async (req, res) => {
     }
 });
 
-// POST /api/seasons/:id/start — Start the season
+// POST /api/seasons/:id/start: Start the season
 router.post('/:id/start', requireAdmin, async (req, res) => {
     try {
         const seasonId = parseInt(req.params.id, 10);
@@ -164,7 +164,7 @@ router.post('/:id/start', requireAdmin, async (req, res) => {
     }
 });
 
-// POST /api/seasons/:id/advance — Advance to next week
+// POST /api/seasons/:id/advance: Advance to next week
 router.post('/:id/advance', requireAdmin, async (req, res) => {
     try {
         const seasonId = parseInt(req.params.id, 10);
@@ -184,7 +184,7 @@ router.post('/:id/advance', requireAdmin, async (req, res) => {
     }
 });
 
-// POST /api/seasons/:id/complete — Complete the season
+// POST /api/seasons/:id/complete: Complete the season
 router.post('/:id/complete', requireAdmin, async (req, res) => {
     try {
         const seasonId = parseInt(req.params.id, 10);
@@ -204,7 +204,7 @@ router.post('/:id/complete', requireAdmin, async (req, res) => {
     }
 });
 
-// POST /api/seasons/:id/carryover — Enroll Forge participants into this season
+// POST /api/seasons/:id/carryover: Enroll Forge participants into this season
 router.post('/:id/carryover', requireAdmin, async (req, res) => {
     try {
         const seasonId = parseInt(req.params.id, 10);

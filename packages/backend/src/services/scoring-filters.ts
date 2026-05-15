@@ -1,27 +1,25 @@
 // ============================================================================
 // Single-source scoring filters
 //
-// Round 2 refactor: previously CPI applied `filterValidPositions`
-// (collateral + duration) before computeCPI in tournament-manager.ts:469-472,
-// while category engines (AA, BF, TT, RM, HO) did not. This produced visible
-// asymmetry — wallets could rank in daily categories with positions that were
-// excluded from CPI for failing the anti-gaming threshold (case in point: 95Vm
-// in T1 with $9.94 BONK trade earning 0.01 quest points but contributing 0 to
-// CPI).
+// Shared by CPI and category engines (All Around, Bottom Fisher,
+// Top-Tick Traveler, Risk Manager, Humble One) so all daily/2-day/portfolio
+// scores agree on which positions are eligible. Without this, asymmetric
+// filtering produces visible ranking issues: a wallet can score points in a
+// daily category from a position that is excluded from CPI for failing the
+// anti-gaming threshold.
 //
-// Single-source helper used by all engine entry points (CPI, AA, BF, TT, RM,
-// HO). LM (quest-engine.ts) already enforces the same checks per-position
-// inside positionCompletesStep, so it stays unchanged.
+// LM (quest-engine.ts) enforces the same checks per-position inside
+// positionCompletesStep, so it stays unchanged.
 //
 // Filter order:
-//   1. assetList match (mint when present, symbol fallback) — D16
+//   1. assetList match (mint when present, symbol fallback)
 //   2. joinedAt cutoff (entry_date >= match.joinedAt)
-//   3. Symbol canonicalization to match's configured symbol — Phase 8.p
+//   3. Symbol canonicalization to match's configured symbol
 //   4. minPositionCollateral floor
 //   5. minTradeDurationSec floor (open positions: elapsed-since-entry; closed:
 //      precomputed `duration` or computed from timestamps)
 //
-// Bypasses asset filter when config.assetList undefined/empty (D5 fallback)
+// Bypasses asset filter when config.assetList undefined/empty,
 // but ALWAYS applies collateral + duration floors.
 // ============================================================================
 

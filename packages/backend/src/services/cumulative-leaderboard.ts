@@ -1,15 +1,17 @@
 // ============================================================================
-// Cumulative Leaderboard — Phase 5 item 20
+// Cumulative Leaderboard
 //
 // Aggregates leaderboard data across 3 views:
-//   - Tournament: current active tournament's top N by finalScore (slim — D-20.8).
+//   - Tournament: current active tournament's top N by finalScore (slim).
 //   - Season:     current active season's standings (uses existing seasonStandings).
-//   - All-time:   cumulative finalScore across all tournaments + formats + FF (D-20.9).
+//   - All-time:   cumulative finalScore across all tournaments + formats + FF.
 //
-// Compute strategy: ON-DEMAND per request (D-20.4). Phase 6 will add caching.
-// Cross-format: all participants regardless of Forge/Gauntlet (D-20.9). FF participants
+// Compute strategy: on-demand per request, memoized via 5-min TTL cache below
+// (createCache). Cache miss replays the full aggregation; hit returns the
+// prior payload instantly.
+// Cross-format: all participants regardless of Forge/Gauntlet. FF participants
 // included naturally via bracketEntries which span main + consolation rounds (verified
-// in final-score.ts:computeFinalScores — iterates all rounds for the tournament).
+// in final-score.ts:computeFinalScores, which iterates all rounds for the tournament).
 // ============================================================================
 
 import { eq, desc, asc } from 'drizzle-orm';
@@ -19,7 +21,7 @@ import { computeFinalScores } from './final-score.js';
 import { resolveConfig } from '../types.js';
 import { createCache } from './cache.js';
 
-// Slim shape for Tournament tab (D-20.8 — top N + link to full /leaderboard/:id)
+// Slim shape for Tournament tab (top N + link to full /leaderboard/:id)
 export interface CumulativeTournamentEntry {
     rank: number;
     wallet: string;
@@ -61,17 +63,17 @@ export interface CumulativeLeaderboardData {
 const TOURNAMENT_TAB_TOP_N = 10;
 const ALL_TIME_TOP_N = 100; // cap rendering payload
 
-// Phase 6 — TTL cache for the bundled cumulative payload.
+// TTL cache for the bundled cumulative payload.
 // Single global key: payload reflects DB-wide state; per-tournament filtering happens inside.
 const cumulativeCache = createCache<CumulativeLeaderboardData>();
 const CUMULATIVE_CACHE_KEY = 'cumulative-leaderboard:global';
 
 export async function computeCumulativeLeaderboard(): Promise<CumulativeLeaderboardData> {
-    // Phase 6: TTL cache check.
+    // TTL cache check.
     const cached = cumulativeCache.get(CUMULATIVE_CACHE_KEY);
     if (cached) return cached;
 
-    // --- Tournament tab — current active (singleton per item 21) ---
+    // --- Tournament tab: current active (singleton) ---
     // Fallback chain matches /forge redirector + layout.tsx Tournament-link logic:
     // active → most-recent completed → most-recent overall.
     const allTournaments = await db
@@ -93,7 +95,7 @@ export async function computeCumulativeLeaderboard(): Promise<CumulativeLeaderbo
     if (currentTournament) {
         const config = resolveConfig(currentTournament.config);
         const fullEntries = await computeFinalScores(currentTournament.id, config);
-        // Tie-aware competition rank, then slice to top N (slim view — D-20.8).
+        // Tie-aware competition rank, then slice to top N (slim view).
         let currentRank = 1;
         const ranked = fullEntries.map((e, i) => {
             if (i > 0 && e.finalScore !== fullEntries[i - 1].finalScore) {
@@ -118,7 +120,7 @@ export async function computeCumulativeLeaderboard(): Promise<CumulativeLeaderbo
         };
     }
 
-    // --- Season tab — current active season standings ---
+    // --- Season tab: current active season standings ---
     const allSeasons = await db
         .select()
         .from(seasons)
@@ -169,13 +171,13 @@ export async function computeCumulativeLeaderboard(): Promise<CumulativeLeaderbo
         };
     }
 
-    // --- All-time tab — cross-tournament finalScore aggregation (D-20.1, D-20.9) ---
+    // --- All-time tab: cross-tournament finalScore aggregation ---
     // For each tournament: compute finalScores → fold into per-wallet running sum.
-    // Zero-fill is implicit (D-20.2): wallets that didn't play a tournament don't get
+    // Zero-fill is implicit: wallets that didn't play a tournament don't get
     // a contribution from it, so their total sum is naturally lower than wallets who
     // played more tournaments at the same per-tournament score level.
     //
-    // Cross-format (D-20.9): computeFinalScores is format-agnostic and includes all
+    // Cross-format: computeFinalScores is format-agnostic and includes all
     // bracketEntries (main + consolation FF). No format filter applied.
     const walletAgg = new Map<string, { total: number; count: number }>();
 
@@ -225,7 +227,7 @@ export async function computeCumulativeLeaderboard(): Promise<CumulativeLeaderbo
         },
     };
 
-    // Phase 6: write-through cache.
+    // Write-through cache.
     cumulativeCache.set(CUMULATIVE_CACHE_KEY, result);
     return result;
 }

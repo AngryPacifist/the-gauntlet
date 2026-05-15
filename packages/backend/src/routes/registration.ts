@@ -1,8 +1,8 @@
 // ============================================================================
 // Registration API Routes
 //
-// POST /api/register   — Register a wallet for a tournament
-// GET  /api/register/:tournamentId — Get all registrations for a tournament
+// POST /api/register                Register a wallet for a tournament
+// GET  /api/register/:tournamentId  Get all registrations for a tournament
 //
 // Updated: zero-barrier registration. No eligibility checks at registration
 // time. Anyone with a valid Solana wallet can register.
@@ -16,7 +16,7 @@ import { eq } from 'drizzle-orm';
 
 const router = Router();
 
-// POST /api/register — Register a wallet
+// POST /api/register: Register a wallet
 router.post('/', async (req, res) => {
     try {
         const { tournamentId, wallet } = req.body as {
@@ -58,7 +58,7 @@ router.post('/', async (req, res) => {
     }
 });
 
-// GET /api/register/:tournamentId — Get all registrations
+// GET /api/register/:tournamentId: Get all registrations
 router.get('/:tournamentId', async (req, res) => {
     try {
         const tournamentId = parseInt(req.params.tournamentId, 10);

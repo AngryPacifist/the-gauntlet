@@ -1,5 +1,5 @@
 // ============================================================================
-// Adrena: The Gauntlet — Shared TypeScript Types
+// Shared TypeScript Types
 // ============================================================================
 
 // --- Tournament ---
@@ -8,8 +8,6 @@ export type TournamentStatus = 'registration' | 'active' | 'completed' | 'cancel
 export type RoundStatus = 'pending' | 'active' | 'completed';
 export type RoundName = 'First Blood' | 'The Crucible' | 'Endgame';
 export type RoundType = 'main' | 'consolation';
-
-export const CONSOLATION_ROUND_NAMES = ['Redemption Arc', 'Last Stand', 'Final Reckoning'] as const;
 
 export interface TournamentConfig {
     format: 'bracket' | 'rank_only'; // 'bracket' = Gauntlet (elimination), 'rank_only' = Forge (flat leaderboard)
@@ -28,35 +26,27 @@ export interface TournamentConfig {
     useHistoricalWindow: boolean;     // If true, scoring uses historical window instead of round dates (default: false)
     historicalWindowDays: number;     // Number of days for historical window (default: 90)
 
-    // Seeded brackets (programmatic — set by Season Final logic, not admin UI)
+    // Seeded brackets (programmatic; set by Season Final logic, not admin UI)
     seededWallets?: string[];         // For Final tournaments: wallets ordered by season standing
 
-    // Prize distribution (optional — wired in admin UI per Phase 3 item 16,
-    // extended post-T1 batch for multi-token / sponsor visibility).
+    // Prize distribution (optional). Multi-token / sponsor support for visibility.
     prizeTable?: {
-        /** @deprecated single-currency total — derive from `tokens` if present.
-         *  Kept for backward compat with pre-multi-token tournaments. */
+        /** @deprecated single-currency total: derive from `tokens` if present.
+         *  Kept for backward compat with single-currency tournaments. */
         totalPool: number;
-        /** @deprecated single-currency symbol — see `tokens` for multi-sponsor. */
+        /** @deprecated single-currency symbol: see `tokens` for multi-sponsor. */
         currency: string;
-        /** Rank-weight ratios (post-multi-token interpretation). Per-rank share
-         *  of every token = (skillPrizes[N-1] / totalWeight) × token.amount,
-         *  where totalWeight = sum(skillPrizes) + sum(rafflePrizes). For
-         *  single-sponsor tournaments these can still be read as literal
-         *  token amounts (math is identical). */
+        /** Rank-weight ratios. Per-rank share of every token =
+         *  (skillPrizes[N-1] / totalWeight) × token.amount, where totalWeight =
+         *  sum(skillPrizes) + sum(rafflePrizes). For single-sponsor tournaments
+         *  these can still be read as literal token amounts (math is identical). */
         skillPrizes: number[];
         rafflePrizes: number[];
         /** Multi-token sponsor list. Each entry is a per-sponsor contribution
          *  of a single token. A sponsor with multiple tokens appears as
          *  multiple entries. Per-rank distribution: every winner gets a
          *  proportional share of every token. Conservation: per-token total
-         *  equals the entered amount, summed across all rank + raffle payouts.
-         *
-         *  Migration: T1's pre-multi-token row gets a virtual single-sponsor
-         *  entry [{sponsor: 'Adrena', symbol: 'ADX', amount: 100000}] derived
-         *  from the legacy `currency` + `totalPool` via
-         *  scripts/_migrate-t1-to-multi-token.ts. Future tournaments populate
-         *  `tokens` directly via admin form. */
+         *  equals the entered amount, summed across all rank + raffle payouts. */
         tokens?: Array<{
             /** Sponsor name (e.g. 'Adrena Foundation', 'Jito Labs'). */
             sponsor: string;
@@ -65,67 +55,66 @@ export interface TournamentConfig {
             /** Token-denominated quantity (NOT USD). */
             amount: number;
             /** Optional SPL token mint. When present:
-             *  - On-chain identity for distribution (MrRewards reads this).
-             *  - Forward-compat (Fork A): passed to prices.ts to query Jupiter
-             *    for tokens NOT in KNOWN_PRIZE_TOKEN_MINT. Lets admin add a
-             *    new prize token without a code change. Takes precedence over
+             *  - On-chain identity for distribution.
+             *  - Forward-compat: passed to prices.ts to query Jupiter for tokens
+             *    NOT in KNOWN_PRIZE_TOKEN_MINT. Lets admin add a new prize token
+             *    without a code change. Takes precedence over
              *    KNOWN_PRIZE_TOKEN_MINT[symbol] when both are present.
              *  - Symbol disambiguation: e.g. two tokens both named 'ADX' on
-             *    Jupiter — mint pins which one. */
+             *    Jupiter; mint pins which one. */
             mint?: string;
-            /** Optional static USD price (Fork B / locked decision G2 third
-             *  tier). Used by prices.ts route ONLY if Pyth + Jupiter both
-             *  return null. Admin enters at create-time; immutable once
-             *  tournament flips to `active` (inherited PUT edit-gate).
-             *  Pass-through to the route at query time — not cached
-             *  server-side (the static is fixed in config; no need to
-             *  memoize). FE renders source: 'static' in the tooltip when
-             *  this fires so admin/traders see the fallback was used. */
+            /** Optional static USD price. Used by prices.ts route ONLY if Pyth +
+             *  Jupiter both return null. Admin enters at create-time; immutable
+             *  once tournament flips to `active` (inherited PUT edit-gate).
+             *  Pass-through to the route at query time, not cached server-side
+             *  (the static is fixed in config; no need to memoize). FE renders
+             *  source: 'static' in the tooltip when this fires so admin/traders
+             *  see the fallback was used. */
             staticUsdPrice?: number;
         }>;
     };
 
-    // --- Phase 3 additions (2026-04-22) — config-driven scoring/raffle constants ---
+    // --- Config-driven scoring/raffle constants ---
 
-    // Top % cutoff for skill prizes vs raffle eligibility (item 26 — unifies
+    // Top % cutoff for skill prizes vs raffle eligibility (unifies
     // routes/tournaments.ts forge endpoint + raffle-engine cutoff)
     topPercentCutoff: number;         // Fraction, default 0.30 (top 30% earn skill prizes)
 
-    // All Around quest — per-asset best-ROI scoring (item 13)
+    // All Around quest: per-asset best-ROI scoring
     allAroundMinTradeUsd: number;     // Minimum trade exit_size for quest eligibility (USD, default 500)
-    allAroundMaxPointsPerAsset: number; // Cap on points per asset (default 25 — prevents one outlier dominating)
+    allAroundMaxPointsPerAsset: number; // Cap on points per asset (default 25; prevents one outlier dominating)
 
-    // Bottom Fisher / Top-Tick Traveler quest — rank points (item 17)
-    fisherRankPoints: number[];       // Default [3, 2, 1] — points for 1st/2nd/3rd
+    // Bottom Fisher / Top-Tick Traveler quest: rank points
+    fisherRankPoints: number[];       // Default [3, 2, 1]: points for 1st/2nd/3rd
 
-    // Quest point award tables (item 17 — used by final-score.ts + raffle-engine)
+    // Quest point award tables (used by final-score.ts + raffle-engine)
     dailyQuestPoints: number[];       // Default [0.2, 0.15, 0.1, 0.05, 0.01]
     multidayQuestPoints: number[];    // Default [0.3, 0.25, 0.2, 0.15, 0.1]
 
-    // Raffle eligibility + ticket math (item 17)
-    raffleMinClosedPositions: number; // Default 10 — min closed positions for raffle eligibility
-    cpiTicketMultiplier: number;      // Default 0.5 — tickets = floor(CPI × this)
-    questTicketMultiplier: number;    // Default 20 — tickets += floor(questPoints × this)
+    // Raffle eligibility + ticket math
+    raffleMinClosedPositions: number; // Default 10: min closed positions for raffle eligibility
+    cpiTicketMultiplier: number;      // Default 0.5: tickets = floor(CPI × this)
+    questTicketMultiplier: number;    // Default 20: tickets += floor(questPoints × this)
 
-    // Risk Manager minimum trade size (item 11 — prevents micro-trade SL exploit)
+    // Risk Manager minimum trade size (prevents micro-trade SL exploit)
     riskManagerMinSize: number;       // Default 1000 USD (test 500)
 
-    // Dynamic asset list (item 29-admin — per-asset scoring starts from joinedAt week)
+    // Dynamic asset list (per-asset scoring starts from joinedAt week).
     // Optional: undefined OR empty = engine fallback to permissive (all observed symbols).
     // Populated = strict filter (scoring engines include only listed symbols, from joinedAt).
     // CREATE-time Add Asset defaults joinedAt to today (equivalent to "from tournament start").
     assetList?: Array<{
         symbol: string;               // e.g. 'SOL', 'BTC', 'BONK'
-        // Phase 4: mint from /liquidity-info for identity-robust matching.
-        // Optional for backward compat with Phase-3-created tournaments (no mint).
-        // Engines prefer mint when present, fall back to symbol (D16).
+        // Mint from /liquidity-info for identity-robust matching.
+        // Optional for backward compat with older tournaments (no mint).
+        // Engines prefer mint when present, fall back to symbol.
         mint?: string;
-        joinedAt: string;             // ISO date (YYYY-MM-DD) — first scoring day
-        // Phase 7.b: optional Pyth Lazer feed_id override.
+        joinedAt: string;             // ISO date (YYYY-MM-DD): first scoring day
+        // Optional Pyth Lazer feed_id override.
         // Resolution: feed_id ?? ADRENA_TO_LAZER_FEED_ID[symbol] ?? null (skip).
         // Used by services/pyth-client.ts to query www.adrena.trade/api/oracle-bars.
         feed_id?: number;
-        // Phase 7.a: optional per-asset Leverage Master ladder.
+        // Optional per-asset Leverage Master ladder.
         // Engine builds LeverageStep[] via buildLeverageSteps(lmSteps, lmTolerance ?? 2).
         // undefined = falls back to module constant LEVERAGE_STEPS (10x ladder).
         lmSteps?: number[];           // e.g. [10, 20, 30, ..., 100] or [1.5, 2, 2.5, 3, 3.5, 4, 4.5]
@@ -144,7 +133,7 @@ export const DEFAULT_TOURNAMENT_CONFIG: TournamentConfig = {
     useHistoricalWindow: false,
     historicalWindowDays: 90,
 
-    // Phase 3 config-driven defaults (match current hardcoded values for zero-drift migration)
+    // Config-driven defaults (match current hardcoded values for zero-drift migration)
     topPercentCutoff: 0.30,
     allAroundMinTradeUsd: 500,
     allAroundMaxPointsPerAsset: 25,
@@ -155,25 +144,25 @@ export const DEFAULT_TOURNAMENT_CONFIG: TournamentConfig = {
     cpiTicketMultiplier: 0.5,
     questTicketMultiplier: 20,
     riskManagerMinSize: 1000,
-    // assetList intentionally omitted — undefined = engine fallback; admin opts in via UI (D5)
+    // assetList intentionally omitted: undefined = engine fallback; admin opts in via UI
 };
 
 /**
  * Resolve a stored tournament config against defaults.
  *
  * Merges `stored` (from DB JSONB) onto DEFAULT_TOURNAMENT_CONFIG so missing
- * fields — including ALL Phase 3 additions for pre-existing tournaments —
- * get sensible defaults. Required at every boundary that loads a tournament
- * and passes its config to scoring/quest/raffle engines.
+ * fields, including any newer additions for pre-existing tournaments, get
+ * sensible defaults. Required at every boundary that loads a tournament and
+ * passes its config to scoring/quest/raffle engines.
  *
  * Pattern: `const config = resolveConfig(tournament.config);`
  *
- * Callers (as of 2026-04-22):
- *   - tournament-manager.ts — computeRoundScores, advanceRound, startTournament, registerWallet
- *   - scheduler.ts — refreshScores, scoreDailyCategories, scoreHourlyCategories
- *   - routes/categories.ts — admin-triggered POST /api/categories/score
- *   - routes/tournaments.ts — forge endpoint (item 26 consumer)
- *   - routes/admin.ts — raffle compute endpoint
+ * Callers:
+ *   - tournament-manager.ts: computeRoundScores, advanceRound, startTournament, registerWallet
+ *   - scheduler.ts: refreshScores, scoreDailyCategories, scoreHourlyCategories
+ *   - routes/categories.ts: admin-triggered POST /api/categories/score
+ *   - routes/tournaments.ts: forge endpoint
+ *   - routes/admin.ts: raffle compute endpoint
  */
 export function resolveConfig(stored: unknown): TournamentConfig {
     return { ...DEFAULT_TOURNAMENT_CONFIG, ...(stored as Partial<TournamentConfig>) };
@@ -203,9 +192,9 @@ export interface CPIScores {
     cpiScore: number;
 }
 
-// Phase 8 item (c.1-4): granular CPI inputs surfaced in expanded leaderboard
-// row to give traders insight into why their sub-scores are what they are.
-// Computed on-demand by computeCPIWithDetails; not persisted.
+// Granular CPI inputs surfaced in expanded leaderboard row to give traders
+// insight into why their sub-scores are what they are. Computed on-demand
+// by computeCPIWithDetails; not persisted.
 export interface CPIDetails {
     // PnL granular (under PNL bar)
     totalPnl: number;
@@ -276,7 +265,7 @@ export interface AdrenaPosition {
     // Audit trail
     last_ix?: string;                 // on-chain tx signature
 
-    // Mutagen internals (informational — not used in CPI scoring)
+    // Mutagen internals (informational, not used in CPI scoring)
     pnl_volume_ratio?: number;
     points_pnl_volume_ratio?: number;
     points_duration?: number;
@@ -393,7 +382,7 @@ export interface SeasonConfig {
     qualificationSlots: number;
     tournamentConfig: TournamentConfig;
     pointsScheme: SeasonPointsScheme;
-    award2DayCategorySeasonPoints?: boolean; // default: false — enable season points for Risk Manager / Humble One
+    award2DayCategorySeasonPoints?: boolean; // default: false; enable season points for Risk Manager / Humble One
 }
 
 export const DEFAULT_SEASON_POINTS: SeasonPointsScheme = {
@@ -446,19 +435,19 @@ export interface FisherEntryDetail {
 }
 
 export interface FisherDetails {
-    // Phase 4 item 10 + D19: per-asset refactor.
+    // Per-asset refactor.
     // Top-level rank fields: wallet's rank in the category leaderboard (1-indexed,
     // null if wallet not ranked). Consumed by season-manager.ts for season points.
     longRank: number | null;          // rank in bottom_fisher leaderboard
     shortRank: number | null;         // rank in top_tick_traveler leaderboard
-    // Top-level aggregates (backward compat + fast display — "best" single entry across assets)
+    // Top-level aggregates (backward compat + fast display): "best" single entry across assets.
     longEntry: FisherEntryDetail | null;
     shortEntry: FisherEntryDetail | null;
     longPoints: number;
     shortPoints: number;
     totalPoints: number;
-    // Per-asset breakdown (item 10): best long/short entry per asset.
-    // Optional because pre-Phase-4 details JSONB lacks this field.
+    // Per-asset breakdown: best long/short entry per asset.
+    // Optional because older details JSONB rows lack this field.
     byAsset?: Record<string, {
         longEntry: FisherEntryDetail | null;
         shortEntry: FisherEntryDetail | null;
@@ -479,7 +468,7 @@ export interface RiskManagerDetails {
     // Top-level: best SL trade across all assets (backward compat)
     bestTrade: SLTPTradeDetail | null;
     candidateCount: number;
-    // Phase 4 item 10: per-asset breakdown.
+    // Per-asset breakdown.
     // Aggregate score at row level = avg (1 - |roi|) × 100 across per-asset best SLs.
     byAsset?: Record<string, {
         bestTrade: SLTPTradeDetail | null;
@@ -490,9 +479,9 @@ export interface RiskManagerDetails {
 export interface HumbleOneDetails {
     bestTrade: SLTPTradeDetail | null;
     candidateCount: number;
-    // Phase 4 item 10b: per-asset breakdown.
+    // Per-asset breakdown.
     // Aggregate score at row level = avg (roi × 100) across per-asset best TPs
-    // (matches ZeDef's mockup: SCORE = avg ROI × 100).
+    // (SCORE = avg ROI × 100).
     byAsset?: Record<string, {
         bestTrade: SLTPTradeDetail | null;
         candidateCount: number;
@@ -515,10 +504,10 @@ export interface LeverageStep {
 }
 
 export interface QuestProgressDetails {
-    // Phase 4 item 30: per-asset LM ladders. `byAsset` keys are asset symbols
-    // from config.assetList (e.g. 'SOL', 'BTC', 'BONK'). Each asset has
-    // independent long + short ladders.
-    // Phase 7.a: ladder length is now per-asset (variable). Length = asset.lmSteps?.length
+    // Per-asset LM ladders. `byAsset` keys are asset symbols from
+    // config.assetList (e.g. 'SOL', 'BTC', 'BONK'). Each asset has independent
+    // long + short ladders.
+    // Ladder length is per-asset (variable). Length = asset.lmSteps?.length
     // when assetList entry has lmSteps configured, else LEVERAGE_STEPS.length (10).
     // Step values for rendering are resolved client-side from tournament.config.assetList,
     // not exposed in this payload.
@@ -538,30 +527,25 @@ export interface OHLCBar {
     close: number;
 }
 
-// --- Pyth Lazer Feed ID Mapping moved to services/adrena-canonical.ts (Phase 8.k) ---
-// `ADRENA_TO_LAZER_FEED_ID` is now sourced from a pinned snapshot of the
-// canonical adrena-abi repo (configs/oracles/autonom.mainnet.json). Import
-// from `./services/adrena-canonical.js` instead of from this file.
-
-// --- Pyth Benchmarks Symbol Mapping (PRIMARY, Phase 8.f) ---
-// Phase 8.f promoted to primary OHLC source post call2aamir 2026-05-02 confirming
-// /api/oracle-bars is internal-only Next.js API. Pyth Lazer (via Adrena's proxy)
-// becomes fallback; see services/pyth-client.ts:fetchOHLCWithFallback.
+// --- Pyth Benchmarks Symbol Mapping (PRIMARY OHLC source) ---
+// Pyth Lazer (via Adrena's proxy) is the fallback; see
+// services/pyth-client.ts:fetchOHLCWithFallback.
 //
-// RWA additions (XAU/XAG/WTI) verified empirically 2026-05-02 against
-// benchmarks.pyth.network/v1/shims/tradingview/history?symbol=<X>&resolution=D:
-//   XAU close 2026-05-01 = $4,615   (Lazer 2056 capture: $4,614.83)  ✓ match
-//   XAG close 2026-05-01 = $75.37   (Lazer 2069 capture: $75.36)     ✓ match
-//   WTI close 2026-05-01 = $99.45   via Commodities.USOILSPOT
-//     (Lazer 2035 capture: $102.53; ~3% spot-vs-continuous offset acceptable
-//      since proximity scoring is ratio-based; spot continuous chosen for
-//      handover-friendliness — no monthly futures roll, unlike WTIM6/USD).
+// RWA additions (XAU/XAG/WTI) verified empirically against
+// benchmarks.pyth.network/v1/shims/tradingview/history?symbol=<X>&resolution=D.
+// Sample-day comparison vs Pyth Lazer captures:
+//   XAU = $4,615    (Lazer 2056: $4,614.83)  ✓ match
+//   XAG = $75.37    (Lazer 2069: $75.36)     ✓ match
+//   WTI = $99.45    via Commodities.USOILSPOT
+//     (Lazer 2035: $102.53; ~3% spot-vs-continuous offset acceptable since
+//      proximity scoring is ratio-based; spot continuous chosen for
+//      handover-friendliness, no monthly futures roll, unlike WTIM6/USD).
 export const ADRENA_TO_PYTH_SYMBOL: Record<string, string> = {
     SOL: 'Crypto.SOL/USD',
     BTC: 'Crypto.BTC/USD',
     BONK: 'Crypto.BONK/USD',
     JITOSOL: 'Crypto.JITOSOL/USD',
-    XAU: 'Metal.XAU/USD',                  // Phase 8.f
-    XAG: 'Metal.XAG/USD',                  // Phase 8.f
-    WTI: 'Commodities.USOILSPOT',          // Phase 8.f (spot continuous, no roll)
+    XAU: 'Metal.XAU/USD',
+    XAG: 'Metal.XAG/USD',
+    WTI: 'Commodities.USOILSPOT',          // spot continuous, no roll
 };

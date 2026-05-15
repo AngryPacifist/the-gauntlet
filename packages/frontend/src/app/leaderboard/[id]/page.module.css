@@ -1,7 +1,6 @@
 /* ============================================================================
-   Leaderboard Per-Tournament — Module CSS (Phase 8.i.5.D.4.1)
-   Replaces inline-style + Slate-palette literals from page.tsx with Adrena
-   CSS vars + named classes.
+   Leaderboard Per-Tournament: Module CSS.
+   Adrena CSS vars + named classes (replaces inline styles from page.tsx).
    ============================================================================ */
 
 .page {

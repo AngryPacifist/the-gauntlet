@@ -1,5 +1,5 @@
 // ============================================================================
-// Database Schema — Drizzle ORM (PostgreSQL)
+// Database Schema: Drizzle ORM (PostgreSQL)
 // ============================================================================
 
 import {
@@ -23,8 +23,8 @@ export const tournaments = pgTable('tournaments', {
     name: varchar('name', { length: 255 }).notNull(),
     status: varchar('status', { length: 20 }).notNull().default('registration'),
     config: jsonb('config').notNull(),
-    seasonId: integer('season_id'),  // nullable — standalone tournaments have no season
-    weekNumber: integer('week_number'),  // nullable — which week of the season (1-indexed)
+    seasonId: integer('season_id'),  // nullable: standalone tournaments have no season
+    weekNumber: integer('week_number'),  // nullable: which week of the season (1-indexed)
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
@@ -174,18 +174,18 @@ export const questProgress = pgTable('quest_progress', {
     wallet: varchar('wallet', { length: 44 }).notNull(),
     questType: varchar('quest_type', { length: 30 }).notNull(), // 'leverage_master'
     side: varchar('side', { length: 10 }).notNull(),  // 'long' | 'short'
-    // Phase 4 item 30: per-asset LM ladders. Each (tournament, wallet, side, asset, week) tracks
+    // Per-asset LM ladders. Each (tournament, wallet, side, asset, week) tracks
     // its own progression independently. Length 30 matches questType / symbol conventions.
     asset: varchar('asset', { length: 30 }).notNull(),
     stepsCompleted: jsonb('steps_completed').notNull(), // boolean[N] where N = stepTotal
     stepCount: integer('step_count').notNull().default(0), // denormalized for ORDER BY
-    // Phase 7.a D32: denormalized step total per row (variable per asset).
-    // Default 10 backfills pre-Phase-7 rows safely (crypto ladder length).
+    // Denormalized step total per row (variable per asset).
+    // Default 10 backfills legacy rows safely (crypto ladder length).
     stepTotal: integer('step_total').notNull().default(10),
     weekNumber: integer('week_number').notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 }, (table) => ({
-    // Phase 4 item 30: unique index now includes `asset` (6 cols instead of 5)
+    // Unique index includes `asset` (6 cols instead of 5).
     uniqueQuestWallet: uniqueIndex('idx_quest_progress_unique').on(
         table.tournamentId, table.wallet, table.questType, table.side, table.asset, table.weekNumber,
     ),
@@ -221,6 +221,6 @@ export const raffleDraws = pgTable('raffle_draws', {
     eligibleCount: integer('eligible_count').notNull(),
     totalTickets: integer('total_tickets').notNull(),
     winnerCount: integer('winner_count').notNull(),
-    winners: jsonb('winners').notNull(), // string[] — wallet addresses
+    winners: jsonb('winners').notNull(), // string[]: wallet addresses
     drawnAt: timestamp('drawn_at', { withTimezone: true }).notNull().defaultNow(),
 });

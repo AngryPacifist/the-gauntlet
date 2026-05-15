@@ -1,5 +1,5 @@
 // ============================================================================
-// Scoring Engine — Composite Performance Index (CPI)
+// Scoring Engine: Composite Performance Index (CPI)
 //
 // Computes a multi-dimensional score for trader performance during a round.
 //
@@ -8,21 +8,21 @@
 //
 // Each sub-score is normalized to 0-100.
 //
-// Changelog (ZeDef feedback, March 2026):
-//   - PnL: ROI denominator switched from collateral_amount to entry_size
-//     (entry_size is immutable at position open; collateral is gameable)
-//   - Risk: leverage penalty replaced with max drawdown metric
-//     (drawdown captures equity curve quality; leverage is no longer penalized)
-//   - Consistency: std-dev of daily ROIs replaced with profitable days ratio
-//     (avoids perverse incentive to trade conservatively on big winning days)
-//   - Activity: variety score weight doubled (20→40), trade count reduced
-//     (50→30). Asset count is dynamic via config, not hardcoded to 4.
-//
-// Changelog (April 2026 — API field sync):
-//   - PnL: denominator switched from entry_size × entry_price to exit_size.
-//     entry_size/exit_size are already USD; × entry_price was double-multiplying.
-//     exit_size accounts for upsizing. Denominator now closed-positions-only.
-//   - Activity: volume now uses API's precomputed volume field (with fallback).
+// Design notes:
+//   - PnL uses ROI on closed positions; denominator is exit_size (already USD,
+//     accounts for upsizing). entry_size is a fallback when exit_size is null.
+//   - Risk penalizes max drawdown, not leverage. Tactical high-leverage trading
+//     is a legitimate strategy; what matters is how well the equity curve is
+//     managed regardless of leverage.
+//   - Consistency uses profitable-days ratio (80%) + win rate bonus (20%).
+//     Replaced an earlier std-dev approach that perversely penalized big
+//     winning days.
+//   - Activity rewards trade count + log-scaled volume + asset variety.
+//     Variety is heavily weighted (40%) to push broad market engagement;
+//     asset count is dynamic via config, not hardcoded.
+//   - Activity volume uses the API's precomputed `volume` field with
+//     entry_size fallback. Size fields are already USD; do NOT multiply by
+//     entry_price (that's double-multiplying).
 // ============================================================================
 
 import type {
@@ -33,7 +33,7 @@ import type {
     TournamentConfig,
 } from '../types.js';
 import { DEFAULT_CPI_WEIGHTS } from '../types.js';
-// Round 2: single-source filter applied uniformly across all engines.
+// Single-source filter applied uniformly across all engines.
 // See services/scoring-filters.ts for full rationale.
 import { filterPositionsForScoring } from './scoring-filters.js';
 
@@ -47,10 +47,10 @@ export function computeCPI(
     weights: CPIWeights = DEFAULT_CPI_WEIGHTS,
     config?: Partial<TournamentConfig>,
 ): CPIScores {
-    // Round 2: single-source filter — assetList match + joinedAt + canonicalization
-    // + minPositionCollateral floor + minTradeDurationSec floor. Idempotent with
-    // tournament-manager.ts:469's filterValidPositions call (same coll+dur excluded
-    // by both layers).
+    // Single-source filter: assetList match + joinedAt + canonicalization
+    // + minPositionCollateral floor + minTradeDurationSec floor. Idempotent
+    // with tournament-manager.ts's filterValidPositions call (same coll+dur
+    // excluded by both layers).
     const filtered = filterPositionsForScoring(positions, (config ?? {}) as TournamentConfig);
 
     // If trader has zero valid positions (post-filter), all scores are 0
@@ -64,8 +64,8 @@ export function computeCPI(
         };
     }
 
-    // D22: variety denominator prefers assetList length when populated,
-    // falls back to supportedAssetCount for backward compat.
+    // Variety denominator prefers assetList length when populated;
+    // falls back to supportedAssetCount otherwise.
     const assetCount = Math.max(
         config?.assetList?.length ?? config?.supportedAssetCount ?? 4,
         1,
@@ -99,8 +99,8 @@ export function computeCPI(
 // Uses exit_size for closed positions (accounts for upsizing).
 // Falls back to entry_size for positions that lack exit_size (historical data).
 //
-// IMPORTANT: Do NOT multiply by entry_price — the size fields are already USD.
-// The previous formula (entry_size × entry_price) was double-multiplying.
+// IMPORTANT: Do NOT multiply by entry_price; the size fields are already USD.
+// Multiplying by entry_price double-counts.
 //
 // ROI = Total Net PnL (USD) / Total Close Exposure (USD)
 // PnL Score = normalize(ROI, -100%, +200%) → 0-100
@@ -324,7 +324,7 @@ function computeActivityScore(
 }
 
 // ============================================================================
-// Phase 8 item (c.1-4): granular CPI details for wallet-breakdown UI
+// Granular CPI details for wallet-breakdown UI
 //
 // Surfaces the underlying inputs used to compute each CPI sub-score, so the
 // expanded leaderboard row can show "ROI: X%" / "Liquidations: N/M · Max DD:
@@ -332,7 +332,7 @@ function computeActivityScore(
 // alongside each 0-100 bar.
 //
 // Implementation note: detail helpers and existing computeXScore wrappers
-// re-run a few of the same filters/reductions. Acceptable duplication —
+// re-run a few of the same filters/reductions. Acceptable duplication;
 // these are called at most once per wallet expansion (cached 5min in the
 // breakdown endpoint), and keeping computeCPI unchanged minimises blast
 // radius for this additive feature. Refactor to DRY if call frequency rises.
@@ -453,17 +453,16 @@ function computeActivityDetails(positions: AdrenaPosition[]): {
 }
 
 /**
- * Phase 8 item (c.1-4): compute CPI scores AND granular details.
+ * Compute CPI scores AND granular details.
  *
  * Returns both the 0-100 sub-scores (CPIScores) and the underlying granular
  * inputs (CPIDetails). Used by the wallet-breakdown endpoint to surface
  * granular details under each CPI sub-bar in the expanded leaderboard row.
  *
- * Re-runs the same asset-list + joinedAt filter as computeCPI (with
- * Phase 8.p canonicalization). Internally calls the existing
- * computeXScore functions for sub-scores AND the new computeXDetails
- * helpers for granular fields. Slight duplication accepted for low-risk
- * minimal-touch.
+ * Re-runs the same asset-list + joinedAt + canonicalization filter as
+ * computeCPI. Internally calls the existing computeXScore functions for
+ * sub-scores AND the new computeXDetails helpers for granular fields.
+ * Slight duplication accepted for low-risk minimal-touch.
  */
 export function computeCPIWithDetails(
     positions: AdrenaPosition[],
@@ -472,7 +471,7 @@ export function computeCPIWithDetails(
     weights: CPIWeights = DEFAULT_CPI_WEIGHTS,
     config?: Partial<TournamentConfig>,
 ): { scores: CPIScores; details: CPIDetails } {
-    // Round 2: single-source filter (mirror of computeCPI). See top of file.
+    // Single-source filter (mirror of computeCPI). See top of file.
     const filtered = filterPositionsForScoring(positions, (config ?? {}) as TournamentConfig);
 
     if (filtered.length === 0) {

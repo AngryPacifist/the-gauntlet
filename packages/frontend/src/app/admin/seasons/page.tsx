@@ -1,13 +1,12 @@
 'use client';
 
 // ============================================================================
-// Admin Seasons — Phase 5 item 19 sub-route
+// Admin Seasons
 //
 // Season CRUD + lifecycle (create, start, advance week, complete).
-// Extracted from monolithic /admin/page.tsx (pre-Phase-5).
 //
 // Admin secret: shared via localStorage (key 'adrena_admin_secret').
-// Modal-internal-draft pattern preserved (Phase 4 admin UX fix).
+// Modal-internal-draft pattern preserved.
 // ============================================================================
 
 import { useState, useEffect, useRef } from 'react';

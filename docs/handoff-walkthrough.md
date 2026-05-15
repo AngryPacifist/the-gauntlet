@@ -119,7 +119,6 @@ packages/
         tournament/[id]/                  Tournament detail + bracket view + analytics.
         categories/[tournamentId]/        Category leaderboards.
         raffle/[tournamentId]/            Raffle results + verification.
-        register/                         Public registration.
         seasons/                          Season list + detail.
         trader/[wallet]/                  Trader profile.
       lib/

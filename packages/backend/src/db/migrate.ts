@@ -1,5 +1,5 @@
 // ============================================================================
-// Database Migration — Push schema to PostgreSQL
+// Database Migration: push schema to PostgreSQL
 // ============================================================================
 
 import 'dotenv/config';
@@ -221,8 +221,8 @@ DO $$ BEGIN
   END IF;
 END $$;
 
--- Phase 4 item 30: add asset column to quest_progress + recreate unique index
--- Migration strategy (D18 — Option A): TRUNCATE existing rows (no meaningful per-asset
+-- Add asset column to quest_progress + recreate unique index.
+-- Migration strategy: TRUNCATE existing rows (no meaningful per-asset
 -- info in old single-ladder rows), ADD COLUMN NOT NULL (safe on empty table),
 -- DROP old unique index, CREATE new 6-col unique index. Backfill repopulates.
 DO $$ BEGIN
@@ -238,9 +238,9 @@ DO $$ BEGIN
   END IF;
 END $$;
 
--- Phase 4 item 30: bump daily_category_scores.category length to accommodate
--- per-asset LM slugs (leverage_master_SYMBOL_long|short). Idempotent: only alters
--- if current length is 30.
+-- Bump daily_category_scores.category length to accommodate per-asset LM
+-- slugs (leverage_master_SYMBOL_long|short). Idempotent: only alters if
+-- current length is 30.
 DO $$ BEGIN
   IF EXISTS (
     SELECT 1 FROM information_schema.columns
@@ -253,9 +253,9 @@ DO $$ BEGIN
   END IF;
 END $$;
 
--- Phase 7.a D32: add step_total column to quest_progress (denormalized step count
--- for variable-length per-asset ladders). Default 10 backfills existing rows
--- (matches pre-Phase-7 crypto ladder length).
+-- Add step_total column to quest_progress (denormalized step count for
+-- variable-length per-asset ladders). Default 10 backfills existing rows
+-- (matches the legacy crypto ladder length).
 DO $$ BEGIN
   IF NOT EXISTS (
     SELECT 1 FROM information_schema.columns
@@ -265,12 +265,11 @@ DO $$ BEGIN
   END IF;
 END $$;
 
--- Phase 8 fix (Day-42, surfaced live during T1 hourly tick): drop the legacy
--- 5-col UNIQUE constraint that the inline UNIQUE(...) clause in CREATE TABLE
--- created. The Phase 4 migration block (above) added the 6-col
--- idx_quest_progress_unique but the inline constraint was never explicitly
--- dropped — its DROP INDEX IF EXISTS targeted a name that the inline
--- constraint doesn't use.
+-- Drop the legacy 5-col UNIQUE constraint created by the inline UNIQUE(...)
+-- clause in CREATE TABLE. The earlier ALTER TABLE block above added the
+-- 6-col idx_quest_progress_unique but the inline constraint was never
+-- explicitly dropped; its DROP INDEX IF EXISTS targeted a name that the
+-- inline constraint doesn't use.
 --
 -- Symptom: per-asset LM INSERT fails with 5-col unique violation when a
 -- (tournament, wallet, side, week) tuple already has ANY asset row, even
@@ -280,9 +279,9 @@ END $$;
 --
 -- Recovery: dropping the constraint leaves the 6-col idx_quest_progress_unique
 -- in place. Existing rows trivially satisfy the looser 6-col uniqueness
--- (5-col is strictly stricter). Next hourly tick re-evaluates all wallets
--- from positions and INSERTs the missing per-asset rows cleanly — no data
--- corruption, just data that was previously failing to land.
+-- (5-col is strictly stricter). The next hourly tick re-evaluates all wallets
+-- from positions and INSERTs the missing per-asset rows cleanly, with no
+-- data corruption.
 DO $$ BEGIN
   IF EXISTS (
     SELECT 1 FROM information_schema.table_constraints

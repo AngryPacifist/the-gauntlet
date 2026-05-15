@@ -1,14 +1,13 @@
 'use client';
 
 // ============================================================================
-// Admin Tournaments — Phase 5 item 19 sub-route
+// Admin Tournaments
 //
 // Tournament CRUD + lifecycle (create, start, score, advance, cancel, delete) +
 // raffle controls (compute, draw, verify, reset) + category scoring trigger.
-// Extracted from monolithic /admin/page.tsx (pre-Phase-5).
 //
 // Admin secret: shared via localStorage (key 'adrena_admin_secret').
-// Modal-internal-draft pattern preserved (Phase 4 admin UX fix).
+// Modal-internal-draft pattern preserved.
 // ============================================================================
 
 import { useState, useEffect, useRef, useMemo } from 'react';
@@ -43,12 +42,11 @@ import styles from '../page.module.css';
 
 const ADMIN_SECRET_KEY = 'adrena_admin_secret';
 
-// Phase 8.h: KNOWN_LAZER_FEED_IDS dropped — feed_id now sourced from backend
-// /admin/tradable-assets response (which derives it from autonom's
-// source_feed_id in /last-trading-prices). Single source of truth.
+// feed_id is sourced from the backend /admin/tradable-assets response
+// (derived from autonom's source_feed_id in /last-trading-prices) so the
+// frontend doesn't carry a parallel hardcoded map.
 
-// Phase 8.a: preset prize distribution templates.
-// Triggered by ZeDef Apr 30 obs (2): manual array entry is error-prone;
+// Preset prize distribution templates: manual array entry is error-prone,
 // preset rule + total pool is cleaner. Admin enters Total Pool; system
 // auto-derives skill+raffle arrays from (skillSharePct, raffleSharePct)
 // split + (skillCurve, raffleCurve) percentages. Each curve sums to 100.
@@ -106,14 +104,14 @@ export default function AdminTournamentsPage() {
     const [loading, setLoading] = useState(true);
     const [adminSecret, setAdminSecret] = useState('');
 
-    // Create tournament modal (also reused as Edit modal — see Phase 7.f)
+    // Create tournament modal (also reused as Edit modal).
     const [showCreateModal, setShowCreateModal] = useState(false);
     const [newName, setNewName] = useState('');
     const [creating, setCreating] = useState(false);
     const [modalSecretDraft, setModalSecretDraft] = useState('');
-    // Phase 7.f: when non-null, the modal is in EDIT mode for this tournament id.
+    // When non-null, the modal is in EDIT mode for this tournament id.
     // Submit branches: createTournament (null) vs updateTournament (number).
-    // Restricted to `registration` status — Edit button only renders for that status.
+    // Restricted to `registration` status (Edit button only renders for that status).
     const [editingTournamentId, setEditingTournamentId] = useState<number | null>(null);
 
     // Config fields
@@ -141,8 +139,8 @@ export default function AdminTournamentsPage() {
     const [cfgPrizeCurrency, setCfgPrizeCurrency] = useState<'ADX' | 'USDC'>('ADX');
     const [cfgSkillPrizes, setCfgSkillPrizes] = useState('500, 300, 200');
     const [cfgRafflePrizes, setCfgRafflePrizes] = useState('100, 50, 25');
-    // Phase 8.a: preset prize distribution mode + state.
-    // 'manual' (default) = admin types arrays directly (current behavior).
+    // Preset prize distribution mode + state.
+    // 'manual' (default) = admin types arrays directly.
     // 'preset' = admin selects template + customizes shares/curves; arrays auto-derive.
     const [cfgPrizeMode, setCfgPrizeMode] = useState<'manual' | 'preset'>('manual');
     const [cfgPresetTemplateId, setCfgPresetTemplateId] = useState<string>(PRIZE_TEMPLATES[0].id);
@@ -151,18 +149,18 @@ export default function AdminTournamentsPage() {
     const [cfgSkillCurve, setCfgSkillCurve] = useState<string>(PRIZE_TEMPLATES[0].skillCurve.join(', '));
     const [cfgRaffleCurve, setCfgRaffleCurve] = useState<string>(PRIZE_TEMPLATES[0].raffleCurve.join(', '));
     const [cfgAssetList, setCfgAssetList] = useState<Array<{ symbol: string; mint?: string; joinedAt: string; feed_id?: number; lmSteps?: string; lmTolerance?: string }>>([]);
-    // Post-T1 batch (Item 1): multi-token sponsor entry.
+    // Multi-token sponsor entry.
     // Each sponsor contributes a list of tokens with amounts. skillPrizes +
     // rafflePrizes arrays become rank-weight ratios (same shape, reinterpreted).
     // Token entry fields:
     //   - symbol: 'ADX' | 'JTO' | 'USDC' | custom string
     //   - amount: token-denominated quantity (NOT USD)
-    //   - mint (Fork A): optional SPL mint; overrides KNOWN_PRIZE_TOKEN_MINT for
-    //     this symbol. Required if admin enters a custom symbol Jupiter can't
+    //   - mint: optional SPL mint; overrides KNOWN_PRIZE_TOKEN_MINT for this
+    //     symbol. Required if admin enters a custom symbol Jupiter can't
     //     resolve via the server-side default map.
-    //   - staticUsdPrice (Fork B): optional fallback USD/token; used by prices.ts
-    //     only when both Pyth + Jupiter return null for this token.
-    //   - custom: UI flag — true when symbol isn't one of {ADX, JTO, USDC}.
+    //   - staticUsdPrice: optional fallback USD/token; used by prices.ts only
+    //     when both Pyth + Jupiter return null for this token.
+    //   - custom: UI flag, true when symbol isn't one of {ADX, JTO, USDC}.
     const [cfgSponsors, setCfgSponsors] = useState<Array<{
         name: string;
         tokens: Array<{
@@ -174,9 +172,9 @@ export default function AdminTournamentsPage() {
         }>;
     }>>([]);
     const [cfgTokenUSDPrices, setCfgTokenUSDPrices] = useState<Record<string, number>>({});
-    // Phase 8.k state type matches /admin/tradable-assets enriched response.
+    // State type matches /admin/tradable-assets enriched response.
     // mint = main-pool SPL token mint (set for SOL/JITOSOL/BTC/WBTC/BONK/USDC; undefined for RWAs).
-    // synthetic_custody_mint = commodities-pool RWA synthetic-custody PDA (XAU/XAG/WTI only — informational).
+    // synthetic_custody_mint = commodities-pool RWA synthetic-custody PDA (XAU/XAG/WTI only, informational).
     const [cfgTradableAssets, setCfgTradableAssets] = useState<Array<{
         symbol: string;
         feed_id: number;
@@ -252,7 +250,7 @@ export default function AdminTournamentsPage() {
     useEffect(() => { loadAll(); }, []);
 
     function resetConfigDefaults() {
-        // Phase 7.f: also clear edit-mode state so next modal-open is a fresh CREATE.
+        // Also clear edit-mode state so next modal-open is a fresh CREATE.
         setEditingTournamentId(null);
         setNewName('');
         setCfgFormat('bracket');
@@ -279,7 +277,7 @@ export default function AdminTournamentsPage() {
         setCfgPrizeCurrency('ADX');
         setCfgSkillPrizes('500, 300, 200');
         setCfgRafflePrizes('100, 50, 25');
-        // Phase 8.a: reset preset state to first template's defaults
+        // Reset preset state to first template's defaults
         setCfgPrizeMode('manual');
         setCfgPresetTemplateId(PRIZE_TEMPLATES[0].id);
         setCfgSkillSharePct(PRIZE_TEMPLATES[0].skillSharePct);
@@ -287,7 +285,7 @@ export default function AdminTournamentsPage() {
         setCfgSkillCurve(PRIZE_TEMPLATES[0].skillCurve.join(', '));
         setCfgRaffleCurve(PRIZE_TEMPLATES[0].raffleCurve.join(', '));
         setCfgAssetList([]);
-        // Post-T1 batch (Item 1): reset multi-token sponsor state.
+        // Reset multi-token sponsor state.
         setCfgSponsors([]);
         setCfgTokenUSDPrices({});
     }
@@ -301,7 +299,7 @@ export default function AdminTournamentsPage() {
         }
     }
 
-    // Phase 7.f: populate Create modal state from an existing tournament.
+    // Populate Create modal state from an existing tournament.
     // Used by handleOpenEdit to pre-fill the form for an EDIT operation.
     // Mirrors resetConfigDefaults but reads from `t.config` instead of defaults.
     function populateCfgFromTournament(t: Tournament) {
@@ -340,8 +338,8 @@ export default function AdminTournamentsPage() {
             setCfgSkillPrizes('500, 300, 200');
             setCfgRafflePrizes('100, 50, 25');
         }
-        // Phase 8.a: edit mode always opens in manual (existing tournaments persist
-        // arrays, not percentages — admin can switch to preset to re-derive if desired).
+        // Edit mode always opens in manual (existing tournaments persist arrays,
+        // not percentages; admin can switch to preset to re-derive if desired).
         setCfgPrizeMode('manual');
         setCfgPresetTemplateId(PRIZE_TEMPLATES[0].id);
         setCfgSkillSharePct(PRIZE_TEMPLATES[0].skillSharePct);
@@ -362,7 +360,7 @@ export default function AdminTournamentsPage() {
             setCfgAssetList([]);
         }
 
-        // Post-T1 batch (Item 1): hydrate sponsors from tokens[] when present.
+        // Hydrate sponsors from tokens[] when present.
         // Group flat tokens by sponsor (matches admin form's nested shape).
         if (c.prizeTable?.tokens && c.prizeTable.tokens.length > 0) {
             const grouped = new Map<string, Array<{
@@ -386,7 +384,7 @@ export default function AdminTournamentsPage() {
         }
     }
 
-    // Phase 7.f: open Create modal in EDIT mode for an existing tournament.
+    // Open Create modal in EDIT mode for an existing tournament.
     // Restricted by caller to `registration` status (Edit button only renders for that).
     function handleOpenEdit(t: Tournament) {
         if (!adminSecret) { showToast('Enter admin secret on /admin landing first', 'error'); return; }
@@ -397,9 +395,9 @@ export default function AdminTournamentsPage() {
         loadTradableAssetsIfReady(adminSecret);
     }
 
-    // Phase 7.c: live prize-totals descriptor.
-    // Warns when skill+raffle sum doesn't match cfgPrizeTotalPool — ZeDef Apr 29
-    // hit this footgun (100k Total Pool, 1175 in array sums).
+    // Live prize-totals descriptor.
+    // Warns when skill+raffle sum doesn't match cfgPrizeTotalPool (otherwise
+    // the arrays can quietly disagree with the headline total).
     const prizeSums = useMemo(() => {
         const parse = (s: string) => s.split(',').map((x) => Number(x.trim())).filter((n) => !isNaN(n) && n > 0);
         const skillTotal = parse(cfgSkillPrizes).reduce((a, b) => a + b, 0);
@@ -409,10 +407,10 @@ export default function AdminTournamentsPage() {
         return { skillTotal, raffleTotal, combined, matches };
     }, [cfgSkillPrizes, cfgRafflePrizes, cfgPrizeTotalPool]);
 
-    // Phase 8.a: auto-derive skill/raffle arrays from preset shares + curves.
-    // Runs only when in preset mode. 7.c descriptor still catches mismatches
-    // (e.g. curve doesn't sum to 100, share% don't sum to 100).
-    // Defensive: NaN/negative inputs collapse to 0 — prevents "NaN, NaN, ..."
+    // Auto-derive skill/raffle arrays from preset shares + curves.
+    // Runs only when in preset mode. The live descriptor above still catches
+    // mismatches (e.g. curve doesn't sum to 100, share% don't sum to 100).
+    // Defensive: NaN/negative inputs collapse to 0 to prevent "NaN, NaN, ..."
     // strings appearing in cfgSkillPrizes/cfgRafflePrizes if admin pastes garbage
     // into a number input.
     useEffect(() => {
@@ -431,11 +429,11 @@ export default function AdminTournamentsPage() {
         setCfgRafflePrizes(raffleArr.join(', '));
     }, [cfgPrizeMode, cfgPrizeTotalPool, cfgSkillSharePct, cfgRaffleSharePct, cfgSkillCurve, cfgRaffleCurve]);
 
-    // Post-T1 batch (Item 1, Forks A+B): fetch live USD prices for tokens the
-    // admin has entered. Dedupe by symbol+mint so multi-sponsor tournaments
-    // with the same token query Pyth/Jupiter once. Static prices (Fork B) are
-    // surfaced per-row in the indicator below — not stored in this map (which
-    // only holds live Pyth/Jupiter results).
+    // Fetch live USD prices for tokens the admin has entered. Dedupe by
+    // symbol+mint so multi-sponsor tournaments with the same token query
+    // Pyth/Jupiter once. Static prices are surfaced per-row in the indicator
+    // below; they are not stored in this map (which only holds live
+    // Pyth/Jupiter results).
     useEffect(() => {
         const fetchTokens = (() => {
             const seen = new Map<string, { symbol: string; mint?: string }>();
@@ -462,7 +460,7 @@ export default function AdminTournamentsPage() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [JSON.stringify(cfgSponsors.flatMap((s) => s.tokens.map((t) => ({ symbol: t.symbol, mint: t.mint }))))]);
 
-    // Phase 8.a: when admin selects a different template, load its shares + curves.
+    // When admin selects a different template, load its shares + curves.
     function handleTemplateChange(templateId: string) {
         const tpl = PRIZE_TEMPLATES.find(t => t.id === templateId);
         if (!tpl) return;
@@ -510,7 +508,7 @@ export default function AdminTournamentsPage() {
             return;
         }
 
-        // Phase 7.a: validate per-asset lmSteps + lmTolerance (block submit on error,
+        // Validate per-asset lmSteps + lmTolerance (block submit on error,
         // matches existing fisherRankPoints validation pattern above).
         for (const a of cfgAssetList) {
             if (a.lmSteps && a.lmSteps.trim()) {
@@ -557,10 +555,9 @@ export default function AdminTournamentsPage() {
         };
 
         if (cfgPrizeEnabled) {
-            // Post-T1 batch (Item 1 + Forks A+B): validate sponsors + build multi-
-            // token prizeTable. Sponsors section replaces the single Currency
-            // dropdown; tokens carry sponsor name, symbol, amount, optional mint
-            // (Fork A), and optional staticUsdPrice (Fork B).
+            // Validate sponsors + build multi-token prizeTable. Sponsors section
+            // replaces the single Currency dropdown; tokens carry sponsor name,
+            // symbol, amount, optional mint, and optional staticUsdPrice.
             if (cfgSponsors.length === 0) {
                 showToast('At least one sponsor required when prize table is enabled', 'error');
                 return;
@@ -580,10 +577,10 @@ export default function AdminTournamentsPage() {
                         showToast(`Sponsor ${s.name}: token ${t.symbol} amount must be > 0`, 'error');
                         return;
                     }
-                    // Fork A: mint validation — if supplied, must look like a base58 pubkey
-                    // (32-44 chars). Lightweight check; real verification happens when
-                    // Jupiter fails to find it. Empty mint OK (server falls back to
-                    // KNOWN_PRIZE_TOKEN_MINT for ADX/JTO/USDC).
+                    // Mint validation: if supplied, must look like a base58 pubkey
+                    // (32-44 chars). Lightweight check; real verification happens
+                    // when Jupiter fails to find it. Empty mint OK (server falls
+                    // back to KNOWN_PRIZE_TOKEN_MINT for ADX/JTO/USDC).
                     if (t.mint && t.mint.trim()) {
                         const m = t.mint.trim();
                         if (m.length < 32 || m.length > 44 || !/^[1-9A-HJ-NP-Za-km-z]+$/.test(m)) {
@@ -591,7 +588,7 @@ export default function AdminTournamentsPage() {
                             return;
                         }
                     }
-                    // Fork B: staticUsdPrice validation — if supplied, must be > 0.
+                    // staticUsdPrice validation: if supplied, must be > 0.
                     if (t.staticUsdPrice !== undefined && (isNaN(t.staticUsdPrice) || t.staticUsdPrice <= 0)) {
                         showToast(`Sponsor ${s.name}: token ${t.symbol} static USD price must be > 0`, 'error');
                         return;
@@ -618,7 +615,7 @@ export default function AdminTournamentsPage() {
             );
             // Legacy `totalPool` + `currency` derived from sponsors for backward-compat.
             // New code reads `tokens` directly; legacy fields kept so older
-            // consumers (Drizzle JSONB shape, pre-migration tournaments) still parse.
+            // consumers (single-currency Drizzle JSONB shape) still parse.
             const primaryToken = flatTokens[0];
             config.prizeTable = {
                 totalPool: flatTokens.reduce((a, t) => a + t.amount, 0),
@@ -630,15 +627,14 @@ export default function AdminTournamentsPage() {
         }
         if (cfgAssetList.length > 0) {
             config.assetList = cfgAssetList.map((a) => {
-                // Phase 7.b + 7.a: assetList entry shape extended with feed_id (7.b),
-                // lmSteps (7.a), and lmTolerance (7.a).
+                // assetList entry shape includes feed_id, lmSteps, and lmTolerance.
                 const item: { symbol: string; mint?: string; joinedAt: string; feed_id?: number; lmSteps?: number[]; lmTolerance?: number } = {
                     symbol: a.symbol.trim(),
                     joinedAt: a.joinedAt,
                 };
                 if (a.mint && a.mint.trim()) item.mint = a.mint.trim();
                 if (typeof a.feed_id === 'number' && a.feed_id > 0) item.feed_id = a.feed_id;
-                // Phase 7.a: lmSteps + lmTolerance — already validated above, just parse + assign
+                // lmSteps + lmTolerance: already validated above, just parse + assign
                 if (a.lmSteps && a.lmSteps.trim()) {
                     const parsed = a.lmSteps.split(',').map((x) => Number(x.trim())).filter((n) => !isNaN(n) && n > 0);
                     if (parsed.length > 0) item.lmSteps = parsed;
@@ -653,7 +649,7 @@ export default function AdminTournamentsPage() {
 
         try {
             setCreating(true);
-            // Phase 7.f: branch on edit mode — update existing vs create new.
+            // Branch on edit mode: update existing vs create new.
             if (editingTournamentId !== null) {
                 await updateTournament(editingTournamentId, { name: newName.trim(), config }, effectiveSecret);
                 if (!adminSecret && modalSecretDraft) {
@@ -905,7 +901,7 @@ export default function AdminTournamentsPage() {
                         <div className={styles.controlActions}>
                             {t.status === 'registration' && (
                                 <>
-                                    {/* Phase 7.f: Edit button — opens Create modal in edit mode, only for registration status */}
+                                    {/* Edit button: opens Create modal in edit mode, only for registration status */}
                                     <button className="btn btn--secondary" onClick={() => handleOpenEdit(t)} disabled={actionLoading}>
                                         <Pencil size={14} /> Edit
                                     </button>
@@ -935,7 +931,7 @@ export default function AdminTournamentsPage() {
                                     </button>
                                     <button className="btn btn--secondary" onClick={() => {
                                         setDrawTournamentId(t.id);
-                                        // Phase 7.d: lock prizeCount to rafflePrizes.length on modal open.
+                                        // Lock prizeCount to rafflePrizes.length on modal open.
                                         const len = t.config.prizeTable?.rafflePrizes?.length;
                                         setDrawPrizeCount(len && len > 0 ? len : 3);
                                         setShowDrawModal(true);
@@ -960,7 +956,7 @@ export default function AdminTournamentsPage() {
                                     </button>
                                     <button className="btn btn--secondary" onClick={() => {
                                         setDrawTournamentId(t.id);
-                                        // Phase 7.d: lock prizeCount to rafflePrizes.length on modal open.
+                                        // Lock prizeCount to rafflePrizes.length on modal open.
                                         const len = t.config.prizeTable?.rafflePrizes?.length;
                                         setDrawPrizeCount(len && len > 0 ? len : 3);
                                         setShowDrawModal(true);
@@ -975,7 +971,7 @@ export default function AdminTournamentsPage() {
                                     </button>
                                 </>
                             )}
-                            {/* Quick-links — Section 3C "link to Forge pages" */}
+                            {/* Quick-links to view-side pages */}
                             {t.config.format === 'rank_only' ? (
                                 <a href={`/leaderboard/${t.id}`} className="btn btn--secondary">
                                     <ExternalLink size={14} /> View Forge
@@ -1185,10 +1181,9 @@ export default function AdminTournamentsPage() {
                                         <span className={styles.formHint}>Used by Preset mode below to derive Skill/Raffle arrays. After submit, the saved `totalPool` is replaced with `sum(sponsors.tokens.amount)`.</span>
                                     </div>
 
-                                    {/* Post-T1 batch (Item 1, Forks A+B): Sponsors section replaces the
-                                        single Currency dropdown. Admin adds sponsors; each sponsor adds
-                                        tokens (symbol + amount + optional mint + optional static USD).
-                                        Live USD running total derives from current Pyth/Jupiter prices. */}
+                                    {/* Sponsors section: admin adds sponsors; each sponsor adds tokens
+                                        (symbol + amount + optional mint + optional static USD). Live USD
+                                        running total derives from current Pyth/Jupiter prices. */}
                                     <div className={styles.formGroup}>
                                         <label className={styles.formLabel}>Sponsors / Token Pool</label>
                                         <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: 'var(--space-sm)' }}>
@@ -1235,7 +1230,7 @@ export default function AdminTournamentsPage() {
                                                                         : t) }
                                                                     : s))}
                                                                 min={0} />
-                                                            {/* Fork A: optional mint override. */}
+                                                            {/* Optional mint override. */}
                                                             <input type="text" className="input input--mono" placeholder="Mint (optional, Fork A)"
                                                                 value={tok.mint ?? ''}
                                                                 title="Optional SPL token mint pubkey. Required for custom tokens Jupiter can't resolve via the server-side default map. Empty for ADX/JTO/USDC."
@@ -1247,7 +1242,7 @@ export default function AdminTournamentsPage() {
                                                                             : t) }
                                                                         : s));
                                                                 }} />
-                                                            {/* Fork B: optional static USD fallback. */}
+                                                            {/* Optional static USD fallback. */}
                                                             <input type="number" className="input input--mono" placeholder="Static $/tok (Fork B)"
                                                                 value={tok.staticUsdPrice ?? ''}
                                                                 step="0.000001" min="0"
@@ -1302,7 +1297,7 @@ export default function AdminTournamentsPage() {
                                             ).toLocaleString('en-US', { maximumFractionDigits: 0 })}
                                         </div>
                                     </div>
-                                    {/* Phase 8.a: Mode toggle (Manual / Preset) */}
+                                    {/* Mode toggle (Manual / Preset) */}
                                     <div className={styles.formGroup}>
                                         <label className={styles.formLabel}>Distribution Mode</label>
                                         <div style={{ display: 'flex', gap: 'var(--space-sm)' }}>
@@ -1321,7 +1316,7 @@ export default function AdminTournamentsPage() {
                                                 : 'Pick template + customize percentages. Skill/Raffle prize arrays auto-derived (read-only).'}
                                         </span>
                                     </div>
-                                    {/* Phase 8.a: Preset-only inputs (template dropdown + share% + curves) */}
+                                    {/* Preset-only inputs (template dropdown + share% + curves) */}
                                     {cfgPrizeMode === 'preset' && (
                                         <>
                                             <div className={styles.formGroup}>
@@ -1383,7 +1378,7 @@ export default function AdminTournamentsPage() {
                                             <span className={styles.formHint}>Auto-derived from preset shares + curves above.</span>
                                         )}
                                     </div>
-                                    {/* Phase 7.c: live prize-totals descriptor — warns when sums don't match Total Pool */}
+                                    {/* Live prize-totals descriptor: warns when sums don't match Total Pool */}
                                     <div style={{
                                         padding: '0.5rem 0.75rem',
                                         background: prizeSums.matches ? 'rgba(34, 197, 94, 0.08)' : 'rgba(245, 158, 11, 0.08)',
@@ -1420,12 +1415,12 @@ export default function AdminTournamentsPage() {
                             )}
                             {cfgAssetList.map((asset, i) => (
                                 <div key={i} className={styles.assetRow}>
-                                    {/* Phase 8.i.5.D.3 + 5.D.6.3 Site 1: labeled grid + Custom Select.
-                                     * Custom Select replaces native <select>+free-text fallback (8.h pattern).
+                                    {/* Labeled grid + Custom Select.
+                                     * Custom Select replaces a native <select>+free-text fallback.
                                      * If cfgTradableAssets empty (admin secret not yet loaded), Select shows "No options".
                                      * Hint combines both `mint` (main-pool SPL token mint) AND `synthetic_custody_mint`
-                                     * (commodities-pool RWA synth PDA) per D45 — both must remain admin-visible.
-                                     * Engines do NOT match against synth PDA (RWA position.token_account_mint = "1111…"). */}
+                                     * (commodities-pool RWA synth PDA): both must remain admin-visible. Engines do NOT
+                                     * match against synth PDA (RWA position.token_account_mint = "1111…"). */}
                                     <div className={styles.assetRowField}>
                                         <label className={styles.assetRowFieldLabel}>Symbol</label>
                                         <Select

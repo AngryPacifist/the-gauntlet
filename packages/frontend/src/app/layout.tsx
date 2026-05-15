@@ -14,9 +14,9 @@ export default function RootLayout({
 }) {
   const pathname = usePathname();
 
-  // Phase 5 item 18: dynamic "Tournament" link target.
-  // - Resolves to the current active tournament (singleton per item 21).
-  // - Falls back to most-recent completed tournament (D-18.1).
+  // Dynamic "Tournament" link target.
+  // - Resolves to the current active tournament (singleton).
+  // - Falls back to most-recent completed tournament.
   // - Format-aware: Forge (rank_only) → /leaderboard/:id, Gauntlet (bracket) → /tournament/:id
   //   (the bracket-format /tournament/:id auto-redirects to /leaderboard/:id for rank_only,
   //    so direct routing avoids the bounce flash).
@@ -54,10 +54,10 @@ export default function RootLayout({
     return () => { cancelled = true; };
   }, []);
 
-  // Phase 5 item 18: simplified 3-link nav.
-  // Removed from nav: Dashboard, The Forge, Admin (D-18.2 keeps `/` reachable via logo + direct URL;
-  // Forge URL-only at /forge; Admin URL-only at /admin per Round 3 + definitive item 19).
-  // Logo (below) keeps "The Gauntlet" platform branding (D-18.5) and links to / (D-18.4).
+  // Simplified 3-link nav.
+  // Removed from nav: Dashboard, The Forge, Admin. `/` remains reachable via logo + direct URL;
+  // Forge is URL-only at /forge; Admin is URL-only at /admin.
+  // Logo (below) keeps "The Gauntlet" platform branding and links to /.
   const navLinks: Array<{ href: string; label: string; disabled: boolean }> = [
     { href: tournamentLink.href, label: 'Tournament', disabled: tournamentLink.disabled },
     { href: '/seasons', label: 'Seasons', disabled: false },
@@ -74,8 +74,8 @@ export default function RootLayout({
         />
       </head>
       <body>
-        {/* Trailing slash intentional: hides nav on /leaderboard/[id] (per-tournament view, Phase 1 item 1)
-            but SHOWS nav on /leaderboard (Phase 5 cumulative LB, item 20 — nav-accessible feature). */}
+        {/* Trailing slash intentional: hides nav on /leaderboard/[id] (per-tournament view)
+            but SHOWS nav on /leaderboard (cumulative leaderboard, nav-accessible feature). */}
         {!pathname.startsWith('/leaderboard/') && (
           <nav className="nav">
             <div className="container nav__inner">
