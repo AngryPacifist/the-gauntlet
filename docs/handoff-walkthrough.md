@@ -401,13 +401,12 @@ Skip Drizzle's internal schema unless you're adding tables. The schema is in `db
 
 ## Open items at handover
 
-These are noted in the project's CLAUDE.md and various brain docs. None block handover, but flagging for awareness:
+None block the handover. Flagging for awareness:
 
-- Forge -> Gauntlet carryover: auto-register Forge participants in the next Gauntlet season. Approved by ZeDef but not yet built.
-- Registration-free Forge: ZeDef wants any active Adrena trader auto-included. Currently requires explicit registration.
-- Fallen Fighters UX: eliminated traders aren't notified they're being scored for consolation.
-- CORS lockdown: currently open. Restrict to production frontend domain.
-- Cumulative leaderboard caching: currently on-demand compute. A TTL cache layer is the natural next step if load demands it.
+- Forge -> Gauntlet carryover: backend shipped (`POST /api/seasons/:id/carryover` route + `carryoverForgeParticipants` in `services/season-manager.ts`). Frontend admin-UI button and `lib/api.ts` wrapper are not yet wired; operators trigger via curl with the admin secret in the interim.
+- Registration-free Forge: auto-include any active Adrena trader without an explicit `POST /api/register`. No auto-include path against Adrena's active-trader list exists yet; the current `registerWallet` still requires the explicit POST.
+- Fallen Fighters proactive notification: the leaderboard renders an in-app FF banner for bracket tournaments (see `FF_DESCRIPTION` in `lib/quest-descriptions.ts` + the `.ffCard` block in `leaderboard/[id]/page.tsx`). No push / email / Discord notification when a trader is eliminated. Adrena's integration can wire that against existing notification surfaces.
+- CORS lockdown: backend currently calls `cors()` with no origin restriction (`backend/src/index.ts:24`). The `CORS_ORIGIN` env var is documented in `deployment-guide.md` but not yet consumed. Restrict to the production frontend domain before mainnet.
 
 ## Contact + handoff context
 
