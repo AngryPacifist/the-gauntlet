@@ -29,6 +29,7 @@ import {
     adminScoreCategories,
     adminResetRaffle,
     adminGetTradableAssets,
+    getTokenUSDPrices,
     type Tournament,
     type TournamentConfig,
 } from '@/lib/api';
@@ -150,6 +151,29 @@ export default function AdminTournamentsPage() {
     const [cfgSkillCurve, setCfgSkillCurve] = useState<string>(PRIZE_TEMPLATES[0].skillCurve.join(', '));
     const [cfgRaffleCurve, setCfgRaffleCurve] = useState<string>(PRIZE_TEMPLATES[0].raffleCurve.join(', '));
     const [cfgAssetList, setCfgAssetList] = useState<Array<{ symbol: string; mint?: string; joinedAt: string; feed_id?: number; lmSteps?: string; lmTolerance?: string }>>([]);
+    // Post-T1 batch (Item 1): multi-token sponsor entry.
+    // Each sponsor contributes a list of tokens with amounts. skillPrizes +
+    // rafflePrizes arrays become rank-weight ratios (same shape, reinterpreted).
+    // Token entry fields:
+    //   - symbol: 'ADX' | 'JTO' | 'USDC' | custom string
+    //   - amount: token-denominated quantity (NOT USD)
+    //   - mint (Fork A): optional SPL mint; overrides KNOWN_PRIZE_TOKEN_MINT for
+    //     this symbol. Required if admin enters a custom symbol Jupiter can't
+    //     resolve via the server-side default map.
+    //   - staticUsdPrice (Fork B): optional fallback USD/token; used by prices.ts
+    //     only when both Pyth + Jupiter return null for this token.
+    //   - custom: UI flag — true when symbol isn't one of {ADX, JTO, USDC}.
+    const [cfgSponsors, setCfgSponsors] = useState<Array<{
+        name: string;
+        tokens: Array<{
+            symbol: string;
+            amount: number;
+            mint?: string;
+            staticUsdPrice?: number;
+            custom?: boolean;
+        }>;
+    }>>([]);
+    const [cfgTokenUSDPrices, setCfgTokenUSDPrices] = useState<Record<string, number>>({});
     // Phase 8.k state type matches /admin/tradable-assets enriched response.
     // mint = main-pool SPL token mint (set for SOL/JITOSOL/BTC/WBTC/BONK/USDC; undefined for RWAs).
     // synthetic_custody_mint = commodities-pool RWA synthetic-custody PDA (XAU/XAG/WTI only — informational).
@@ -263,6 +287,9 @@ export default function AdminTournamentsPage() {
         setCfgSkillCurve(PRIZE_TEMPLATES[0].skillCurve.join(', '));
         setCfgRaffleCurve(PRIZE_TEMPLATES[0].raffleCurve.join(', '));
         setCfgAssetList([]);
+        // Post-T1 batch (Item 1): reset multi-token sponsor state.
+        setCfgSponsors([]);
+        setCfgTokenUSDPrices({});
     }
 
     function commitSecret(value: string) {
@@ -334,6 +361,29 @@ export default function AdminTournamentsPage() {
         } else {
             setCfgAssetList([]);
         }
+
+        // Post-T1 batch (Item 1): hydrate sponsors from tokens[] when present.
+        // Group flat tokens by sponsor (matches admin form's nested shape).
+        if (c.prizeTable?.tokens && c.prizeTable.tokens.length > 0) {
+            const grouped = new Map<string, Array<{
+                symbol: string; amount: number; mint?: string;
+                staticUsdPrice?: number; custom?: boolean;
+            }>>();
+            for (const t of c.prizeTable.tokens) {
+                const arr = grouped.get(t.sponsor) ?? [];
+                arr.push({
+                    symbol: t.symbol,
+                    amount: t.amount,
+                    mint: t.mint,
+                    staticUsdPrice: t.staticUsdPrice,
+                    custom: !['ADX', 'JTO', 'USDC'].includes(t.symbol),
+                });
+                grouped.set(t.sponsor, arr);
+            }
+            setCfgSponsors(Array.from(grouped, ([name, tokens]) => ({ name, tokens })));
+        } else {
+            setCfgSponsors([]);
+        }
     }
 
     // Phase 7.f: open Create modal in EDIT mode for an existing tournament.
@@ -380,6 +430,37 @@ export default function AdminTournamentsPage() {
         setCfgSkillPrizes(skillArr.join(', '));
         setCfgRafflePrizes(raffleArr.join(', '));
     }, [cfgPrizeMode, cfgPrizeTotalPool, cfgSkillSharePct, cfgRaffleSharePct, cfgSkillCurve, cfgRaffleCurve]);
+
+    // Post-T1 batch (Item 1, Forks A+B): fetch live USD prices for tokens the
+    // admin has entered. Dedupe by symbol+mint so multi-sponsor tournaments
+    // with the same token query Pyth/Jupiter once. Static prices (Fork B) are
+    // surfaced per-row in the indicator below — not stored in this map (which
+    // only holds live Pyth/Jupiter results).
+    useEffect(() => {
+        const fetchTokens = (() => {
+            const seen = new Map<string, { symbol: string; mint?: string }>();
+            for (const s of cfgSponsors) {
+                for (const t of s.tokens) {
+                    const sym = t.symbol.trim();
+                    if (!sym) continue;
+                    const key = `${sym}|${t.mint ?? ''}`;
+                    if (!seen.has(key)) seen.set(key, { symbol: sym, mint: t.mint });
+                }
+            }
+            return Array.from(seen.values());
+        })();
+        if (fetchTokens.length === 0) return;
+        getTokenUSDPrices(fetchTokens).then((data) => {
+            const map: Record<string, number> = {};
+            for (const [sym, v] of Object.entries(data)) {
+                if (v.usd !== null && v.usd !== undefined && v.source !== 'static') {
+                    map[sym] = v.usd;
+                }
+            }
+            setCfgTokenUSDPrices(map);
+        }).catch(() => { /* ignore */ });
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [JSON.stringify(cfgSponsors.flatMap((s) => s.tokens.map((t) => ({ symbol: t.symbol, mint: t.mint }))))]);
 
     // Phase 8.a: when admin selects a different template, load its shares + curves.
     function handleTemplateChange(templateId: string) {
@@ -476,7 +557,76 @@ export default function AdminTournamentsPage() {
         };
 
         if (cfgPrizeEnabled) {
-            config.prizeTable = { totalPool: cfgPrizeTotalPool, currency: cfgPrizeCurrency, skillPrizes, rafflePrizes };
+            // Post-T1 batch (Item 1 + Forks A+B): validate sponsors + build multi-
+            // token prizeTable. Sponsors section replaces the single Currency
+            // dropdown; tokens carry sponsor name, symbol, amount, optional mint
+            // (Fork A), and optional staticUsdPrice (Fork B).
+            if (cfgSponsors.length === 0) {
+                showToast('At least one sponsor required when prize table is enabled', 'error');
+                return;
+            }
+            const tokenPairs = new Set<string>();
+            for (const s of cfgSponsors) {
+                if (!s.name.trim()) {
+                    showToast('Every sponsor must have a name', 'error');
+                    return;
+                }
+                for (const t of s.tokens) {
+                    if (!t.symbol.trim()) {
+                        showToast(`Sponsor ${s.name}: token symbol required`, 'error');
+                        return;
+                    }
+                    if (t.amount <= 0) {
+                        showToast(`Sponsor ${s.name}: token ${t.symbol} amount must be > 0`, 'error');
+                        return;
+                    }
+                    // Fork A: mint validation — if supplied, must look like a base58 pubkey
+                    // (32-44 chars). Lightweight check; real verification happens when
+                    // Jupiter fails to find it. Empty mint OK (server falls back to
+                    // KNOWN_PRIZE_TOKEN_MINT for ADX/JTO/USDC).
+                    if (t.mint && t.mint.trim()) {
+                        const m = t.mint.trim();
+                        if (m.length < 32 || m.length > 44 || !/^[1-9A-HJ-NP-Za-km-z]+$/.test(m)) {
+                            showToast(`Sponsor ${s.name}: token ${t.symbol} mint must be a valid base58 pubkey (32-44 chars)`, 'error');
+                            return;
+                        }
+                    }
+                    // Fork B: staticUsdPrice validation — if supplied, must be > 0.
+                    if (t.staticUsdPrice !== undefined && (isNaN(t.staticUsdPrice) || t.staticUsdPrice <= 0)) {
+                        showToast(`Sponsor ${s.name}: token ${t.symbol} static USD price must be > 0`, 'error');
+                        return;
+                    }
+                    const pairKey = `${s.name.trim()}|${t.symbol.trim()}`;
+                    if (tokenPairs.has(pairKey)) {
+                        showToast(`Duplicate (sponsor, token) pair: ${s.name} + ${t.symbol}`, 'error');
+                        return;
+                    }
+                    tokenPairs.add(pairKey);
+                }
+            }
+            const flatTokens = cfgSponsors.flatMap((s) =>
+                s.tokens.map((t) => {
+                    const item: { sponsor: string; symbol: string; amount: number; mint?: string; staticUsdPrice?: number } = {
+                        sponsor: s.name.trim(),
+                        symbol: t.symbol.trim(),
+                        amount: t.amount,
+                    };
+                    if (t.mint && t.mint.trim()) item.mint = t.mint.trim();
+                    if (t.staticUsdPrice !== undefined && t.staticUsdPrice > 0) item.staticUsdPrice = t.staticUsdPrice;
+                    return item;
+                }),
+            );
+            // Legacy `totalPool` + `currency` derived from sponsors for backward-compat.
+            // New code reads `tokens` directly; legacy fields kept so older
+            // consumers (Drizzle JSONB shape, pre-migration tournaments) still parse.
+            const primaryToken = flatTokens[0];
+            config.prizeTable = {
+                totalPool: flatTokens.reduce((a, t) => a + t.amount, 0),
+                currency: primaryToken?.symbol ?? 'ADX',
+                skillPrizes,
+                rafflePrizes,
+                tokens: flatTokens,
+            };
         }
         if (cfgAssetList.length > 0) {
             config.assetList = cfgAssetList.map((a) => {
@@ -1029,22 +1179,127 @@ export default function AdminTournamentsPage() {
                             </div>
                             {cfgPrizeEnabled && (
                                 <>
-                                    <div className={styles.formGrid}>
-                                        <div className={styles.formGroup}>
-                                            <label className={styles.formLabel}>Total Pool</label>
-                                            <input type="number" className="input input--mono" value={cfgPrizeTotalPool} onChange={(e) => setCfgPrizeTotalPool(Number(e.target.value))} min={0} />
+                                    <div className={styles.formGroup}>
+                                        <label className={styles.formLabel}>Total Pool (informational — overridden by sum of sponsor token amounts at submit)</label>
+                                        <input type="number" className="input input--mono" value={cfgPrizeTotalPool} onChange={(e) => setCfgPrizeTotalPool(Number(e.target.value))} min={0} />
+                                        <span className={styles.formHint}>Used by Preset mode below to derive Skill/Raffle arrays. After submit, the saved `totalPool` is replaced with `sum(sponsors.tokens.amount)`.</span>
+                                    </div>
+
+                                    {/* Post-T1 batch (Item 1, Forks A+B): Sponsors section replaces the
+                                        single Currency dropdown. Admin adds sponsors; each sponsor adds
+                                        tokens (symbol + amount + optional mint + optional static USD).
+                                        Live USD running total derives from current Pyth/Jupiter prices. */}
+                                    <div className={styles.formGroup}>
+                                        <label className={styles.formLabel}>Sponsors / Token Pool</label>
+                                        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: 'var(--space-sm)' }}>
+                                            Each sponsor contributes one or more tokens. Live USD totals derive from current prices.
+                                            Optional per-token mint (Fork A) lets you add any SPL token without a code change;
+                                            optional Static $/tok (Fork B) is used only if Pyth + Jupiter both return null.
                                         </div>
-                                        <div className={styles.formGroup}>
-                                            <label className={styles.formLabel}>Currency</label>
-                                            <Select
-                                                ariaLabel="Prize currency"
-                                                value={cfgPrizeCurrency}
-                                                onChange={(v) => setCfgPrizeCurrency(v as 'ADX' | 'USDC')}
-                                                options={[
-                                                    { value: 'ADX', label: 'ADX' },
-                                                    { value: 'USDC', label: 'USDC' },
-                                                ]}
-                                            />
+                                        {cfgSponsors.map((sponsor, sIdx) => (
+                                            <div key={sIdx} className={styles.sponsorRow}>
+                                                <input type="text" className="input" placeholder="Sponsor name (e.g. Adrena Foundation)"
+                                                    value={sponsor.name}
+                                                    onChange={(e) => setCfgSponsors((prev) => prev.map((s, j) => j === sIdx ? { ...s, name: e.target.value } : s))}
+                                                    style={{ flex: 1 }} />
+                                                <button type="button" className="btn btn--secondary"
+                                                    onClick={() => setCfgSponsors((prev) => prev.filter((_, j) => j !== sIdx))}>×</button>
+                                                <div className={styles.sponsorTokensWrap}>
+                                                    {sponsor.tokens.map((tok, tIdx) => (
+                                                        <div key={tIdx} className={styles.sponsorTokenRow}>
+                                                            <Select
+                                                                ariaLabel="Token symbol"
+                                                                value={tok.symbol}
+                                                                onChange={(symbol) => {
+                                                                    const fromKnown = ['ADX', 'JTO', 'USDC'].includes(symbol);
+                                                                    setCfgSponsors((prev) => prev.map((s, j) => j === sIdx
+                                                                        ? { ...s, tokens: s.tokens.map((t, k) => k === tIdx
+                                                                            ? { ...t, symbol, custom: !fromKnown }
+                                                                            : t) }
+                                                                        : s));
+                                                                }}
+                                                                placeholder="— select token —"
+                                                                options={[
+                                                                    { value: 'ADX', label: 'ADX' },
+                                                                    { value: 'JTO', label: 'JTO' },
+                                                                    { value: 'USDC', label: 'USDC' },
+                                                                    // Admin can type a non-standard symbol in the mint field
+                                                                    // below; engine + display handle it as 'custom: true'.
+                                                                ]}
+                                                            />
+                                                            <input type="number" className="input input--mono" placeholder="Amount"
+                                                                value={tok.amount}
+                                                                onChange={(e) => setCfgSponsors((prev) => prev.map((s, j) => j === sIdx
+                                                                    ? { ...s, tokens: s.tokens.map((t, k) => k === tIdx
+                                                                        ? { ...t, amount: Number(e.target.value) }
+                                                                        : t) }
+                                                                    : s))}
+                                                                min={0} />
+                                                            {/* Fork A: optional mint override. */}
+                                                            <input type="text" className="input input--mono" placeholder="Mint (optional, Fork A)"
+                                                                value={tok.mint ?? ''}
+                                                                title="Optional SPL token mint pubkey. Required for custom tokens Jupiter can't resolve via the server-side default map. Empty for ADX/JTO/USDC."
+                                                                onChange={(e) => {
+                                                                    const m = e.target.value.trim() || undefined;
+                                                                    setCfgSponsors((prev) => prev.map((s, j) => j === sIdx
+                                                                        ? { ...s, tokens: s.tokens.map((t, k) => k === tIdx
+                                                                            ? { ...t, mint: m }
+                                                                            : t) }
+                                                                        : s));
+                                                                }} />
+                                                            {/* Fork B: optional static USD fallback. */}
+                                                            <input type="number" className="input input--mono" placeholder="Static $/tok (Fork B)"
+                                                                value={tok.staticUsdPrice ?? ''}
+                                                                step="0.000001" min="0"
+                                                                title="Optional static USD/token fallback. Used only when both Pyth + Jupiter return null. Leave empty for live-only pricing."
+                                                                onChange={(e) => {
+                                                                    const v = e.target.value.trim();
+                                                                    const num = v ? Number(v) : undefined;
+                                                                    setCfgSponsors((prev) => prev.map((s, j) => j === sIdx
+                                                                        ? { ...s, tokens: s.tokens.map((t, k) => k === tIdx
+                                                                            ? { ...t, staticUsdPrice: (num != null && !isNaN(num) && num > 0) ? num : undefined }
+                                                                            : t) }
+                                                                        : s));
+                                                                }} />
+                                                            <span className={styles.sponsorTokenUSDHint}>
+                                                                {(() => {
+                                                                    const live = cfgTokenUSDPrices[tok.symbol];
+                                                                    const usdPerTok = live != null && live > 0
+                                                                        ? live
+                                                                        : (tok.staticUsdPrice ?? 0);
+                                                                    const indicator = live != null && live > 0
+                                                                        ? 'live'
+                                                                        : (tok.staticUsdPrice ? 'static' : '—');
+                                                                    return `≈ $${(tok.amount * usdPerTok).toLocaleString('en-US', { maximumFractionDigits: 0 })} (${indicator})`;
+                                                                })()}
+                                                            </span>
+                                                            <button type="button" className="btn btn--secondary"
+                                                                onClick={() => setCfgSponsors((prev) => prev.map((s, j) => j === sIdx
+                                                                    ? { ...s, tokens: s.tokens.filter((_, k) => k !== tIdx) }
+                                                                    : s))}>×</button>
+                                                        </div>
+                                                    ))}
+                                                    <button type="button" className="btn btn--secondary"
+                                                        onClick={() => setCfgSponsors((prev) => prev.map((s, j) => j === sIdx
+                                                            ? { ...s, tokens: [...s.tokens, { symbol: 'ADX', amount: 0 }] }
+                                                            : s))}>
+                                                        + Add token
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        ))}
+                                        <button type="button" className="btn btn--secondary"
+                                            onClick={() => setCfgSponsors((prev) => [...prev, { name: '', tokens: [{ symbol: 'ADX', amount: 0 }] }])}>
+                                            + Add sponsor
+                                        </button>
+                                        <div className={styles.sponsorTotalRow}>
+                                            <strong>Total USD (live):</strong> ${cfgSponsors.reduce((sum, s) =>
+                                                sum + s.tokens.reduce((sm, t) => {
+                                                    const live = cfgTokenUSDPrices[t.symbol];
+                                                    const usdPerTok = live != null && live > 0 ? live : (t.staticUsdPrice ?? 0);
+                                                    return sm + t.amount * usdPerTok;
+                                                }, 0), 0
+                                            ).toLocaleString('en-US', { maximumFractionDigits: 0 })}
                                         </div>
                                     </div>
                                     {/* Phase 8.a: Mode toggle (Manual / Preset) */}

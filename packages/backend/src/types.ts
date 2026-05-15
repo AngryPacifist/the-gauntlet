@@ -31,12 +31,58 @@ export interface TournamentConfig {
     // Seeded brackets (programmatic — set by Season Final logic, not admin UI)
     seededWallets?: string[];         // For Final tournaments: wallets ordered by season standing
 
-    // Prize distribution (optional — wired in admin UI per Phase 3 item 16)
+    // Prize distribution (optional — wired in admin UI per Phase 3 item 16,
+    // extended post-T1 batch for multi-token / sponsor visibility).
     prizeTable?: {
-        totalPool: number;            // Total prize pool amount
-        currency: string;             // Prize currency (e.g. 'ADX', 'USDC')
-        skillPrizes: number[];        // Amounts for rank 1, 2, 3... (top 30% skill prizes)
-        rafflePrizes: number[];       // Amounts for raffle winner 1, 2, 3...
+        /** @deprecated single-currency total — derive from `tokens` if present.
+         *  Kept for backward compat with pre-multi-token tournaments. */
+        totalPool: number;
+        /** @deprecated single-currency symbol — see `tokens` for multi-sponsor. */
+        currency: string;
+        /** Rank-weight ratios (post-multi-token interpretation). Per-rank share
+         *  of every token = (skillPrizes[N-1] / totalWeight) × token.amount,
+         *  where totalWeight = sum(skillPrizes) + sum(rafflePrizes). For
+         *  single-sponsor tournaments these can still be read as literal
+         *  token amounts (math is identical). */
+        skillPrizes: number[];
+        rafflePrizes: number[];
+        /** Multi-token sponsor list. Each entry is a per-sponsor contribution
+         *  of a single token. A sponsor with multiple tokens appears as
+         *  multiple entries. Per-rank distribution: every winner gets a
+         *  proportional share of every token. Conservation: per-token total
+         *  equals the entered amount, summed across all rank + raffle payouts.
+         *
+         *  Migration: T1's pre-multi-token row gets a virtual single-sponsor
+         *  entry [{sponsor: 'Adrena', symbol: 'ADX', amount: 100000}] derived
+         *  from the legacy `currency` + `totalPool` via
+         *  scripts/_migrate-t1-to-multi-token.ts. Future tournaments populate
+         *  `tokens` directly via admin form. */
+        tokens?: Array<{
+            /** Sponsor name (e.g. 'Adrena Foundation', 'Jito Labs'). */
+            sponsor: string;
+            /** Token ticker symbol (e.g. 'ADX', 'JTO', 'USDC' or custom). */
+            symbol: string;
+            /** Token-denominated quantity (NOT USD). */
+            amount: number;
+            /** Optional SPL token mint. When present:
+             *  - On-chain identity for distribution (MrRewards reads this).
+             *  - Forward-compat (Fork A): passed to prices.ts to query Jupiter
+             *    for tokens NOT in KNOWN_PRIZE_TOKEN_MINT. Lets admin add a
+             *    new prize token without a code change. Takes precedence over
+             *    KNOWN_PRIZE_TOKEN_MINT[symbol] when both are present.
+             *  - Symbol disambiguation: e.g. two tokens both named 'ADX' on
+             *    Jupiter — mint pins which one. */
+            mint?: string;
+            /** Optional static USD price (Fork B / locked decision G2 third
+             *  tier). Used by prices.ts route ONLY if Pyth + Jupiter both
+             *  return null. Admin enters at create-time; immutable once
+             *  tournament flips to `active` (inherited PUT edit-gate).
+             *  Pass-through to the route at query time — not cached
+             *  server-side (the static is fixed in config; no need to
+             *  memoize). FE renders source: 'static' in the tooltip when
+             *  this fires so admin/traders see the fallback was used. */
+            staticUsdPrice?: number;
+        }>;
     };
 
     // --- Phase 3 additions (2026-04-22) — config-driven scoring/raffle constants ---

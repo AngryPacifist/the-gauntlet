@@ -492,6 +492,14 @@ router.get('/:id/payouts', async (req, res) => {
         const skillPrizes = prizeTable.skillPrizes;
         const rafflePrizes = prizeTable.rafflePrizes;
 
+        // Post-T1 batch: tokens[] is the multi-token source of truth. For
+        // pre-migration tournaments (T1 before _migrate-t1-to-multi-token.ts
+        // runs), synthesize a virtual single-sponsor entry from the legacy
+        // currency + totalPool so the same code path handles both.
+        const tokens = prizeTable.tokens && prizeTable.tokens.length > 0
+            ? prizeTable.tokens
+            : [{ sponsor: 'Adrena', symbol: prizeTable.currency, amount: prizeTable.totalPool, mint: undefined as string | undefined }];
+
         // Top% wallets ranked by finalScore DESC, wallet ASC (mirrors raffle-engine).
         const topPercentRows = await db
             .select()
@@ -505,24 +513,40 @@ router.get('/:id/payouts', async (req, res) => {
         const K = topPercentRows.length;
         const extendedSkill = extendSkillPrizes(skillPrizes, K);
         const totalSkillPool = skillPrizes.reduce((a, b) => a + b, 0);
+        const totalRafflePool = rafflePrizes.reduce((a, b) => a + b, 0);
+        const totalWeight = totalSkillPool + totalRafflePool;
         const usedWeights = extendedSkill.slice(0, K).reduce((a, b) => a + b, 0);
         const proRataScale = usedWeights > 0 ? totalSkillPool / usedWeights : 1;
 
+        type PayoutTokenAmount = { symbol: string; mint?: string; sponsor: string; amount: number };
         type PayoutRow = {
             wallet: string;
             amountADX: number;
+            tokens: PayoutTokenAmount[];
             category: 'skill' | 'raffle';
             rank: number | null;
             drawPosition: number | null;
         };
         const rows: PayoutRow[] = [];
 
+        // Helper: per-wallet token amounts at a given share-of-total-weight.
+        // Conservation: sum across (skill ranks + raffle slots) equals each
+        // token's pool amount (assuming all top% wallets paid + all raffle
+        // slots filled).
+        function buildTokensForShare(shareOfTotal: number): PayoutTokenAmount[] {
+            return tokens.map((t) => ({
+                symbol: t.symbol,
+                mint: t.mint,
+                sponsor: t.sponsor,
+                amount: shareOfTotal * t.amount,
+            }));
+        }
+
         // Competition ranking (1224) — wallets tied at the same finalScore
-        // share a rank. We must MATCH the FE's prizesByRank tie-handling in
+        // share a rank. Match the FE's prizesByRank tie-handling in
         // leaderboard/[id]/page.tsx: for a group of N wallets tied at rank R,
-        // the per-wallet ADX is (extendedPrizes[R-1] + ... + extendedPrizes[R+N-2]) / N.
-        // This preserves conservation — orphaned skipped-rank slots redistribute
-        // across the tied group rather than disappearing.
+        // the per-wallet weight share is (extendedPrizes[R-1] + ... +
+        // extendedPrizes[R+N-2]) * proRataScale / N / totalWeight.
         //
         // Pass 1: assign competition rank to every wallet.
         const walletRanks: Array<{ wallet: string; rank: number; finalScore: number }> = [];
@@ -534,24 +558,28 @@ router.get('/:id/payouts', async (req, res) => {
             prevScore = r.finalScore;
             walletRanks.push({ wallet: r.wallet, rank: currentRank, finalScore: r.finalScore });
         }
-        // Pass 2: count members per rank, then split summed-slot ADX per FE convention.
+        // Pass 2: per-rank weight share → fraction of totalWeight per wallet.
         const rankCounts = new Map<number, number>();
         for (const w of walletRanks) {
             rankCounts.set(w.rank, (rankCounts.get(w.rank) ?? 0) + 1);
         }
-        const perRankADX = new Map<number, number>();
+        const perRankWeightShare = new Map<number, number>();
         for (const [rank, count] of rankCounts) {
-            let sum = 0;
-            for (let i = 0; i < count; i++) {
-                sum += extendedSkill[rank - 1 + i] ?? 0;
-            }
-            perRankADX.set(rank, (sum * proRataScale) / count);
+            let sumWeights = 0;
+            for (let i = 0; i < count; i++) sumWeights += extendedSkill[rank - 1 + i] ?? 0;
+            const skillScaledForRank = (sumWeights * proRataScale) / count;
+            perRankWeightShare.set(rank, totalWeight > 0 ? skillScaledForRank / totalWeight : 0);
         }
         for (const w of walletRanks) {
-            const adxFloat = perRankADX.get(w.rank) ?? 0;
+            const share = perRankWeightShare.get(w.rank) ?? 0;
+            const tokenAmounts = buildTokensForShare(share);
+            const amountADX = tokenAmounts
+                .filter((t) => t.symbol === 'ADX')
+                .reduce((a, t) => a + t.amount, 0);
             rows.push({
                 wallet: w.wallet,
-                amountADX: Math.round(adxFloat),
+                amountADX: Math.round(amountADX),
+                tokens: tokenAmounts.map((t) => ({ ...t, amount: Math.round(t.amount * 100) / 100 })),
                 category: 'skill',
                 rank: w.rank,
                 drawPosition: null,
@@ -574,9 +602,16 @@ router.get('/:id/payouts', async (req, res) => {
         if (draw) {
             const winners = draw.winners as string[];
             for (let i = 0; i < winners.length; i++) {
+                const slotWeight = rafflePrizes[i] ?? 0;
+                const share = totalWeight > 0 ? slotWeight / totalWeight : 0;
+                const tokenAmounts = buildTokensForShare(share);
+                const amountADX = tokenAmounts
+                    .filter((t) => t.symbol === 'ADX')
+                    .reduce((a, t) => a + t.amount, 0);
                 rows.push({
                     wallet: winners[i],
-                    amountADX: rafflePrizes[i] ?? 0,
+                    amountADX: Math.round(amountADX),
+                    tokens: tokenAmounts.map((t) => ({ ...t, amount: Math.round(t.amount * 100) / 100 })),
                     category: 'raffle',
                     rank: null,
                     drawPosition: i + 1,
@@ -599,6 +634,7 @@ router.get('/:id/payouts', async (req, res) => {
                 status: t.status,
                 complete,
                 prizeTable: {
+                    tokens,
                     totalPool: prizeTable.totalPool,
                     skillPrizes,
                     rafflePrizes,

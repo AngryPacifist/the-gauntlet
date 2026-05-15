@@ -15,6 +15,8 @@ import {
     getWalletBreakdown,
     getDailyScores,
     getLeverageMasterLeaderboard,
+    getTokenUSDPrices,
+    getPayouts,
     registerWallet,
     type ForgeLeaderboard,
     type ForgeEntry,
@@ -24,6 +26,8 @@ import {
     type LeverageMasterLeaderboard,
     type LeverageMasterMergedEntry,
     type TournamentState,
+    type TokenUSDPrice,
+    type PayoutRow,
 } from '@/lib/api';
 import { QUEST_DESCRIPTIONS, FF_DESCRIPTION, getLeverageMasterDescription, type QuestDescription } from '@/lib/quest-descriptions';
 import { CPI_DESCRIPTION } from '@/lib/cpi-description';
@@ -151,15 +155,43 @@ function todayUTC(): string {
     return formatDate(new Date());
 }
 
-function formatPrize(amount: number): string {
-    return amount.toLocaleString('en-US', {
-        minimumFractionDigits: 0,
-        maximumFractionDigits: 2,
-    });
-}
-
 function shortWallet(wallet: string): string {
     return wallet.slice(0, 4) + '...' + wallet.slice(-4);
+}
+
+// --------------------------------------------------------------------------
+// Multi-token prize helpers (post-T1 batch Item 1)
+//
+// resolveTokens: extract the tokens[] array from a prizeTable, synthesizing
+// a single-sponsor virtual entry from legacy { currency, totalPool } when
+// `tokens` is absent (pre-migration T1 fallback). Return type matches the
+// full schema (mint? + staticUsdPrice?) so callers can pass directly to
+// getTokenUSDPrices for Forks A + B flow-through.
+// --------------------------------------------------------------------------
+type ResolvedToken = {
+    sponsor: string;
+    symbol: string;
+    amount: number;
+    mint?: string;
+    staticUsdPrice?: number;
+};
+
+function resolveTokens(prizeTable: NonNullable<ForgeLeaderboard['tournament']['config']['prizeTable']>):
+    ResolvedToken[] {
+    if (prizeTable.tokens && prizeTable.tokens.length > 0) return prizeTable.tokens;
+    return [{
+        sponsor: 'Adrena',
+        symbol: prizeTable.currency,
+        amount: prizeTable.totalPool,
+    }];
+}
+
+function formatTokenAmount(amount: number, symbol: string): string {
+    return `${amount.toLocaleString('en-US', { maximumFractionDigits: 2 })} ${symbol}`;
+}
+
+function formatUSD(value: number): string {
+    return `$${value.toLocaleString('en-US', { maximumFractionDigits: 2 })}`;
 }
 
 function extractQuestColumns(
@@ -514,7 +546,12 @@ export default function LeaderboardPage({ params }: { params: Promise<{ id: stri
                     </div>
                     {isForge && <RegisterButton status={data.tournament.status} onClick={() => setShowRegModal(true)} />}
                 </div>
-                {isForge && data.tournament.config.prizeTable && (
+                {/* Fork D: PrizeInfo header renders on BOTH Forge and Gauntlet
+                   tournaments — Gauntlet is also a prized contest with the
+                   same topPercentCutoff semantics. Splits inside PrizeInfo
+                   conditionally render per weight (Skill / Raffle hidden
+                   when their respective weight is 0). */}
+                {data.tournament.config.prizeTable && (
                     <PrizeInfo prizeTable={data.tournament.config.prizeTable} topPercentCutoff={data.tournament.config.topPercentCutoff} />
                 )}
             </div>
@@ -546,6 +583,7 @@ export default function LeaderboardPage({ params }: { params: Promise<{ id: stri
             {/* Tab content */}
             {activeTab === 'general' ? (
                 <GeneralLeaderboard
+                    tournamentId={tournamentId}
                     entries={filteredEntries}
                     expandedWallet={expandedWallet}
                     breakdown={breakdown}
@@ -603,6 +641,7 @@ export default function LeaderboardPage({ params }: { params: Promise<{ id: stri
 // --------------------------------------------------------------------------
 
 interface GeneralLeaderboardProps {
+    tournamentId: number;
     entries: ForgeEntry[];
     expandedWallet: string | null;
     breakdown: WalletBreakdown | null;
@@ -611,52 +650,109 @@ interface GeneralLeaderboardProps {
     onSearch: (q: string) => void;
     onToggle: (wallet: string) => void;
     isForge: boolean;
-    prizeTable?: {
-        totalPool: number;
-        currency: string;
-        skillPrizes: number[];
-        rafflePrizes: number[];
-    };
+    prizeTable?: NonNullable<ForgeLeaderboard['tournament']['config']['prizeTable']>;
     topPercentCutoff?: number;
     assetList?: Array<{ symbol: string; lmSteps?: number[]; lmTolerance?: number }>;
 }
 
 function GeneralLeaderboard({
-    entries, expandedWallet, breakdown, breakdownLoading,
+    tournamentId, entries, expandedWallet, breakdown, breakdownLoading,
     searchQuery, onSearch, onToggle, isForge, prizeTable, topPercentCutoff, assetList,
 }: GeneralLeaderboardProps) {
-    const prizesByRank = useMemo<Map<number, number>>(() => {
-        const map = new Map<number, number>();
+    // Post-T1 batch (Item 1): per-rank token amounts. Map<rank, perWalletTokens[]>.
+    // USD is computed live in PrizeCellMultiToken from tokens × usdPrices (don't
+    // store stale USD here; tokens are amount-denominated, USD is a derived view
+    // that updates per Pyth/Jupiter/static poll).
+    const prizesByRank = useMemo<Map<number, Array<{ symbol: string; amount: number }>>>(() => {
+        const map = new Map<number, Array<{ symbol: string; amount: number }>>();
         if (!prizeTable) return map;
+
+        const tokens = resolveTokens(prizeTable);
+        const totalWeight = prizeTable.skillPrizes.reduce((a, b) => a + b, 0)
+                          + prizeTable.rafflePrizes.reduce((a, b) => a + b, 0);
+        const skillWeight = prizeTable.skillPrizes.reduce((a, b) => a + b, 0);
+        if (totalWeight === 0) return map;
+
+        // Phase 8.n + 8.q: pro-rata scale + geometric-decay extension so every
+        // top% wallet gets a non-zero share. Post-multi-token interpretation:
+        // each rank gets a fraction of totalWeight, applied to every token.
         const rankCounts = new Map<number, number>();
         for (const e of entries) {
             if (!e.isTopPercent) continue;
             rankCounts.set(e.rank, (rankCounts.get(e.rank) ?? 0) + 1);
         }
-        // Phase 8.n: pro-rata scale so the configured skill pool always flows
-        // fully to active top% wallets. K = total top% count; usedWeights sums
-        // the first K (extended) skillPrizes slots. Scale = totalSkillPool /
-        // usedWeights. K = length → scale = 1 (configured values). K < length
-        // → scale > 1 (boost active wallets to consume full pool). Total
-        // payout always sums to sum(skillPrizes).
-        // Phase 8.q: when K > skillPrizes.length, extend the curve via
-        // geometric decay (using the configured tail ratio) so every top%
-        // wallet gets a non-zero prize. Without extension, ranks past
-        // skillPrizes.length got 0 ADX while displaying TOP 30% chip — fixed.
         const totalTopCount = Array.from(rankCounts.values()).reduce((a, b) => a + b, 0);
-        const totalSkillPool = prizeTable.skillPrizes.reduce((a, b) => a + b, 0);
         const extendedPrizes = extendSkillPrizes(prizeTable.skillPrizes, totalTopCount);
         const usedWeights = extendedPrizes.slice(0, totalTopCount).reduce((a, b) => a + b, 0);
-        const scale = usedWeights > 0 ? totalSkillPool / usedWeights : 1;
+        const scale = usedWeights > 0 ? skillWeight / usedWeights : 1;
+
         for (const [rank, count] of rankCounts) {
-            let sum = 0;
+            let sumWeights = 0;
             for (let i = 0; i < count; i++) {
-                sum += extendedPrizes[rank - 1 + i] ?? 0;
+                sumWeights += extendedPrizes[rank - 1 + i] ?? 0;
             }
-            map.set(rank, (sum * scale) / count);
+            const rankWeightShare = (sumWeights * scale) / count / totalWeight;  // fraction of totalWeight per wallet at this rank
+            const perWallet = tokens.map((t) => ({ symbol: t.symbol, amount: rankWeightShare * t.amount }));
+            map.set(rank, perWallet);
         }
         return map;
     }, [entries, prizeTable]);
+
+    // Forks A+B: dedupe price-fetch tokens by symbol (first-occurrence wins
+    // for mint + staticUsdPrice). Multi-sponsor tournaments with the same
+    // token query Pyth/Jupiter once.
+    const tokens = useMemo(() => prizeTable ? resolveTokens(prizeTable) : [], [prizeTable]);
+    const priceFetchTokens = useMemo(() => {
+        const seen = new Map<string, { symbol: string; mint?: string; staticUsdPrice?: number }>();
+        for (const t of tokens) {
+            if (!seen.has(t.symbol)) {
+                seen.set(t.symbol, { symbol: t.symbol, mint: t.mint, staticUsdPrice: t.staticUsdPrice });
+            }
+        }
+        return Array.from(seen.values());
+    }, [tokens]);
+    const [usdPrices, setUsdPrices] = useState<Record<string, TokenUSDPrice> | null>(null);
+    useEffect(() => {
+        if (priceFetchTokens.length === 0) return;
+        let cancelled = false;
+        getTokenUSDPrices(priceFetchTokens)
+            .then((p) => { if (!cancelled) setUsdPrices(p); })
+            .catch(() => { if (!cancelled) setUsdPrices(null); });
+        return () => { cancelled = true; };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [JSON.stringify(priceFetchTokens)]);
+
+    // S4 path B: fetch payouts.rows to surface raffle prizes on the leaderboard
+    // PRIZE column. Skill rows derive from prizesByRank above (live); we pull
+    // only raffle rows from /payouts. Pre-draw: /payouts returns no raffle rows
+    // → rafflePrizesByWallet stays empty → raffle-tier wallets render `—` (current
+    // behavior preserved).
+    const [rafflePayoutRows, setRafflePayoutRows] = useState<PayoutRow[] | null>(null);
+    useEffect(() => {
+        let cancelled = false;
+        getPayouts(tournamentId)
+            .then((p) => {
+                if (cancelled) return;
+                setRafflePayoutRows(p.rows.filter((r) => r.category === 'raffle'));
+            })
+            .catch(() => {
+                if (!cancelled) setRafflePayoutRows(null);
+            });
+        return () => { cancelled = true; };
+    }, [tournamentId]);
+
+    const rafflePrizesByWallet = useMemo(() => {
+        const map = new Map<string, { drawPosition: number; tokens: Array<{ symbol: string; amount: number }> }>();
+        if (!rafflePayoutRows) return map;
+        for (const r of rafflePayoutRows) {
+            if (r.drawPosition == null) continue;  // defensive — raffle rows always have drawPosition
+            map.set(r.wallet, {
+                drawPosition: r.drawPosition,
+                tokens: r.tokens.map((t) => ({ symbol: t.symbol, amount: t.amount })),
+            });
+        }
+        return map;
+    }, [rafflePayoutRows]);
 
     return (
         <>
@@ -700,6 +796,8 @@ function GeneralLeaderboard({
                                 isForge={isForge}
                                 prizeTable={prizeTable}
                                 prizesByRank={prizesByRank}
+                                rafflePrizesByWallet={rafflePrizesByWallet}
+                                usdPrices={usdPrices}
                                 topPercentCutoff={topPercentCutoff}
                                 assetList={assetList}
                             />
@@ -729,19 +827,23 @@ interface ForgeRowProps {
     breakdown: WalletBreakdown | null;
     breakdownLoading: boolean;
     isForge: boolean;
-    prizeTable?: {
-        totalPool: number;
-        currency: string;
-        skillPrizes: number[];
-        rafflePrizes: number[];
-    };
-    prizesByRank: Map<number, number>;
+    prizeTable?: NonNullable<ForgeLeaderboard['tournament']['config']['prizeTable']>;
+    prizesByRank: Map<number, Array<{ symbol: string; amount: number }>>;
+    rafflePrizesByWallet: Map<string, { drawPosition: number; tokens: Array<{ symbol: string; amount: number }> }>;
+    usdPrices: Record<string, TokenUSDPrice> | null;
     topPercentCutoff?: number;
     assetList?: Array<{ symbol: string; lmSteps?: number[]; lmTolerance?: number }>;
 }
 
-function ForgeRow({ entry, isExpanded, onToggle, breakdown, breakdownLoading, isForge, prizeTable, prizesByRank, topPercentCutoff, assetList }: ForgeRowProps) {
+function ForgeRow({
+    entry, isExpanded, onToggle, breakdown, breakdownLoading, isForge,
+    prizeTable, prizesByRank, rafflePrizesByWallet, usdPrices,
+    topPercentCutoff, assetList,
+}: ForgeRowProps) {
     const rankClass = rankBadgeClass(entry.rank);
+    // Post-T1 batch (Item 1 + S4 path B): 3-way prize column branch.
+    const skillTokens = entry.isTopPercent && prizeTable ? prizesByRank.get(entry.rank) : undefined;
+    const raffleEntry = !entry.isTopPercent ? rafflePrizesByWallet.get(entry.wallet) : undefined;
 
     return (
         <>
@@ -781,9 +883,14 @@ function ForgeRow({ entry, isExpanded, onToggle, breakdown, breakdownLoading, is
                     {entry.finalScore.toFixed(2)}
                 </td>
                 <td className={styles.prizeCol}>
-                    {entry.isTopPercent && prizeTable
-                        ? `${formatPrize(prizesByRank.get(entry.rank) ?? 0)} ${prizeTable.currency}`
-                        : '—'}
+                    {skillTokens
+                        ? <PrizeCellMultiToken tokens={skillTokens} usdPrices={usdPrices} />
+                        : raffleEntry
+                            ? <PrizeCellMultiToken
+                                tokens={raffleEntry.tokens}
+                                usdPrices={usdPrices}
+                                drawPosition={raffleEntry.drawPosition} />
+                            : '—'}
                 </td>
                 <td className={entry.isTopPercent ? styles.ticketColTop : styles.ticketColRaffle}>
                     {entry.raffleTickets}
@@ -1591,47 +1698,133 @@ function RegisterModal({
 }
 
 // --------------------------------------------------------------------------
-// Prize Info — totals displayed in the Forge header
+// Prize Info — multi-token header for Forge + Gauntlet (Fork D)
 // --------------------------------------------------------------------------
+//
+// Renders: USD live total + "Sponsored by X · Y" + "Distributed in ADX, JTO" +
+// per-split (Skill / Raffle) USD breakdowns. Each split is conditional on
+// its respective weight > 0 (hides $0 Raffle on skill-only configs).
+//
+// USD is computed live via the Pyth → Jupiter → admin static cascade
+// (Forks A+B). If all sources fail for a token, that token contributes 0 to
+// the USD total but its token amount + sponsor still display in the tooltip.
 
 function PrizeInfo({ prizeTable, topPercentCutoff }: {
-    prizeTable: {
-        totalPool: number;
-        currency: string;
-        skillPrizes: number[];
-        rafflePrizes: number[];
-    };
+    prizeTable: NonNullable<ForgeLeaderboard['tournament']['config']['prizeTable']>;
     topPercentCutoff?: number;
 }) {
-    const skillTotal = prizeTable.skillPrizes.reduce((sum, v) => sum + v, 0);
-    const raffleTotal = prizeTable.rafflePrizes.reduce((sum, v) => sum + v, 0);
-    const formatAmount = (n: number) => n.toLocaleString('en-US');
+    const tokens = resolveTokens(prizeTable);
+    // Forks A+B: dedupe by symbol — first-occurrence wins for mint + static.
+    const priceFetchTokens = useMemo(() => {
+        const seen = new Map<string, { symbol: string; mint?: string; staticUsdPrice?: number }>();
+        for (const t of tokens) {
+            if (!seen.has(t.symbol)) {
+                seen.set(t.symbol, { symbol: t.symbol, mint: t.mint, staticUsdPrice: t.staticUsdPrice });
+            }
+        }
+        return Array.from(seen.values());
+    }, [tokens]);
+    const symbols = useMemo(() => priceFetchTokens.map((t) => t.symbol), [priceFetchTokens]);
+    const [usdPrices, setUsdPrices] = useState<Record<string, TokenUSDPrice> | null>(null);
+
+    useEffect(() => {
+        let cancelled = false;
+        getTokenUSDPrices(priceFetchTokens)
+            .then((p) => { if (!cancelled) setUsdPrices(p); })
+            .catch(() => { if (!cancelled) setUsdPrices(null); });
+        return () => { cancelled = true; };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [JSON.stringify(priceFetchTokens)]);
+
+    // Compute weight + USD totals.
+    const skillWeight = prizeTable.skillPrizes.reduce((a, b) => a + b, 0);
+    const raffleWeight = prizeTable.rafflePrizes.reduce((a, b) => a + b, 0);
+    const totalWeight = skillWeight + raffleWeight;
+    const skillFrac = totalWeight > 0 ? skillWeight / totalWeight : 0;
+    const raffleFrac = totalWeight > 0 ? raffleWeight / totalWeight : 0;
+
+    const totalUSD = tokens.reduce((sum, t) => {
+        const p = usdPrices?.[t.symbol]?.usd;
+        return sum + (p !== null && p !== undefined ? t.amount * p : 0);
+    }, 0);
+    const skillUSD = totalUSD * skillFrac;
+    const raffleUSD = totalUSD * raffleFrac;
+
+    // Sponsor + symbol summaries.
+    const sponsors = useMemo(() => Array.from(new Set(tokens.map((t) => t.sponsor))), [tokens]);
+    const sponsorsDisplay = sponsors.length <= 4
+        ? sponsors.join(' · ')
+        : `${sponsors.slice(0, 3).join(' · ')} · +${sponsors.length - 3} more`;
+    const symbolsDisplay = symbols.join(', ');
+
+    const tokenBreakdown = tokens
+        .map((t) => `${t.sponsor}: ${formatTokenAmount(t.amount, t.symbol)}`)
+        .join('\n');
 
     return (
         <div className={styles.prizeBanner}>
             <div className={styles.prizeMain}>
                 <div className={styles.prizeLabel}>Total Prize Pool</div>
-                <div className={styles.prizeValue}>
-                    {formatAmount(prizeTable.totalPool)} {prizeTable.currency}
+                <div className={styles.prizeValue} title={tokenBreakdown}>
+                    {usdPrices ? formatUSD(totalUSD) : '—'}
                 </div>
+                <div className={styles.prizeSubtitle}>Sponsored by {sponsorsDisplay}</div>
+                <div className={styles.prizeSubtitle}>Distributed in {symbolsDisplay}</div>
             </div>
             <div className={styles.prizeSplits}>
-                <div className={styles.prizeSplit}>
-                    <div className={styles.prizeSplitLabel}>
-                        Top {Math.round((topPercentCutoff ?? 0.30) * 100)}% Skill
+                {/* Fork D refinement: conditionally render each split based on
+                    its weight. Forge tournaments typically have both skill +
+                    raffle; Gauntlet tournaments often have skill-only. Hiding
+                    the empty split avoids "$0 Raffle" wart on Gauntlet. */}
+                {skillWeight > 0 && (
+                    <div className={styles.prizeSplit}>
+                        <div className={styles.prizeSplitLabel}>
+                            Top {Math.round((topPercentCutoff ?? 0.30) * 100)}% Skill
+                        </div>
+                        <div className={styles.prizeSplitValueSkill} title={`${formatUSD(skillUSD)} (${(skillFrac * 100).toFixed(0)}% of pool)`}>
+                            {usdPrices ? formatUSD(skillUSD) : '—'}
+                        </div>
                     </div>
-                    <div className={styles.prizeSplitValueSkill}>
-                        {formatAmount(skillTotal)} {prizeTable.currency}
+                )}
+                {raffleWeight > 0 && (
+                    <div className={styles.prizeSplit}>
+                        <div className={styles.prizeSplitLabel}>Raffle</div>
+                        <div className={styles.prizeSplitValueRaffle} title={`${formatUSD(raffleUSD)} (${(raffleFrac * 100).toFixed(0)}% of pool)`}>
+                            {usdPrices ? formatUSD(raffleUSD) : '—'}
+                        </div>
                     </div>
-                </div>
-                <div className={styles.prizeSplit}>
-                    <div className={styles.prizeSplitLabel}>Raffle</div>
-                    <div className={styles.prizeSplitValueRaffle}>
-                        {formatAmount(raffleTotal)} {prizeTable.currency}
-                    </div>
-                </div>
+                )}
             </div>
         </div>
+    );
+}
+
+// --------------------------------------------------------------------------
+// PrizeCellMultiToken — per-row PRIZE column for both skill + raffle.
+//
+// Renders USD live + token-breakdown tooltip. For raffle rows (S4 path B),
+// `drawPosition` is provided so the tooltip prefixes "Raffle slot #N".
+// If usdPrices is still loading or `tokens` is empty, renders `—`.
+// --------------------------------------------------------------------------
+function PrizeCellMultiToken({
+    tokens, usdPrices, drawPosition,
+}: {
+    tokens: Array<{ symbol: string; amount: number }> | undefined;
+    usdPrices: Record<string, TokenUSDPrice> | null;
+    drawPosition?: number;
+}) {
+    if (!tokens || tokens.length === 0) return <>—</>;
+    const usd = tokens.reduce((s, t) => {
+        const p = usdPrices?.[t.symbol]?.usd;
+        return s + (p !== null && p !== undefined ? t.amount * p : 0);
+    }, 0);
+    const breakdownParts = tokens.map((t) => formatTokenAmount(t.amount, t.symbol));
+    if (drawPosition !== undefined) breakdownParts.unshift(`Raffle slot #${drawPosition}`);
+    const breakdown = breakdownParts.join('\n');
+    return (
+        <span title={breakdown}>
+            {usdPrices ? formatUSD(usd) : '—'}
+        </span>
     );
 }
 

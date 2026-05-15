@@ -71,6 +71,13 @@ export interface TournamentConfig {
         currency: string;
         skillPrizes: number[];
         rafflePrizes: number[];
+        tokens?: Array<{
+            sponsor: string;
+            symbol: string;
+            amount: number;
+            mint?: string;             // Fork A: admin-supplied mint for Jupiter
+            staticUsdPrice?: number;   // Fork B: G2 third-tier fallback
+        }>;
     };
     // Phase 3 additions — config-driven scoring/raffle constants
     topPercentCutoff: number;
@@ -853,4 +860,80 @@ export interface CumulativeLeaderboardData {
 
 export async function getCumulativeLeaderboard(): Promise<CumulativeLeaderboardData> {
     return apiFetch<CumulativeLeaderboardData>('/api/leaderboard');
+}
+
+// --------------------------------------------------------------------------
+// Token Prices (USD) — Pyth → Jupiter → admin static cascade.
+// `source` field tells the FE which tier answered ('pyth' | 'jupiter' |
+// 'static' | null). Forks A+B: takes the full token entries so admin-
+// supplied mints (forward-compat) and statics (G2 third tier) flow
+// through as parallel-array query params.
+// --------------------------------------------------------------------------
+export interface TokenUSDPrice {
+    usd: number | null;
+    source: string | null;
+}
+
+export interface PriceFetchToken {
+    symbol: string;
+    mint?: string;            // Fork A: admin-supplied mint overrides server default
+    staticUsdPrice?: number;  // Fork B: G2 third-tier fallback when both feeds null
+}
+
+export async function getTokenUSDPrices(
+    tokens: PriceFetchToken[],
+): Promise<Record<string, TokenUSDPrice>> {
+    if (tokens.length === 0) return {};
+    const symbols = tokens.map((t) => t.symbol).join(',');
+    // Parallel arrays — empty slots preserved (don't filter); index alignment
+    // with `symbols` is what the route uses to pair them up.
+    const mints = tokens.map((t) => t.mint ?? '').join(',');
+    const statics = tokens
+        .map((t) => t.staticUsdPrice != null && t.staticUsdPrice > 0 ? String(t.staticUsdPrice) : '')
+        .join(',');
+    const qs = `symbols=${encodeURIComponent(symbols)}&mints=${encodeURIComponent(mints)}&statics=${encodeURIComponent(statics)}`;
+    return apiFetch(`/api/prices/usd?${qs}`);
+}
+
+// --------------------------------------------------------------------------
+// Payouts endpoint — final distribution list (skill + raffle).
+// Consumed by S4 path B to surface raffle prizes on the leaderboard PRIZE
+// column post-draw. Also consumed by external distribution systems
+// (e.g. MrRewards) — keep `amountADX` field for backward compat.
+// --------------------------------------------------------------------------
+export interface PayoutToken {
+    symbol: string;
+    mint?: string;
+    sponsor: string;
+    amount: number;
+}
+
+export interface PayoutRow {
+    wallet: string;
+    amountADX: number;
+    tokens: PayoutToken[];
+    category: 'skill' | 'raffle';
+    rank: number | null;
+    drawPosition: number | null;
+}
+
+export interface PayoutsResponse {
+    tournamentId: number;
+    status: string;
+    complete: boolean;
+    prizeTable: {
+        tokens: Array<{ sponsor: string; symbol: string; amount: number; mint?: string }>;
+        skillPrizes: number[];
+        rafflePrizes: number[];
+        totalPool: number;
+        currency: string;
+    };
+    raffleDraw: { id: number; blockHash: string; drawnAt: string } | null;
+    proRataScale: number;
+    totalPayout: number;
+    rows: PayoutRow[];
+}
+
+export async function getPayouts(tournamentId: number): Promise<PayoutsResponse> {
+    return apiFetch<PayoutsResponse>(`/api/tournaments/${tournamentId}/payouts`);
 }
