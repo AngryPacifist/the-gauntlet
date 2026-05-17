@@ -492,8 +492,13 @@ export default function AdminTournamentsPage() {
         const skillPrizes = parseNums(cfgSkillPrizes);
         const rafflePrizes = parseNums(cfgRafflePrizes);
 
-        if (fisherRankPoints.length !== 3) {
-            showToast('Fisher rank points must have exactly 3 entries (1st/2nd/3rd)', 'error');
+        if (fisherRankPoints.length < 1 || fisherRankPoints.length > 5) {
+            showToast('Fisher rank points must have 1-5 entries', 'error');
+            return;
+        }
+        const isNonIncreasing = fisherRankPoints.every((v, i) => i === 0 || v <= fisherRankPoints[i - 1]);
+        if (!isNonIncreasing) {
+            showToast('Fisher rank points must be non-increasing (e.g. 5, 4, 3, 2, 1 — highest first)', 'error');
             return;
         }
         if (dailyQuestPoints.length !== 5) {
