@@ -84,6 +84,8 @@ export interface TournamentConfig {
     allAroundMinTradeUsd: number;
     allAroundMaxPointsPerAsset: number;
     fisherRankPoints: number[];
+    fisherProximityWeight: number;
+    fisherRoiWeight: number;
     dailyQuestPoints: number[];
     multidayQuestPoints: number[];
     raffleMinClosedPositions: number;

@@ -126,6 +126,8 @@ export default function AdminTournamentsPage() {
     const [cfgRiskManagerMinSize, setCfgRiskManagerMinSize] = useState(1000);
     const [cfgAllAroundMaxPointsPerAsset, setCfgAllAroundMaxPointsPerAsset] = useState(25);
     const [cfgFisherRankPoints, setCfgFisherRankPoints] = useState('3, 2, 1');
+    const [cfgFisherProximityWeight, setCfgFisherProximityWeight] = useState(0.8);
+    const [cfgFisherRoiWeight, setCfgFisherRoiWeight] = useState(0.2);
     const [cfgDailyQuestPoints, setCfgDailyQuestPoints] = useState('0.2, 0.15, 0.1, 0.05, 0.01');
     const [cfgMultidayQuestPoints, setCfgMultidayQuestPoints] = useState('0.3, 0.25, 0.2, 0.15, 0.1');
     const [cfgTopPercentCutoff, setCfgTopPercentCutoff] = useState(0.30);
@@ -264,6 +266,8 @@ export default function AdminTournamentsPage() {
         setCfgRiskManagerMinSize(1000);
         setCfgAllAroundMaxPointsPerAsset(25);
         setCfgFisherRankPoints('3, 2, 1');
+        setCfgFisherProximityWeight(0.8);
+        setCfgFisherRoiWeight(0.2);
         setCfgDailyQuestPoints('0.2, 0.15, 0.1, 0.05, 0.01');
         setCfgMultidayQuestPoints('0.3, 0.25, 0.2, 0.15, 0.1');
         setCfgTopPercentCutoff(0.30);
@@ -316,6 +320,8 @@ export default function AdminTournamentsPage() {
         setCfgRiskManagerMinSize(c.riskManagerMinSize);
         setCfgAllAroundMaxPointsPerAsset(c.allAroundMaxPointsPerAsset);
         setCfgFisherRankPoints(c.fisherRankPoints.join(', '));
+        setCfgFisherProximityWeight(c.fisherProximityWeight ?? 0.8);
+        setCfgFisherRoiWeight(c.fisherRoiWeight ?? 0.2);
         setCfgDailyQuestPoints(c.dailyQuestPoints.join(', '));
         setCfgMultidayQuestPoints(c.multidayQuestPoints.join(', '));
         setCfgTopPercentCutoff(c.topPercentCutoff);
@@ -501,6 +507,19 @@ export default function AdminTournamentsPage() {
             showToast('Fisher rank points must be non-increasing (e.g. 5, 4, 3, 2, 1 — highest first)', 'error');
             return;
         }
+        if (cfgFisherProximityWeight < 0 || cfgFisherProximityWeight > 1) {
+            showToast('Fisher proximity weight must be between 0 and 1', 'error');
+            return;
+        }
+        if (cfgFisherRoiWeight < 0 || cfgFisherRoiWeight > 1) {
+            showToast('Fisher ROI weight must be between 0 and 1', 'error');
+            return;
+        }
+        const fisherWeightSum = cfgFisherProximityWeight + cfgFisherRoiWeight;
+        if (Math.abs(fisherWeightSum - 1.0) > 0.01) {
+            showToast(`Fisher weights must sum to 1.0 (currently ${fisherWeightSum.toFixed(2)})`, 'error');
+            return;
+        }
         if (dailyQuestPoints.length !== 5) {
             showToast('Daily quest points must have exactly 5 entries (ranks 1-5)', 'error');
             return;
@@ -550,6 +569,8 @@ export default function AdminTournamentsPage() {
             allAroundMinTradeUsd: cfgAllAroundMinTradeUsd,
             allAroundMaxPointsPerAsset: cfgAllAroundMaxPointsPerAsset,
             fisherRankPoints,
+            fisherProximityWeight: cfgFisherProximityWeight,
+            fisherRoiWeight: cfgFisherRoiWeight,
             dailyQuestPoints,
             multidayQuestPoints,
             raffleMinClosedPositions: cfgRaffleMinClosedPositions,
@@ -1132,6 +1153,24 @@ export default function AdminTournamentsPage() {
                             <div className={styles.formGroup}>
                                 <label className={styles.formLabel}>Fisher Rank Points</label>
                                 <input type="text" className="input input--mono" value={cfgFisherRankPoints} onChange={(e) => setCfgFisherRankPoints(e.target.value)} placeholder="3, 2, 1" />
+                            </div>
+                            <div className={styles.formGrid}>
+                                <div className={styles.formGroup}>
+                                    <label className={styles.formLabel}>Fisher Proximity Weight</label>
+                                    <input type="number" className="input input--mono"
+                                        value={cfgFisherProximityWeight}
+                                        onChange={(e) => setCfgFisherProximityWeight(Number(e.target.value))}
+                                        min={0} max={1} step={0.05} />
+                                    <span className={styles.formHint}>Default 0.8 (proximity-dominant). Must sum with ROI weight to 1.0.</span>
+                                </div>
+                                <div className={styles.formGroup}>
+                                    <label className={styles.formLabel}>Fisher ROI Weight</label>
+                                    <input type="number" className="input input--mono"
+                                        value={cfgFisherRoiWeight}
+                                        onChange={(e) => setCfgFisherRoiWeight(Number(e.target.value))}
+                                        min={0} max={1} step={0.05} />
+                                    <span className={styles.formHint}>Default 0.2. Sums to 1.0 with proximity weight.</span>
+                                </div>
                             </div>
                             <div className={styles.formGroup}>
                                 <label className={styles.formLabel}>Daily Quest Points (ranks 1-5)</label>

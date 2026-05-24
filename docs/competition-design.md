@@ -277,9 +277,9 @@ Rewards precise long entry timing. *"I see the bottom and try to go long to catc
 2. Long proximity: `1 - ((entry_price - day_low) / (day_high - day_low))`
 3. Rank all traders' best longs by proximity (descending). Tiebreaker: wallet address alphabetical.
 4. Top 3 receive rank points: 3, 2, 1.
-5. Score = `rank_points * ROI * 100`
+5. Score = `isOpen ? 0 : rank_points * (proxW * proximity + roiW * clamp(ROI, 0, 1)) * 100`. Default `proxW = 0.8`, `roiW = 0.2` (admin-tunable via `config.fisherProximityWeight` + `config.fisherRoiWeight`). Open positions appear on the leaderboard ranked by proximity but score 0 until they close; the 3-day rolling rescore window catches retroactive closes.
 
-**Negative scores:** Fisher scores can be negative when a top-3 proximity trader has negative ROI. The formula is uncapped; no floor at zero. This ensures leaderboards always have entries regardless of market conditions. Wallets with negative Fisher scores are still eligible for quest points if they rank in the top 5.
+**Score range:** Fisher scores are non-negative under the 2026-05-18 corrected formula. The ROI component is clamped to `[0, 1]` (negative ROI floored to 0, ROI > 100% capped at 1.0); the proximity component is already `[0, 1]`. Theoretical max = `max(fisherRankPoints) × 100` (e.g. `500` for `[5, 4, 3, 2, 1]`). Closed losing trades can still earn from the 80% proximity component; open positions score 0 regardless of proximity.
 
 **Season points:** Top 3 earn 3 / 2 / 1 season points daily.
 
@@ -294,12 +294,12 @@ Rewards precise short entry timing. *"I see the top and try to go short to catch
 2. Short proximity: `(entry_price - day_low) / (day_high - day_low)`
 3. Rank all traders' best shorts by proximity (descending). Tiebreaker: wallet address alphabetical.
 4. Top 3 receive rank points: 3, 2, 1.
-5. Score = `rank_points * ROI * 100`
+5. Score = `isOpen ? 0 : rank_points * (proxW * proximity + roiW * clamp(ROI, 0, 1)) * 100`. Default `proxW = 0.8`, `roiW = 0.2` (admin-tunable via `config.fisherProximityWeight` + `config.fisherRoiWeight`). Open positions appear on the leaderboard ranked by proximity but score 0 until they close; the 3-day rolling rescore window catches retroactive closes.
 
 **Edge cases (both directions):**
 - Degenerate price range (< 0.1% daily spread, or high = low): that asset is skipped entirely. Protects against stale oracle feeds, exchange outages, and permanently cached degenerate OHLC bars.
 - Entry outside day's range: proximity clamped to [0, 1].
-- Open positions: ROI = 0, so ranked but no score.
+- Open positions: explicit `score = 0` guard. Ranked by proximity for visibility; close the trade within the 3-day rolling rescore window to convert proximity into actual score.
 - Fewer than 3 traders with longs/shorts: only available ranks awarded.
 
 **Season points:** Top 3 earn 3 / 2 / 1 season points daily.

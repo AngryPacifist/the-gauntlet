@@ -217,18 +217,26 @@ function extractQuestColumns(
             ];
         }
         case 'bottom_fisher': {
-            const entry = d.longEntry as { proximity: number; roi: number } | null;
-            return [
+            const entry = d.longEntry as { proximity: number; roi: number; status?: string } | null;
+            const pairs = [
                 { label: 'Bottom Accuracy', value: entry ? `${(entry.proximity * 100).toFixed(2)}%` : '-' },
                 { label: 'ROI', value: entry ? `${(entry.roi * 100).toFixed(2)}%` : '-' },
             ];
+            if (entry?.status === 'open') {
+                pairs.push({ label: 'Status', value: 'OPEN: close to score' });
+            }
+            return pairs;
         }
         case 'top_tick_traveler': {
-            const entry = d.shortEntry as { proximity: number; roi: number } | null;
-            return [
+            const entry = d.shortEntry as { proximity: number; roi: number; status?: string } | null;
+            const pairs = [
                 { label: 'Top Accuracy', value: entry ? `${(entry.proximity * 100).toFixed(2)}%` : '-' },
                 { label: 'ROI', value: entry ? `${(entry.roi * 100).toFixed(2)}%` : '-' },
             ];
+            if (entry?.status === 'open') {
+                pairs.push({ label: 'Status', value: 'OPEN: close to score' });
+            }
+            return pairs;
         }
         case 'risk_manager':
         case 'humble_one': {

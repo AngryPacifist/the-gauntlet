@@ -188,7 +188,15 @@ export function computeAllAroundScore(
 // - At end of UTC day, capture daily high/low from Pyth OHLC data
 // - Rank longs by how close entry price was to the day's LOW (best long entry)
 // - Rank shorts by how close entry price was to the day's HIGH (best short entry)
-// - Top 3 each direction get rank points (3, 2, 1), multiplied by ROI
+// - Score = (isOpen ? 0 : rankPoints * (proxW * proximity + roiW * clamp(roi, 0, 1)) * 100).
+//   Default proxW=0.8, roiW=0.2 (admin-tunable via config.fisherProximityWeight
+//   + fisherRoiWeight). rankPoints from fisherRankPoints[rank-1], 0 if off-podium.
+//   Open positions appear on the leaderboard ranked by proximity but score 0
+//   until they close (3-day rolling rescore window catches retroactive closes).
+//   Was multiplicative (rankPoints * ROI * 100) until 2026-05-18; ROI dominated
+//   the score and broke fisher-quest semantics. Flipped to additive blend on
+//   ZeDef's correction; rankPoints retained for top-N gating + proximity
+//   amplification.
 // - Best trade per trader per direction
 //
 // This is a TOURNAMENT-WIDE computation -- rankings require comparing all traders.
@@ -207,6 +215,9 @@ interface FisherCandidate {
     proximity: number;
     roi: number;
     positionId: number;
+    // Position lifecycle status. Drives the open-position guard in the score
+    // formula (open positions score 0 until they close).
+    status: 'open' | 'close' | 'liquidate';
 }
 
 /**
@@ -226,6 +237,12 @@ export function computeFisherScores(
 
     // Read Fisher rank points from config (default [3, 2, 1]).
     const fisherPoints = config.fisherRankPoints ?? DEFAULT_TOURNAMENT_CONFIG.fisherRankPoints;
+
+    // Score formula weights (default 0.8 / 0.2, proximity-dominant per the
+    // 2026-05-18 correction). Hoisted once so both ranking loops below reuse
+    // the same values without per-iteration reads.
+    const proxW = config.fisherProximityWeight ?? DEFAULT_TOURNAMENT_CONFIG.fisherProximityWeight;
+    const roiW = config.fisherRoiWeight ?? DEFAULT_TOURNAMENT_CONFIG.fisherRoiWeight;
 
     // Phase 1: Find each wallet's best long and best short for the day
     const allLongs: FisherCandidate[] = [];
@@ -274,6 +291,7 @@ export function computeFisherScores(
                         proximity: clampedProximity,
                         roi,
                         positionId: p.position_id,
+                        status: p.status,
                     };
                 }
             } else if (p.side === 'short') {
@@ -299,6 +317,7 @@ export function computeFisherScores(
                         proximity: clampedProximity,
                         roi,
                         positionId: p.position_id,
+                        status: p.status,
                     };
                 }
             }
@@ -354,6 +373,7 @@ export function computeFisherScores(
                         dayLow: ohlc.low, dayHigh: ohlc.high,
                         proximity, roi, rank: null, rankPoints: 0,
                         positionId: p.position_id,
+                        status: p.status,
                     };
                 }
             } else if (p.side === 'short') {
@@ -367,6 +387,7 @@ export function computeFisherScores(
                         dayLow: ohlc.low, dayHigh: ohlc.high,
                         proximity, roi, rank: null, rankPoints: 0,
                         positionId: p.position_id,
+                        status: p.status,
                     };
                 }
             }
@@ -383,7 +404,9 @@ export function computeFisherScores(
         const candidate = allLongs[i];
         const rank = i + 1; // All entries get a rank (1-indexed)
         const rankPoints = i < fisherPoints.length ? fisherPoints[i] : 0;
-        const pointsFromLong = rankPoints * candidate.roi * 100;
+        const roiComponent = Math.max(0, Math.min(1, candidate.roi));
+        const blendedScore = (proxW * candidate.proximity + roiW * roiComponent) * 100;
+        const pointsFromLong = candidate.status === 'open' ? 0 : rankPoints * blendedScore;
 
         const existing = results.get(candidate.wallet)!;
         existing.longEntry = {
@@ -396,6 +419,7 @@ export function computeFisherScores(
             rank,
             rankPoints,
             positionId: candidate.positionId,
+            status: candidate.status,
         };
         existing.longPoints = pointsFromLong;
         existing.longRank = rank;  // top-level rank field consumed by season-manager
@@ -409,7 +433,9 @@ export function computeFisherScores(
         const candidate = allShorts[i];
         const rank = i + 1; // All entries get a rank (1-indexed)
         const rankPoints = i < fisherPoints.length ? fisherPoints[i] : 0;
-        const pointsFromShort = rankPoints * candidate.roi * 100;
+        const roiComponent = Math.max(0, Math.min(1, candidate.roi));
+        const blendedScore = (proxW * candidate.proximity + roiW * roiComponent) * 100;
+        const pointsFromShort = candidate.status === 'open' ? 0 : rankPoints * blendedScore;
 
         const existing = results.get(candidate.wallet)!;
         existing.shortEntry = {
@@ -422,6 +448,7 @@ export function computeFisherScores(
             rank,
             rankPoints,
             positionId: candidate.positionId,
+            status: candidate.status,
         };
         existing.shortPoints = pointsFromShort;
         existing.shortRank = rank;

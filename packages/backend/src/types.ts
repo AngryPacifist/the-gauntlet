@@ -87,6 +87,13 @@ export interface TournamentConfig {
     // Bottom Fisher / Top-Tick Traveler quest: rank points
     fisherRankPoints: number[];       // Default [3, 2, 1]: points for 1st/2nd/3rd
 
+    // Bottom Fisher / Top-Tick Traveler score weighting (proximity vs ROI).
+    // Should sum to 1.0. Default 0.8 / 0.2 (proximity-dominant) per the
+    // 2026-05-18 correction. Engine: score = isOpen ? 0
+    //   : rankPoints * (proxW * proximity + roiW * clamp(roi, 0, 1)) * 100.
+    fisherProximityWeight: number;    // Default 0.8
+    fisherRoiWeight: number;          // Default 0.2
+
     // Quest point award tables (used by final-score.ts + raffle-engine)
     dailyQuestPoints: number[];       // Default [0.2, 0.15, 0.1, 0.05, 0.01]
     multidayQuestPoints: number[];    // Default [0.3, 0.25, 0.2, 0.15, 0.1]
@@ -138,6 +145,8 @@ export const DEFAULT_TOURNAMENT_CONFIG: TournamentConfig = {
     allAroundMinTradeUsd: 500,
     allAroundMaxPointsPerAsset: 25,
     fisherRankPoints: [3, 2, 1],
+    fisherProximityWeight: 0.8,
+    fisherRoiWeight: 0.2,
     dailyQuestPoints: [0.2, 0.15, 0.1, 0.05, 0.01],
     multidayQuestPoints: [0.3, 0.25, 0.2, 0.15, 0.1],
     raffleMinClosedPositions: 10,
@@ -432,6 +441,12 @@ export interface FisherEntryDetail {
     rank: number | null;
     rankPoints: number;
     positionId: number;
+    // Position lifecycle status at scoring time. 'open' positions appear on the
+    // leaderboard ranked by proximity but score 0 until they close (the 3-day
+    // rolling rescore window catches retroactive closes).
+    // Optional for backwards compat with pre-2026-05-18 JSONB rows that lack
+    // this field; FE consumers treat undefined as not-open.
+    status?: 'open' | 'close' | 'liquidate';
 }
 
 export interface FisherDetails {
