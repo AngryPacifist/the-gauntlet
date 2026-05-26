@@ -25,17 +25,26 @@ const DEFAULT_BASE_URL = 'https://datapi.adrena.trade';
 
 export interface AdrenaStake {
     stake_id: number;
-    user_pubkey: string;
     mint: string;
     symbol: 'ADX' | 'ALP';
     initial_amount: number;
-    current_amount: number;
+    /**
+     * Currently-staked ADX after any unstakes / early exits. API field is
+     * `remaining_amount` (not `current_amount` — the Commit 4 declaration
+     * mismatched the live response shape; corrected here when first
+     * consumed by Activity 2 scorer in Commit 11).
+     */
+    remaining_amount: number;
     locked_days: number;
     is_liquid: boolean;
     is_early_exit: boolean;
     status: 'open' | 'closed';
     entry_date: string;
-    end_date: string | null;
+    /** ISO timestamp the stake was withdrawn; null for open stakes. */
+    exit_date: string | null;
+    stake_resolution_thread_id?: string;
+    created_at?: string;
+    updated_at?: string | null;
 }
 
 export interface ReferrerStatus {
@@ -308,9 +317,19 @@ export class AdrenaClient {
         return data?.positions ?? [];
     }
 
-    // GET /stake?user_wallet=X — per-user stake list (404 → [] per fetchWithRetry)
-    async getStakes(wallet: string): Promise<AdrenaStake[]> {
-        const url = `${this.baseUrl}/stake?user_wallet=${encodeURIComponent(wallet)}`;
+    // GET /stake?user_wallet=X&start_date=... — per-user stake list.
+    //
+    // The endpoint defaults to a ~25-day lookback window (verified empirically
+    // 2026-05-26: response includes start_date matching ~25 days ago). For
+    // Mutagen R2 staking scoring, we need ALL currently-open stakes including
+    // those started before the default window. Max ADX lock duration is 540
+    // days, so passing `startDate` ≥ 540 days back captures every stake that
+    // could still be active. Callers that don't pass startDate get the API
+    // default behavior (recent stakes only).
+    async getStakes(wallet: string, startDate?: Date): Promise<AdrenaStake[]> {
+        const params = new URLSearchParams({ user_wallet: wallet });
+        if (startDate) params.set('start_date', startDate.toISOString());
+        const url = `${this.baseUrl}/stake?${params.toString()}`;
         const response = await this.fetchWithRetry(url);
         if (!response.success) {
             // /stake returns {error: "Not found"} for wallets with no stakes; fetchWithRetry treats

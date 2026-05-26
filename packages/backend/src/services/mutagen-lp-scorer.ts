@@ -27,6 +27,7 @@ import { ALP_MINT, RWALP_MINT } from './solana-constants.js';
 import { AdrenaNativeLockSource } from './lock-sources/adrena-native.js';
 import {
     bracketLookupUsd,
+    sumMutationIncrements,
     type ScorerContext,
     type ActivityScoreResult,
     type DimensionScore,
@@ -108,7 +109,7 @@ export async function scoreActivity1(ctx: ScorerContext): Promise<ActivityScoreR
     const qualifiedCount = dims.filter((d) => d.qualifiedForMutation).length;
     const extraQualified = Math.max(0, qualifiedCount - 1);
     const mutationFactor =
-        1 + sumIncrements(ctx.config.activity1.mutationIncrements, extraQualified);
+        1 + sumMutationIncrements(ctx.config.activity1.mutationIncrements, extraQualified);
 
     const baseScore = sizeScore + lockScore;
     const finalScore = baseScore * mutationFactor;
@@ -143,23 +144,3 @@ async function getSplBalance(wallet: PublicKey, mint: PublicKey): Promise<number
     return total;
 }
 
-/**
- * Sums the first `extraDims` increments. If there are more extra dimensions
- * than tabled increments, the last increment applies for each additional dim
- * (so the slope continues at the steepest-tier rate).
- *
- * Example: increments [0.3, 0.5, 0.7, 0.9], extraDims=5
- *   → 0.3 + 0.5 + 0.7 + 0.9 + 0.9 (one extra at last-tier rate) = 3.3
- *
- * Returns 0 when extraDims = 0 (only one qualified dim → no mutation bonus).
- */
-function sumIncrements(increments: number[], extraDims: number): number {
-    if (extraDims <= 0 || increments.length === 0) return 0;
-    let sum = 0;
-    const tabledCount = Math.min(extraDims, increments.length);
-    for (let i = 0; i < tabledCount; i++) sum += increments[i];
-    if (extraDims > increments.length) {
-        sum += increments[increments.length - 1] * (extraDims - increments.length);
-    }
-    return sum;
-}

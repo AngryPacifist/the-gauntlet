@@ -66,6 +66,71 @@ export function bracketLookupCount(table: CountBracket, value: number): number {
     return 0;
 }
 
+// ---------- UI lock-tier buckets ----------
+//
+// Used by both AdrenaNativeLockSource (deciding which tier a sub-tier
+// on-chain lock duration buckets to) and Activity 2 staking scorer
+// (mapping per-stake locked_days to its multiplier-eligible tier).
+//
+// ADX UI tiers from /stake page header (0d liquid / 90d / 180d / 360d / 540d).
+// ALP UI tiers from /buy_alp Lock buttons (30d / 90d / 180d / 1yr).
+// The "1yr" button is treated as 360d per native-staking convention;
+// ZeDef open question #31 reconciles whether it should be 365 instead.
+
+export const ADX_TIERS_DAYS: readonly number[] = [0, 90, 180, 360, 540];
+export const ALP_TIERS_DAYS: readonly number[] = [30, 90, 180, 360];
+
+/**
+ * Buckets `value` to the closest entry in `tiers`. Ties go to the lower
+ * tier (because Math.abs comparison is strict-less-than, not less-equal,
+ * so the first match wins).
+ *
+ * Empty tier array is invalid input — returns 0 defensively.
+ */
+export function bucketToNearestTier(value: number, tiers: readonly number[]): number {
+    if (tiers.length === 0) return 0;
+    let closest = tiers[0];
+    let bestDist = Math.abs(closest - value);
+    for (let i = 1; i < tiers.length; i++) {
+        const d = Math.abs(tiers[i] - value);
+        if (d < bestDist) {
+            bestDist = d;
+            closest = tiers[i];
+        }
+    }
+    return closest;
+}
+
+// ---------- Within-Activity mutation math ----------
+
+/**
+ * Sums the first `extraDims` mutation increments. If more extra dimensions
+ * exist than tabled increments, the last increment applies for each
+ * additional dim (slope continues at the steepest-tier rate, never resets).
+ *
+ * Example: increments [0.3, 0.5, 0.7, 0.9], extraDims=5
+ *   → 0.3 + 0.5 + 0.7 + 0.9 + 0.9 (one extra at last-tier rate) = 3.3
+ *
+ * "Extra" dims = qualifiedDimCount - 1 (the first qualified dim earns the
+ * base mutationFactor of 1.0; each ADDITIONAL qualified dim adds an
+ * increment). So:
+ *   1 qualified dim  → extraDims=0 → 0   → mutationFactor 1.0
+ *   2 qualified dims → extraDims=1 → +0.3 → mutationFactor 1.3
+ *   3 qualified dims → extraDims=2 → +0.8 → mutationFactor 1.8
+ *
+ * Returns 0 for extraDims ≤ 0 (or empty table).
+ */
+export function sumMutationIncrements(increments: number[], extraDims: number): number {
+    if (extraDims <= 0 || increments.length === 0) return 0;
+    let sum = 0;
+    const tabledCount = Math.min(extraDims, increments.length);
+    for (let i = 0; i < tabledCount; i++) sum += increments[i];
+    if (extraDims > increments.length) {
+        sum += increments[increments.length - 1] * (extraDims - increments.length);
+    }
+    return sum;
+}
+
 // ---------- Scorer I/O ----------
 
 export interface ScorerContext {

@@ -35,6 +35,11 @@ import {
     ADRENA_USER_STAKING_SIZE,
     ADRENA_USER_STAKING_DISCRIMINATOR,
 } from '../solana-constants.js';
+import {
+    ADX_TIERS_DAYS,
+    ALP_TIERS_DAYS,
+    bucketToNearestTier,
+} from '../mutagen-scorer-types.js';
 import type { LockSource, LockEntry } from './types.js';
 
 // ---------- UserStaking outer layout (from codama IDL) ----------
@@ -81,27 +86,11 @@ const LS_STAKE_TIME_OFFSET = 8;
 const LS_END_TIME_OFFSET = 24;
 const LS_LOCK_DURATION_OFFSET = 32;
 
-// ---------- UI-tier buckets per mint ----------
-//
-// ADX (LM staking) — UI tiers from /stake page header (0d / 90d / 180d / 360d / 540d)
-const ADX_TIERS_DAYS = [0, 90, 180, 360, 540] as const;
-// ALP (LP staking via /buy_alp) — UI buttons 30d / 90d / 180d / 1yr
-// The "1yr" button is treated as 360d per native-staking convention; ZeDef
-// open question (#31 in teardown §17) reconciles whether it should be 365.
-const ALP_TIERS_DAYS = [30, 90, 180, 360] as const;
-
-function bucketToNearestUiTier(durationDays: number, mint: PublicKey): number {
-    const tiers: readonly number[] = mint.equals(ADX_MINT) ? ADX_TIERS_DAYS : ALP_TIERS_DAYS;
-    let closest = tiers[0];
-    let bestDist = Math.abs(closest - durationDays);
-    for (let i = 1; i < tiers.length; i++) {
-        const d = Math.abs(tiers[i] - durationDays);
-        if (d < bestDist) {
-            bestDist = d;
-            closest = tiers[i];
-        }
-    }
-    return closest;
+// UI-tier sets (ADX_TIERS_DAYS, ALP_TIERS_DAYS) and bucketToNearestTier
+// helper live in mutagen-scorer-types.ts so Activity 2 staking scorer
+// can share them. Per-mint dispatch:
+function tiersForMint(mint: PublicKey): readonly number[] {
+    return mint.equals(ADX_MINT) ? ADX_TIERS_DAYS : ALP_TIERS_DAYS;
 }
 
 interface LockedStakeRaw {
@@ -181,7 +170,7 @@ export class AdrenaNativeLockSource implements LockSource {
 
             locks.push({
                 sourceMint: mint,
-                durationDays: bucketToNearestUiTier(lockDurationDays, mint),
+                durationDays: bucketToNearestTier(lockDurationDays, tiersForMint(mint)),
                 amountRaw: raw.amount,
                 startedAt: Number(raw.stakeTime),
                 endsAt: endsAtSec,
