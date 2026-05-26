@@ -317,6 +317,131 @@ CREATE INDEX IF NOT EXISTS idx_rounds_tournament_status ON rounds(tournament_id,
 CREATE INDEX IF NOT EXISTS idx_bracket_entries_bracket_cpi_desc ON bracket_entries(bracket_id, cpi_score DESC);
 `;
 
+// ============================================================================
+// MUTAGEN R2 — 9 new tables for the new scoring domain
+// ============================================================================
+// See .agent/brain/zedef_mutagen_rework_r2_implementation_plan.md §8.1
+// for table specs and rationale.
+
+const MUTAGEN_R2_TABLES_SQL = `
+-- Mutagen Epochs (Y-month epochs per teardown, default 3 months)
+CREATE TABLE IF NOT EXISTS mutagen_epochs (
+  id SERIAL PRIMARY KEY,
+  name VARCHAR(120) NOT NULL,
+  status VARCHAR(20) NOT NULL DEFAULT 'registration',
+  start_at TIMESTAMPTZ NOT NULL,
+  end_at TIMESTAMPTZ NOT NULL,
+  sub_epoch_weeks INTEGER NOT NULL DEFAULT 3,
+  config JSONB NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Mutagen Sub-Epochs (X-week buckets within an epoch, default 3 weeks)
+CREATE TABLE IF NOT EXISTS mutagen_sub_epochs (
+  id SERIAL PRIMARY KEY,
+  epoch_id INTEGER NOT NULL REFERENCES mutagen_epochs(id),
+  sub_epoch_index INTEGER NOT NULL,
+  start_at TIMESTAMPTZ NOT NULL,
+  end_at TIMESTAMPTZ NOT NULL,
+  UNIQUE(epoch_id, sub_epoch_index)
+);
+
+-- Mutagen User Scores (per-wallet per-sub-epoch result, on-demand-cached)
+CREATE TABLE IF NOT EXISTS mutagen_user_scores (
+  id SERIAL PRIMARY KEY,
+  sub_epoch_id INTEGER NOT NULL REFERENCES mutagen_sub_epochs(id),
+  wallet VARCHAR(44) NOT NULL,
+  activity_1_score NUMERIC(20, 4) NOT NULL DEFAULT 0,
+  activity_2_score NUMERIC(20, 4) NOT NULL DEFAULT 0,
+  activity_3_score NUMERIC(20, 4) NOT NULL DEFAULT 0,
+  activity_4_score NUMERIC(20, 4) NOT NULL DEFAULT 0,
+  activity_5_score NUMERIC(20, 4) NOT NULL DEFAULT 0,
+  meta_mutation_multiplier NUMERIC(6, 3) NOT NULL DEFAULT 1.0,
+  total_mutagen NUMERIC(20, 4) NOT NULL DEFAULT 0,
+  details JSONB NOT NULL,
+  computed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE(sub_epoch_id, wallet)
+);
+
+-- Mutagen Snapshots (audit trail of raw inputs per scoring run)
+CREATE TABLE IF NOT EXISTS mutagen_snapshots (
+  id SERIAL PRIMARY KEY,
+  sub_epoch_id INTEGER NOT NULL REFERENCES mutagen_sub_epochs(id),
+  wallet VARCHAR(44) NOT NULL,
+  raw_inputs JSONB NOT NULL,
+  computed_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Mutagen Marketing Awards (Activity 5: admin-manual + future automated feeds)
+CREATE TABLE IF NOT EXISTS mutagen_marketing_awards (
+  id SERIAL PRIMARY KEY,
+  sub_epoch_id INTEGER NOT NULL REFERENCES mutagen_sub_epochs(id),
+  wallet VARCHAR(44) NOT NULL,
+  source VARCHAR(32) NOT NULL,
+  activity_type VARCHAR(64) NOT NULL,
+  amount NUMERIC(20, 4) NOT NULL,
+  reason VARCHAR(500),
+  awarded_by VARCHAR(80),
+  awarded_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Mutagen Legacy Scores (snapshot-freeze of pre-R2 leaderboard, migration path c)
+CREATE TABLE IF NOT EXISTS mutagen_legacy_scores (
+  id SERIAL PRIMARY KEY,
+  wallet VARCHAR(44) NOT NULL UNIQUE,
+  snapshot_at TIMESTAMPTZ NOT NULL,
+  points_trading NUMERIC(20, 4),
+  points_mutations NUMERIC(20, 4),
+  points_streaks NUMERIC(20, 4),
+  points_quests NUMERIC(20, 4),
+  total_points NUMERIC(20, 4),
+  total_volume NUMERIC(20, 4),
+  raw_row JSONB NOT NULL
+);
+
+-- Mutagen Position Snapshots (Activity 4 time-weighted size, hourly snapshots)
+CREATE TABLE IF NOT EXISTS mutagen_position_snapshots (
+  id SERIAL PRIMARY KEY,
+  wallet VARCHAR(44) NOT NULL,
+  sub_epoch_id INTEGER NOT NULL REFERENCES mutagen_sub_epochs(id),
+  pool_address VARCHAR(44) NOT NULL,
+  source VARCHAR(32) NOT NULL,
+  position_value_usd NUMERIC(20, 4) NOT NULL,
+  total_x_amount NUMERIC(40, 0) NOT NULL,
+  total_y_amount NUMERIC(40, 0) NOT NULL,
+  last_updated_at_chain INTEGER,
+  snapshotted_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Mutagen Vote Cache (daily refresh; expensive getProgramAccounts query)
+CREATE TABLE IF NOT EXISTS mutagen_vote_cache (
+  wallet VARCHAR(44) PRIMARY KEY,
+  vote_count INTEGER NOT NULL,
+  has_token_owner_record BOOLEAN NOT NULL,
+  refreshed_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Mutagen Scoring Locks (prevent concurrent scoring per wallet+sub-epoch; TTL via expires_at)
+CREATE TABLE IF NOT EXISTS mutagen_scoring_locks (
+  wallet VARCHAR(44) NOT NULL,
+  sub_epoch_id INTEGER NOT NULL,
+  acquired_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  expires_at TIMESTAMPTZ NOT NULL,
+  PRIMARY KEY (wallet, sub_epoch_id)
+);
+`;
+
+const MUTAGEN_R2_INDEXES_SQL = `
+CREATE INDEX IF NOT EXISTS idx_mutagen_sub_epochs_epoch ON mutagen_sub_epochs(epoch_id);
+CREATE INDEX IF NOT EXISTS idx_mutagen_user_scores_leaderboard ON mutagen_user_scores(sub_epoch_id, total_mutagen DESC);
+CREATE INDEX IF NOT EXISTS idx_mutagen_user_scores_wallet ON mutagen_user_scores(wallet);
+CREATE INDEX IF NOT EXISTS idx_mutagen_snapshots_subepoch ON mutagen_snapshots(sub_epoch_id, wallet);
+CREATE INDEX IF NOT EXISTS idx_mutagen_marketing_awards_wallet ON mutagen_marketing_awards(wallet, sub_epoch_id);
+CREATE INDEX IF NOT EXISTS idx_mutagen_position_snapshots_wallet_subepoch ON mutagen_position_snapshots(wallet, sub_epoch_id);
+CREATE INDEX IF NOT EXISTS idx_mutagen_position_snapshots_snapshotted_at ON mutagen_position_snapshots(snapshotted_at);
+CREATE INDEX IF NOT EXISTS idx_mutagen_vote_cache_refreshed_at ON mutagen_vote_cache(refreshed_at);
+`;
+
 async function migrate() {
     console.log('🔧 Running database migration...');
     console.log('   Connecting to:', process.env.DATABASE_URL?.replace(/:[^@]+@/, ':***@'));
@@ -331,13 +456,21 @@ async function migrate() {
     try {
         await client.connect();
 
-        // Step 1: Tables + ALTER TABLE (must complete before indexes reference new columns)
+        // Step 1: Forge tables + ALTER TABLE (must complete before indexes reference new columns)
         await client.query(TABLES_SQL);
-        console.log('   ✅ Tables and columns created');
+        console.log('   ✅ Forge tables and columns created');
 
-        // Step 2: Indexes (safe now that all columns exist)
+        // Step 2: Forge indexes (safe now that all columns exist)
         await client.query(INDEXES_SQL);
-        console.log('   ✅ Indexes created');
+        console.log('   ✅ Forge indexes created');
+
+        // Step 3: Mutagen R2 tables (new domain alongside Forge)
+        await client.query(MUTAGEN_R2_TABLES_SQL);
+        console.log('   ✅ Mutagen R2 tables created');
+
+        // Step 4: Mutagen R2 indexes
+        await client.query(MUTAGEN_R2_INDEXES_SQL);
+        console.log('   ✅ Mutagen R2 indexes created');
 
         console.log('✅ Database schema created successfully');
     } catch (error) {
