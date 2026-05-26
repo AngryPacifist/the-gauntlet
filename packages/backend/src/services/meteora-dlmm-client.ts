@@ -57,8 +57,15 @@ interface DlmmPositionRaw {
         lowerBinId: number;
     };
 }
+interface DlmmTokenLike {
+    publicKey: PublicKey;
+    decimal: number;
+    mint?: { decimals?: number };
+}
 interface DlmmInstance {
     getPositionsByUserAndLbPair(wallet: PublicKey): Promise<{ userPositions: DlmmPositionRaw[] }>;
+    tokenX: DlmmTokenLike;
+    tokenY: DlmmTokenLike;
 }
 interface DlmmModule {
     create(
@@ -105,6 +112,34 @@ export async function getWalletPositionsForPool(
         upperBinId: p.positionData.upperBinId,
         lowerBinId: p.positionData.lowerBinId,
     }));
+}
+
+/**
+ * Pool-level token metadata, derived from the DLMM SDK instance. Used by
+ * the Activity 4 scorer to convert raw token amounts to USD via the right
+ * decimals + mint→price lookup.
+ *
+ * DLMM convention: tokenX has the lex-smaller mint address than tokenY.
+ * We never assume the order — we read it from the SDK at runtime.
+ */
+export interface PoolTokenInfo {
+    poolAddress: string;
+    tokenXMint: string;
+    tokenXDecimals: number;
+    tokenYMint: string;
+    tokenYDecimals: number;
+}
+
+export async function getPoolTokenInfo(poolAddress: PublicKey): Promise<PoolTokenInfo> {
+    const connection = getSolanaConnection();
+    const dlmm = await dlmmMod.create(connection, poolAddress);
+    return {
+        poolAddress: poolAddress.toBase58(),
+        tokenXMint: dlmm.tokenX.publicKey.toBase58(),
+        tokenXDecimals: dlmm.tokenX.decimal ?? dlmm.tokenX.mint?.decimals ?? 0,
+        tokenYMint: dlmm.tokenY.publicKey.toBase58(),
+        tokenYDecimals: dlmm.tokenY.decimal ?? dlmm.tokenY.mint?.decimals ?? 0,
+    };
 }
 
 /**
