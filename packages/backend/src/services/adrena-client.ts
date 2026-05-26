@@ -55,7 +55,15 @@ export interface ReferrerStatus {
 export interface ReferrerRewardItem {
     referrer_reward_id: number;
     position_id: number;
-    usdc_amount: number;
+    /**
+     * The /referrer-rewards API returns this as a decimal STRING in current
+     * production (verified empirically 2026-05-26 — OUTIS/ZeDef both came
+     * back with string values). Typed as string|number so consumers must
+     * coerce explicitly via Number() — see mutagen-referrer-scorer's
+     * NaN-safe reducer. If Adrena ever normalizes to number-only, this
+     * union is still safe.
+     */
+    usdc_amount: string | number;
     created_at: string;
 }
 

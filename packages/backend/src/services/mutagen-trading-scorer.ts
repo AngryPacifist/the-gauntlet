@@ -190,8 +190,9 @@ interface ForgeRanking {
  *   - The wallet isn't in the Forge
  *   - The wallet's percentile falls outside every tier
  *
- * Type signature uses Pick to avoid coupling this helper to the full
- * activity3 config shape — it only needs topPctTiers.
+ * Internally only reads `config.topPctTiers`; takes the full activity3
+ * config shape for caller convenience so other potential extensions
+ * (e.g. min-CPI gating) don't require a signature change later.
  */
 async function computeForgeTopPctScore(
     wallet: string,
