@@ -17,9 +17,9 @@
 // 180-day 300K ADX lock; ZeDef's ALP UserStaking has only a liquid stake
 // (no active locked stakes despite the `locked_stake_id_counter` being > 0
 // — past locks have been withdrawn). RWALP staking pool doesn't exist
-// today; if it ever does, RWALP locks will land through the same path
-// (the only thing this source cares about is the UserStaking PDA, which
-// is derived from any staking-pool address).
+// today; if Adrena ever creates one, add the mint→pool mapping to
+// `stakingPoolForMint()` below and the rest of the path (UserStaking PDA
+// derivation, LockedStake array decode) is generic.
 // ============================================================================
 
 import { PublicKey } from '@solana/web3.js';

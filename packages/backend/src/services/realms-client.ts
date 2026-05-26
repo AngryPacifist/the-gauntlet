@@ -109,8 +109,9 @@ export async function getWalletVoteCount(wallet: PublicKey): Promise<number> {
  * realm, or null if the wallet hasn't deposited governing/shadow tokens.
  *
  * Filters: dataSize 282 (TokenOwnerRecordV2 size) + memcmp on realm
- * (offset 1) + memcmp on governing_token_owner (offset 65). Both memcmps
- * narrow the set drastically before the filesystem-side filter.
+ * (offset 1) + memcmp on governing_token_owner (offset 65). The combined
+ * filters narrow the set to at most one match on the RPC side; no
+ * client-side filtering is needed afterwards.
  */
 export async function getTokenOwnerRecordPubkey(
     wallet: PublicKey,
