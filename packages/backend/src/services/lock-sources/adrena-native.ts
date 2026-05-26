@@ -3,23 +3,45 @@
 // ============================================================================
 //
 // Reads Adrena's native UserStaking account for a given (wallet, mint) pair
-// and emits one LockEntry per active locked stake.
+// and exposes both the liquid amount and per-slot locked stakes. The
+// LockSource interface only returns locked stakes (for Activity 1); the
+// full liquid+locked decode is exposed via `getUserStakingState` for
+// Activity 2 staking-scorer consumption.
 //
 // Byte layout source-of-truth: Adrena codama-generated IDL
 // (`AdrenaFoundation/adrena-abi/idl/adrena.json`, types: UserStaking +
 // LiquidStake + LockedStake). Field offsets pinned below in module-scope
-// constants; if Adrena ever changes the layout, the boot-time PDA assertion
-// in adrena-pda.ts won't catch it (only program ID + seed scheme are
-// checked there), so consider adding a one-shot decode test for OUTIS's
-// known ADX lock as part of future hardening if the layout ever flexes.
+// constants.
 //
-// Empirically verified during inventory: OUTIS's ADX UserStaking has one
-// 180-day 300K ADX lock; ZeDef's ALP UserStaking has only a liquid stake
-// (no active locked stakes despite the `locked_stake_id_counter` being > 0
-// — past locks have been withdrawn). RWALP staking pool doesn't exist
-// today; if Adrena ever creates one, add the mint→pool mapping to
-// `stakingPoolForMint()` below and the rest of the path (UserStaking PDA
-// derivation, LockedStake array decode) is generic.
+// Active-stake filter: amount > 0 AND endTime > now AND resolved === 0.
+// The `resolved` flag is the protocol's own indicator that a stake's
+// rewards have been distributed (i.e., it's settled / done). A slot can
+// have amount > 0 + endTime in the past + resolved = 1 — that's a stake
+// whose lock period ended and rewards were claimed but the user hasn't
+// withdrawn the principal yet. We DON'T count those (they're not active
+// in any meaningful sense for ongoing Mutagen scoring).
+//
+// Authority for using on-chain reads as the source of truth (over the
+// Adrena datapi /stake endpoint): verified empirically against the
+// Adrena program's own transaction logs. Specifically, ZeDef's
+// UserStaking PDA has an upgradeLockedStake TX from 2026-05-08 that
+// logged `new total amount: 4727799524423 ... current locked days: 540`,
+// matching our on-chain decode exactly. Datapi /stake does NOT return
+// that 4.7M position — it appears to miss upgradeLockedStake events.
+// We trust the chain. See investigate_zedef_userstaking_tx_history.ts
+// in scripts/ for the verification harness.
+//
+// Empirical baselines:
+//   - OUTIS's ADX UserStaking: 1 active locked stake (300K ADX, 180d)
+//   - ZeDef's ADX UserStaking: 7 active locked stakes (~4.77M ADX total,
+//     largest 4.72M in slot 2 via 540d upgradeLockedStake) + 1.54M liquid
+//   - ZeDef's ALP UserStaking: 0 active locked stakes; past locks
+//     finalized + withdrawn (locked_stake_id_counter > 0)
+//
+// RWALP staking pool doesn't exist today; if Adrena ever creates one,
+// add the mint→pool mapping to `stakingPoolForMint()` below and the rest
+// of the path (UserStaking PDA derivation, LockedStake array decode) is
+// generic.
 // ============================================================================
 
 import { PublicKey } from '@solana/web3.js';
@@ -85,6 +107,18 @@ const LS_AMOUNT_OFFSET = 0;
 const LS_STAKE_TIME_OFFSET = 8;
 const LS_END_TIME_OFFSET = 24;
 const LS_LOCK_DURATION_OFFSET = 32;
+const LS_RESOLVED_OFFSET = 72; // u8: 0 = active/pending, 1 = rewards distributed (settled)
+
+// ---------- LiquidStake layout (40 bytes at offset 24 in UserStaking) ----------
+//
+// 0..8     amount (u64)
+// 8..16    stake_time (i64)
+// 16..24   claim_time (i64)
+// 24..32   overlap_time (i64)
+// 32..40   overlap_amount (u64)
+//
+const LIQUID_STAKE_OFFSET = 24;
+const LIQUID_AMOUNT_OFFSET = LIQUID_STAKE_OFFSET + 0;
 
 // UI-tier sets (ADX_TIERS_DAYS, ALP_TIERS_DAYS) and bucketToNearestTier
 // helper live in mutagen-scorer-types.ts so Activity 2 staking scorer
@@ -98,6 +132,7 @@ interface LockedStakeRaw {
     stakeTime: bigint;
     endTime: bigint;
     lockDuration: bigint;
+    resolved: number;
 }
 
 function parseLockedStake(data: Buffer, slotIndex: number): LockedStakeRaw | null {
@@ -113,6 +148,7 @@ function parseLockedStake(data: Buffer, slotIndex: number): LockedStakeRaw | nul
         stakeTime: data.readBigInt64LE(base + LS_STAKE_TIME_OFFSET),
         endTime: data.readBigInt64LE(base + LS_END_TIME_OFFSET),
         lockDuration: data.readBigUInt64LE(base + LS_LOCK_DURATION_OFFSET),
+        resolved: data[base + LS_RESOLVED_OFFSET],
     };
 }
 
@@ -135,24 +171,44 @@ function stakingPoolForMint(mint: PublicKey): PublicKey | null {
     return null;
 }
 
+/**
+ * Combined liquid + locked stake snapshot from a single UserStaking
+ * account decode. Activity 1 only needs `locks`; Activity 2 needs both.
+ * Decode is shared so neither path pays for two RPC reads.
+ */
+export interface UserStakingState {
+    /** Liquid (tier-0) stake amount in raw token units. 0 if no liquid stake. */
+    liquidAmountRaw: bigint;
+    /** Active locked stakes (filtered: amount>0, endTime>now, resolved===0). */
+    locks: LockEntry[];
+}
+
 export class AdrenaNativeLockSource implements LockSource {
     readonly name = 'adrena-native';
 
-    async getActiveLocks(wallet: PublicKey, mint: PublicKey): Promise<LockEntry[]> {
+    /**
+     * One-shot decode of a wallet's UserStaking account for a given mint.
+     * Single getAccountInfo RPC call; returns both liquid + locked state.
+     */
+    async getUserStakingState(wallet: PublicKey, mint: PublicKey): Promise<UserStakingState> {
+        const empty: UserStakingState = { liquidAmountRaw: 0n, locks: [] };
+
         const stakingPool = stakingPoolForMint(mint);
-        if (!stakingPool) return []; // No native staking pool for this mint
+        if (!stakingPool) return empty; // No native staking pool for this mint
 
         const connection = getSolanaConnection();
         const userStaking = deriveUserStaking(wallet, stakingPool);
 
         const account = await connection.getAccountInfo(userStaking);
-        if (!account) return []; // wallet has never interacted with this pool
+        if (!account) return empty; // wallet has never interacted with this pool
 
         // Sanity: size and discriminator must match. If either is off, treat
-        // as no-locks — we'd rather miss data than misread garbage.
-        if (account.data.length !== ADRENA_USER_STAKING_SIZE) return [];
+        // as empty — we'd rather miss data than misread garbage.
+        if (account.data.length !== ADRENA_USER_STAKING_SIZE) return empty;
         const discriminator = account.data.subarray(0, 8);
-        if (!discriminator.equals(Buffer.from(ADRENA_USER_STAKING_DISCRIMINATOR))) return [];
+        if (!discriminator.equals(Buffer.from(ADRENA_USER_STAKING_DISCRIMINATOR))) return empty;
+
+        const liquidAmountRaw = account.data.readBigUInt64LE(LIQUID_AMOUNT_OFFSET);
 
         const now = Math.floor(Date.now() / 1000);
         const locks: LockEntry[] = [];
@@ -162,9 +218,11 @@ export class AdrenaNativeLockSource implements LockSource {
             if (!raw) continue;
 
             const endsAtSec = Number(raw.endTime);
-            // Expired locks: amount still in the slot but the lock period is over.
-            // Don't count toward Mutagen scoring — user can/should withdraw.
+            // Active = end_time in future AND not yet finalized (resolved=0).
+            // A resolved=1 stake has had its rewards distributed; it's "done"
+            // even if amount > 0 (principal not yet withdrawn).
             if (endsAtSec <= now) continue;
+            if (raw.resolved !== 0) continue;
 
             const lockDurationDays = Math.round(Number(raw.lockDuration) / 86400);
 
@@ -178,6 +236,15 @@ export class AdrenaNativeLockSource implements LockSource {
             });
         }
 
-        return locks;
+        return { liquidAmountRaw, locks };
+    }
+
+    /**
+     * LockSource interface — locked stakes only (no liquid).
+     * Activity 1 LP scorer consumes this.
+     */
+    async getActiveLocks(wallet: PublicKey, mint: PublicKey): Promise<LockEntry[]> {
+        const state = await this.getUserStakingState(wallet, mint);
+        return state.locks;
     }
 }
