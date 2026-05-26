@@ -328,7 +328,7 @@ export const mutagenPositionSnapshots = pgTable('mutagen_position_snapshots', {
     positionValueUsd: numeric('position_value_usd', { precision: 20, scale: 4 }).notNull(),
     totalXAmount: numeric('total_x_amount', { precision: 40, scale: 0 }).notNull(),
     totalYAmount: numeric('total_y_amount', { precision: 40, scale: 0 }).notNull(),
-    lastUpdatedAtChain: integer('last_updated_at_chain'),  // unix seconds; BIGINT in SQL
+    lastUpdatedAtChain: integer('last_updated_at_chain'),  // unix seconds (INTEGER; safe through 2038)
     snapshottedAt: timestamp('snapshotted_at', { withTimezone: true }).notNull().defaultNow(),
 }, (table) => ({
     walletSubepochIdx: index('idx_mutagen_position_snapshots_wallet_subepoch').on(table.wallet, table.subEpochId),

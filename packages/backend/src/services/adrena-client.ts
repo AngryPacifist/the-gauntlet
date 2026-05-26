@@ -1,14 +1,18 @@
 // ============================================================================
 // Adrena API Client
 //
-// Wraps the Adrena public API at datapi.adrena.trade for trader position data.
-// Sole endpoint: GET /position (trade history per wallet).
+// Wraps the Adrena public API at datapi.adrena.trade. Endpoints:
+//   Forge:        getPositions, filterPositionsForRound, filterValidPositions
+//   Mutagen R2:   getV4Positions, getStakes, getReferrerStatus,
+//                 getReferrerRewards, getLastPrices, getLiquidityInfo,
+//                 getTraderVolume, getAdrenaMutagenLeaderboard
 //
 // Static asset metadata (mints, feed_ids, sessioned flags) lives in
 // services/adrena-canonical.ts (synced from github.com/AdrenaFoundation/adrena-abi).
 // admin/tradable-assets reads the static-mirror; no runtime HTTP needed for that data.
 //
-// Reference: resources/adrena-api-reference.md
+// Reference: resources/adrena-api-reference.md +
+//            .agent/brain/mutagen_rework_r2_inventory.md §4a (datapi swagger)
 // ============================================================================
 
 import type { AdrenaPosition } from '../types.js';
@@ -368,7 +372,12 @@ export class AdrenaClient {
         return data?.pools ?? [];
     }
 
-    // GET /trader-volume[?user_wallet=X] — per-wallet daily trader volume aggregate
+    // GET /trader-volume[?user_wallet=X] — per-wallet DAILY trader volume aggregate.
+    //
+    // ⚠ NOT used by Mutagen R2 scoring path. Activity 3 aggregates per-epoch volume
+    // from /v4/position instead (multi-day window). This method is here for ad-hoc
+    // analytics + future use. When called with `user_wallet`, returns empty array
+    // if the wallet hasn't traded today (by design — endpoint is daily-only).
     async getTraderVolume(wallet?: string): Promise<TraderVolume[]> {
         const url = wallet
             ? `${this.baseUrl}/trader-volume?user_wallet=${encodeURIComponent(wallet)}`
@@ -382,16 +391,22 @@ export class AdrenaClient {
         return data?.traders ?? [];
     }
 
-    // GET /mutagen-leaderboard?limit=N — Adrena's current Mutagen leaderboard
-    // (used for the one-time bootstrap script to seed our R2 leaderboard with the
-    // wallets already on Adrena's current system — see implementation_plan §8.4)
+    // GET /mutagen-leaderboard?limit=N — Adrena's current Mutagen leaderboard.
+    // Used by the one-time bootstrap script to seed our R2 leaderboard with the
+    // wallets already on Adrena's current system (implementation_plan §8.4).
+    //
+    // ⚠ API quirk: the server-side `limit` param is IGNORED. The endpoint always
+    // returns the full leaderboard (~2782 rows as of 2026-05-26). We pass `limit`
+    // anyway for forward-compat in case they fix it server-side, but we ALSO
+    // slice client-side to honor the method's contract.
     async getAdrenaMutagenLeaderboard(limit: number = 1000): Promise<AdrenaMutagenRow[]> {
         const url = `${this.baseUrl}/mutagen-leaderboard?limit=${limit}`;
         const response = await this.fetchWithRetry(url);
         if (!response.success) {
             throw new Error(`Adrena API error (GET /mutagen-leaderboard): ${response.error ?? 'Unknown'}`);
         }
-        return Array.isArray(response.data) ? (response.data as AdrenaMutagenRow[]) : [];
+        const rows = Array.isArray(response.data) ? (response.data as AdrenaMutagenRow[]) : [];
+        return rows.slice(0, limit);  // enforce limit client-side (API ignores it)
     }
 
     // --------------------------------------------------------------------------
