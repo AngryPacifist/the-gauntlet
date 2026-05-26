@@ -2,7 +2,13 @@
 // Express Server Entry Point
 // ============================================================================
 
-import 'dotenv/config';
+// Boot-time env validation. Side effect of importing config/env.js is loading
+// the monorepo-root .env via path traversal; calling validateEnv() throws
+// loudly if any required var is missing. Must run before any module that
+// reads process.env directly.
+import { validateEnv } from './config/env.js';
+validateEnv();
+
 import express from 'express';
 import cors from 'cors';
 import tournamentRoutes from './routes/tournaments.js';
