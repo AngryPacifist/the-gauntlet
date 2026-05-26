@@ -9,6 +9,14 @@
 import { validateEnv } from './config/env.js';
 validateEnv();
 
+// Boot-time PDA sanity check. Verifies Adrena's program-derived mint
+// addresses still reproduce the canonical pubkeys pinned in
+// solana-constants.ts. Throws loudly if Adrena's program ID or seed scheme
+// has changed upstream — protects against silent corruption in every
+// Mutagen R2 scorer.
+import { assertCanonicalPdas } from './services/adrena-pda.js';
+assertCanonicalPdas();
+
 import express from 'express';
 import cors from 'cors';
 import tournamentRoutes from './routes/tournaments.js';
