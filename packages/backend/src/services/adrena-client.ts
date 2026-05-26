@@ -15,6 +15,105 @@ import type { AdrenaPosition } from '../types.js';
 
 const DEFAULT_BASE_URL = 'https://datapi.adrena.trade';
 
+// ============================================================================
+// Mutagen R2 — endpoint response types (inline; client-specific shapes)
+// ============================================================================
+
+export interface AdrenaStake {
+    stake_id: number;
+    user_pubkey: string;
+    mint: string;
+    symbol: 'ADX' | 'ALP';
+    initial_amount: number;
+    current_amount: number;
+    locked_days: number;
+    is_liquid: boolean;
+    is_early_exit: boolean;
+    status: 'open' | 'closed';
+    entry_date: string;
+    end_date: string | null;
+}
+
+export interface ReferrerStatus {
+    is_referrer: boolean;
+    is_active: boolean | null;
+}
+
+export interface ReferrerRewardItem {
+    referrer_reward_id: number;
+    position_id: number;
+    usdc_amount: number;
+    created_at: string;
+}
+
+export interface ReferrerRewards {
+    is_approved: boolean;
+    pending_usdc: number;
+    paid_usdc: number;
+    total_usdc: number;
+    total_referees: number;
+    rewards: ReferrerRewardItem[];
+}
+
+export interface PriceQuote {
+    price: string;
+    price_timestamp: string;
+}
+
+export interface LastPrices {
+    adx: PriceQuote;
+    alp: PriceQuote;
+    rwalp: PriceQuote;
+}
+
+export interface PoolLiquidityCustody {
+    pubkey: string;
+    symbol: string;
+    name: string;
+    mint: string;
+    isSynthetic: boolean;
+    isStable: boolean;
+    aumUsd: string;
+    aumTokenAmount: string;
+}
+
+export interface PoolLiquidityInfo {
+    poolName: string;
+    poolPubkey: string;
+    poolType: string;
+    lpSymbol: 'ALP' | 'RWALP';
+    aumUsd: string;
+    aumUsdFormatted: string;
+    aumLimitUsd: string;
+    aumLimitUsdFormatted: string;
+    alpPriceUsd: string;
+    alpTotalSupply: string;
+    alpAprPct: string;
+    alpRealizedFeeUsd: string;
+    custodies: PoolLiquidityCustody[];
+}
+
+export interface TraderVolume {
+    user_pubkey: string;
+    total_volume: number;
+    total_pnl: number;
+}
+
+export interface AdrenaMutagenRow {
+    rank: number;
+    user_wallet: string;
+    points_trading: number;
+    points_mutations: number;
+    points_streaks: number;
+    points_quests: number;
+    total_points: number;
+    total_volume: number;
+    total_pnl: number;
+    total_borrow_fees: number;
+    total_close_fees: number;
+    total_fees: number;
+}
+
 // Cache duration for trade data: 5 minutes
 // The Adrena API doesn't document rate limits, but we should be respectful.
 // During active rounds, the scheduler refreshes scores every 15 minutes,
@@ -167,6 +266,132 @@ export class AdrenaClient {
 
     invalidateAllCache(): void {
         this.positionCache.clear();
+    }
+
+    // ==========================================================================
+    // MUTAGEN R2 — 8 new endpoint wrappers
+    //
+    // - getV4Positions(wallet, limit?)         GET /v4/position?user_wallet=X
+    // - getStakes(wallet)                       GET /stake?user_wallet=X
+    // - getReferrerStatus(account)              GET /referrer/status?account=X
+    // - getReferrerRewards(account)             GET /referrer-rewards?account=X
+    // - getLastPrices()                         GET /last-price
+    // - getLiquidityInfo()                      GET /liquidity-info
+    // - getTraderVolume(wallet?)                GET /trader-volume[?user_wallet=X]
+    // - getAdrenaMutagenLeaderboard(limit?)     GET /mutagen-leaderboard
+    //
+    // Param convention quirks (verified live in inventory phase):
+    //   - referrer/*  + fee-rebates/*: `account=X`  (NOT `wallet` / `user_wallet`)
+    //   - stake / position / v4/position / trader-volume: `user_wallet=X`
+    // ==========================================================================
+
+    // GET /v4/position — like legacy /position but response is nested:
+    //   v4:     { success, data: { positions: [...] } }
+    //   legacy: { success, data: [...] }
+    // Returned positions have all the mutagen fields (points_*, total_points)
+    // plus v4-only extras (pool_id, decrease_size, close_size) we ignore here.
+    async getV4Positions(wallet: string, limit?: number): Promise<AdrenaPosition[]> {
+        const params = new URLSearchParams({ user_wallet: wallet });
+        if (limit !== undefined) params.set('limit', String(limit));
+        const url = `${this.baseUrl}/v4/position?${params.toString()}`;
+        const response = await this.fetchWithRetry(url);
+        if (!response.success) {
+            throw new Error(`Adrena API error (GET /v4/position): ${response.error ?? 'Unknown'}`);
+        }
+        // 404-empty path → response.data = [] (per fetchWithRetry); v4 normal path → { positions: [...] }
+        if (Array.isArray(response.data)) return [];
+        const data = response.data as { positions?: AdrenaPosition[] };
+        return data?.positions ?? [];
+    }
+
+    // GET /stake?user_wallet=X — per-user stake list (404 → [] per fetchWithRetry)
+    async getStakes(wallet: string): Promise<AdrenaStake[]> {
+        const url = `${this.baseUrl}/stake?user_wallet=${encodeURIComponent(wallet)}`;
+        const response = await this.fetchWithRetry(url);
+        if (!response.success) {
+            // /stake returns {error: "Not found"} for wallets with no stakes; fetchWithRetry treats
+            // 404 as empty success, so we'd land here only for genuine API issues.
+            throw new Error(`Adrena API error (GET /stake): ${response.error ?? 'Unknown'}`);
+        }
+        // Response shape: { success, data: { stakes: [...], start_date, end_date, limit } }
+        const data = response.data as { stakes?: AdrenaStake[] } | unknown[];
+        if (Array.isArray(data)) return data as AdrenaStake[];  // 404-empty path
+        return data?.stakes ?? [];
+    }
+
+    // GET /referrer/status?account=X — is the wallet an approved referrer?
+    async getReferrerStatus(account: string): Promise<ReferrerStatus> {
+        const url = `${this.baseUrl}/referrer/status?account=${encodeURIComponent(account)}`;
+        const response = await this.fetchWithRetry(url);
+        if (!response.success) {
+            throw new Error(`Adrena API error (GET /referrer/status): ${response.error ?? 'Unknown'}`);
+        }
+        // 404-empty path returns data=[]; coerce to default false/null
+        if (Array.isArray(response.data)) return { is_referrer: false, is_active: null };
+        return response.data as ReferrerStatus;
+    }
+
+    // GET /referrer-rewards?account=X — referrer rewards summary + per-position history
+    async getReferrerRewards(account: string): Promise<ReferrerRewards> {
+        const url = `${this.baseUrl}/referrer-rewards?account=${encodeURIComponent(account)}`;
+        const response = await this.fetchWithRetry(url);
+        if (!response.success) {
+            throw new Error(`Adrena API error (GET /referrer-rewards): ${response.error ?? 'Unknown'}`);
+        }
+        if (Array.isArray(response.data)) {
+            return {
+                is_approved: false, pending_usdc: 0, paid_usdc: 0, total_usdc: 0,
+                total_referees: 0, rewards: [],
+            };
+        }
+        return response.data as ReferrerRewards;
+    }
+
+    // GET /last-price — current ADX / ALP / RWALP prices
+    async getLastPrices(): Promise<LastPrices> {
+        const url = `${this.baseUrl}/last-price`;
+        const response = await this.fetchWithRetry(url);
+        if (!response.success) {
+            throw new Error(`Adrena API error (GET /last-price): ${response.error ?? 'Unknown'}`);
+        }
+        return response.data as LastPrices;
+    }
+
+    // GET /liquidity-info — per-pool AUM, ALP price, AUM cap, custody breakdown
+    async getLiquidityInfo(): Promise<PoolLiquidityInfo[]> {
+        const url = `${this.baseUrl}/liquidity-info`;
+        const response = await this.fetchWithRetry(url);
+        if (!response.success) {
+            throw new Error(`Adrena API error (GET /liquidity-info): ${response.error ?? 'Unknown'}`);
+        }
+        const data = response.data as { pools?: PoolLiquidityInfo[] };
+        return data?.pools ?? [];
+    }
+
+    // GET /trader-volume[?user_wallet=X] — per-wallet daily trader volume aggregate
+    async getTraderVolume(wallet?: string): Promise<TraderVolume[]> {
+        const url = wallet
+            ? `${this.baseUrl}/trader-volume?user_wallet=${encodeURIComponent(wallet)}`
+            : `${this.baseUrl}/trader-volume`;
+        const response = await this.fetchWithRetry(url);
+        if (!response.success) {
+            throw new Error(`Adrena API error (GET /trader-volume): ${response.error ?? 'Unknown'}`);
+        }
+        if (Array.isArray(response.data)) return [];
+        const data = response.data as { traders?: TraderVolume[] };
+        return data?.traders ?? [];
+    }
+
+    // GET /mutagen-leaderboard?limit=N — Adrena's current Mutagen leaderboard
+    // (used for the one-time bootstrap script to seed our R2 leaderboard with the
+    // wallets already on Adrena's current system — see implementation_plan §8.4)
+    async getAdrenaMutagenLeaderboard(limit: number = 1000): Promise<AdrenaMutagenRow[]> {
+        const url = `${this.baseUrl}/mutagen-leaderboard?limit=${limit}`;
+        const response = await this.fetchWithRetry(url);
+        if (!response.success) {
+            throw new Error(`Adrena API error (GET /mutagen-leaderboard): ${response.error ?? 'Unknown'}`);
+        }
+        return Array.isArray(response.data) ? (response.data as AdrenaMutagenRow[]) : [];
     }
 
     // --------------------------------------------------------------------------
