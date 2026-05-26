@@ -128,24 +128,32 @@ function parseLockedStake(data: Buffer, slotIndex: number): LockedStakeRaw | nul
 }
 
 /**
- * Picks the right staking pool PDA for a given mint. Throws if the mint
- * isn't one we know about — we only handle ADX (LM) and ALP (LP) today.
+ * Picks the right staking pool PDA for a given mint, or null if Adrena's
+ * native staking doesn't have a pool for that mint today.
+ *
+ * Today's pools: ADX (LM) and ALP (LP). RWALP is a future candidate —
+ * the mint exists but no staking pool has been created. Anything else
+ * (USDC, WSOL, etc.) is conceptually not stakeable here.
+ *
+ * Returning null (rather than throwing) makes the LockSource contract
+ * predictable: "no locks via THIS source for THAT mint" = empty array.
+ * Callers that want to know "do you handle this mint" can check
+ * stakingPoolForMint(mint) !== null.
  */
-function stakingPoolForMint(mint: PublicKey): PublicKey {
+function stakingPoolForMint(mint: PublicKey): PublicKey | null {
     if (mint.equals(ADX_MINT)) return deriveLmStakingPool();
     if (mint.equals(ALP_MINT)) return deriveLpStakingPool();
-    throw new Error(
-        `[adrena-native] Unsupported mint for Adrena native staking: ${mint.toString()}. ` +
-        `Only ADX and ALP have staking pools today.`,
-    );
+    return null;
 }
 
 export class AdrenaNativeLockSource implements LockSource {
     readonly name = 'adrena-native';
 
     async getActiveLocks(wallet: PublicKey, mint: PublicKey): Promise<LockEntry[]> {
-        const connection = getSolanaConnection();
         const stakingPool = stakingPoolForMint(mint);
+        if (!stakingPool) return []; // No native staking pool for this mint
+
+        const connection = getSolanaConnection();
         const userStaking = deriveUserStaking(wallet, stakingPool);
 
         const account = await connection.getAccountInfo(userStaking);
