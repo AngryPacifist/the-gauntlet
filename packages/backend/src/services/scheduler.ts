@@ -22,7 +22,7 @@
 import cron from 'node-cron';
 import { db } from '../db/index.js';
 import { tournaments, rounds, registrations } from '../db/schema.js';
-import { eq, and, asc } from 'drizzle-orm';
+import { eq, and, asc, gte, lte } from 'drizzle-orm';
 import { computeRoundScores, advanceRound } from './tournament-manager.js';
 import { awardDailyFisherPoints, awardDailyAllAroundPoints, awardDaily2DayCategoryPoints } from './season-manager.js';
 import { AdrenaClient } from './adrena-client.js';
@@ -37,6 +37,22 @@ import {
 } from './category-engine.js';
 import type { AdrenaPosition, CategoryScoreRow } from '../types.js';
 import { evaluateLeverageProgress, computeLeverageMasterLeaderboard } from './quest-engine.js';
+import { PublicKey } from '@solana/web3.js';
+import {
+    mutagenEpochs,
+    mutagenSubEpochs,
+    mutagenUserScores,
+    mutagenPositionSnapshots,
+} from '../db/schema.js';
+import { fetchScoringPrices } from './mutagen-aggregator.js';
+import { computeUsdValueFromPositions } from './mutagen-adx-lp-scorer.js';
+import {
+    getWalletPositionsForPool,
+    getPoolTokenInfo,
+    type PoolTokenInfo,
+} from './meteora-dlmm-client.js';
+import { refreshVoteCacheForWallet } from './vote-cache.js';
+import type { EpochConfig } from './mutagen-scorer-types.js';
 
 const schedulerAdrenaClient = new AdrenaClient();
 
@@ -45,6 +61,9 @@ let advanceTask: cron.ScheduledTask | null = null;
 let categoryTask: cron.ScheduledTask | null = null;
 let hourlyCategoryTask: cron.ScheduledTask | null = null;
 let isHourlyScoringRunning = false;
+let mutagenVoteRefreshTask: cron.ScheduledTask | null = null;
+let mutagenPositionSnapshotTask: cron.ScheduledTask | null = null;
+let isPositionSnapshotRunning = false;
 
 // --------------------------------------------------------------------------
 // Score Refresh: runs every 15 minutes
@@ -591,6 +610,181 @@ function computeCurrentQuestWeek(
 }
 
 // --------------------------------------------------------------------------
+// Mutagen R2 background jobs (Commit 17 — Scheduler RESHAPE)
+//
+// Per the v2 plan (§8.0 architectural pivot): NO all-wallet rescore. Wallet
+// scoring is on-demand via the API (Commit 18). The scheduler only keeps the
+// two slow inputs warm for wallets we've already seen:
+//   1. Daily  — refresh each known wallet's vote-count cache (the SPL-Gov
+//               getProgramAccounts scan is heavy; daily is plenty since vote
+//               counts move slowly).
+//   2. Hourly — snapshot Meteora LP positions per enabled pool, so Activity 4's
+//               trapezoidal time-weighted average has a real series instead of
+//               cold-starting to a single live datapoint every run.
+//
+// "Known wallets" = wallets that already have a mutagen_user_scores row. The
+// vote cache is global per wallet (refresh across the whole table); position
+// snapshots are sub-epoch-scoped (only the current sub-epoch's wallets, since
+// Activity 4 reads snapshots WHERE sub_epoch_id = current).
+// --------------------------------------------------------------------------
+
+interface ActiveSubEpoch {
+    subEpoch: typeof mutagenSubEpochs.$inferSelect;
+    epoch: typeof mutagenEpochs.$inferSelect;
+}
+
+/**
+ * Resolves the single active (epoch, sub-epoch) pair straddling `now`.
+ * Returns null when no epoch is active or no sub-epoch covers the moment —
+ * in which case both Mutagen jobs no-op (nothing to keep warm yet).
+ */
+async function getActiveSubEpoch(now: Date): Promise<ActiveSubEpoch | null> {
+    const rows = await db
+        .select()
+        .from(mutagenSubEpochs)
+        .innerJoin(mutagenEpochs, eq(mutagenSubEpochs.epochId, mutagenEpochs.id))
+        .where(
+            and(
+                eq(mutagenEpochs.status, 'active'),
+                lte(mutagenSubEpochs.startAt, now),
+                gte(mutagenSubEpochs.endAt, now),
+            ),
+        )
+        .limit(1);
+    if (rows.length === 0) return null;
+    return { subEpoch: rows[0].mutagen_sub_epochs, epoch: rows[0].mutagen_epochs };
+}
+
+/**
+ * Daily: refresh the vote-count cache for every wallet we've ever scored.
+ * Sequential to stay well within Helius rate limits (getProgramAccounts is the
+ * single most expensive call in the system). One wallet failing does not abort
+ * the rest.
+ */
+async function refreshMutagenVoteCaches(): Promise<void> {
+    try {
+        const wallets = await db
+            .selectDistinct({ wallet: mutagenUserScores.wallet })
+            .from(mutagenUserScores);
+        if (wallets.length === 0) return;
+
+        console.log(`[Scheduler][mutagen] Refreshing vote cache for ${wallets.length} known wallets`);
+        let ok = 0;
+        for (const { wallet } of wallets) {
+            try {
+                await refreshVoteCacheForWallet(wallet);
+                ok++;
+            } catch (error) {
+                console.warn(
+                    `[Scheduler][mutagen] Vote-cache refresh failed for ${wallet}:`,
+                    error instanceof Error ? error.message : error,
+                );
+            }
+        }
+        console.log(`[Scheduler][mutagen] Vote cache refreshed: ${ok}/${wallets.length}`);
+    } catch (error) {
+        console.error('[Scheduler][mutagen] Error refreshing vote caches:', error);
+    }
+}
+
+/**
+ * Hourly: snapshot each known wallet's Meteora LP position value per enabled
+ * pool into mutagen_position_snapshots. Feeds Activity 4's time-weighted size.
+ *
+ * - Scope: wallets with a mutagen_user_scores row in the CURRENT sub-epoch.
+ * - Prices come from fetchScoringPrices() — the SAME source Activity 4 uses for
+ *   its cold-start live read, so the snapshot series and the live value are
+ *   valued consistently.
+ * - Pool token-info is fetched once per enabled pool per tick (cached locally).
+ * - Wallets with no positions in a pool are skipped (no zero rows; Activity 4's
+ *   cold-start already yields 0 when a wallet has no snapshots).
+ */
+async function snapshotMutagenPositions(): Promise<void> {
+    if (isPositionSnapshotRunning) {
+        console.warn('[Scheduler][mutagen] Position snapshot still running, skipping this tick');
+        return;
+    }
+    isPositionSnapshotRunning = true;
+    try {
+        const now = new Date();
+        const active = await getActiveSubEpoch(now);
+        if (!active) return;
+
+        const config = active.epoch.config as EpochConfig;
+        const enabledPools = config.activity4.pools.filter((p) => p.enabled);
+        if (enabledPools.length === 0) return;
+
+        const wallets = await db
+            .selectDistinct({ wallet: mutagenUserScores.wallet })
+            .from(mutagenUserScores)
+            .where(eq(mutagenUserScores.subEpochId, active.subEpoch.id));
+        if (wallets.length === 0) return;
+
+        // One price fetch + one pool-info fetch per pool for the whole tick.
+        const prices = await fetchScoringPrices();
+        const poolInfo = new Map<string, PoolTokenInfo>();
+        for (const pool of enabledPools) {
+            try {
+                poolInfo.set(pool.address, await getPoolTokenInfo(new PublicKey(pool.address)));
+            } catch (error) {
+                console.warn(
+                    `[Scheduler][mutagen] Pool info fetch failed for ${pool.label} (${pool.address}):`,
+                    error instanceof Error ? error.message : error,
+                );
+            }
+        }
+
+        let rowsWritten = 0;
+        for (const { wallet } of wallets) {
+            const walletPk = new PublicKey(wallet);
+            for (const pool of enabledPools) {
+                const info = poolInfo.get(pool.address);
+                if (!info) continue; // pool-info fetch failed above; skip this pool
+                try {
+                    const positions = await getWalletPositionsForPool(walletPk, new PublicKey(pool.address));
+                    if (positions.length === 0) continue; // no exposure → no row
+
+                    const usd = computeUsdValueFromPositions(positions, info, prices);
+                    let sumX = 0n;
+                    let sumY = 0n;
+                    let lastChain = 0;
+                    for (const p of positions) {
+                        sumX += BigInt(p.totalXAmount);
+                        sumY += BigInt(p.totalYAmount);
+                        if (p.lastUpdatedAt > lastChain) lastChain = p.lastUpdatedAt;
+                    }
+
+                    await db.insert(mutagenPositionSnapshots).values({
+                        wallet,
+                        subEpochId: active.subEpoch.id,
+                        poolAddress: pool.address,
+                        source: 'meteora-dlmm',
+                        positionValueUsd: usd.toFixed(4),
+                        totalXAmount: sumX.toString(),
+                        totalYAmount: sumY.toString(),
+                        lastUpdatedAtChain: lastChain,
+                    });
+                    rowsWritten++;
+                } catch (error) {
+                    console.warn(
+                        `[Scheduler][mutagen] Snapshot failed for ${wallet} @ ${pool.label}:`,
+                        error instanceof Error ? error.message : error,
+                    );
+                }
+            }
+        }
+        console.log(
+            `[Scheduler][mutagen] Position snapshot: ${rowsWritten} rows across ` +
+            `${wallets.length} wallets × ${enabledPools.length} enabled pools (sub-epoch ${active.subEpoch.id})`,
+        );
+    } catch (error) {
+        console.error('[Scheduler][mutagen] Error snapshotting positions:', error);
+    } finally {
+        isPositionSnapshotRunning = false;
+    }
+}
+
+// --------------------------------------------------------------------------
 // Start / Stop
 // --------------------------------------------------------------------------
 
@@ -607,9 +801,19 @@ export function startScheduler(): void {
     // Hourly provisional category scoring: every hour on the hour
     hourlyCategoryTask = cron.schedule('0 * * * *', scoreHourlyCategories, { timezone: 'UTC' });
 
+    // Mutagen R2 (Commit 17): daily vote-cache refresh + hourly position snapshot.
+    // NO all-wallet rescore — wallet scoring is on-demand via the API (Commit 18).
+    // Position snapshot offset to :15 to avoid the busiest scheduler tick (:00,
+    // where the Forge hourly-category job and 15-min score refresh coincide). It
+    // is the only Helius-RPC consumer among the cron jobs, so there's no cross-job
+    // RPC contention — the offset just spreads event-loop / DB-pool load.
+    mutagenVoteRefreshTask = cron.schedule('0 3 * * *', refreshMutagenVoteCaches, { timezone: 'UTC' });
+    mutagenPositionSnapshotTask = cron.schedule('15 * * * *', snapshotMutagenPositions, { timezone: 'UTC' });
+
     console.log(
         '[Scheduler] Started: score refresh every 15 min, advancement check every 1 min, ' +
-        'daily categories at midnight UTC, hourly provisional updates every hour',
+        'daily categories at midnight UTC, hourly provisional updates every hour, ' +
+        'mutagen vote-cache refresh daily 03:00 UTC, mutagen position snapshot hourly at :15',
     );
 }
 
@@ -630,5 +834,18 @@ export function stopScheduler(): void {
         hourlyCategoryTask.stop();
         hourlyCategoryTask = null;
     }
+    if (mutagenVoteRefreshTask) {
+        mutagenVoteRefreshTask.stop();
+        mutagenVoteRefreshTask = null;
+    }
+    if (mutagenPositionSnapshotTask) {
+        mutagenPositionSnapshotTask.stop();
+        mutagenPositionSnapshotTask = null;
+    }
     console.log('[Scheduler] Stopped');
 }
+
+// Internal re-exports for verification + manual triggering (e.g. a Commit 18/19
+// admin endpoint forcing an immediate refresh). Mirrors the aggregator's
+// testing re-export pattern.
+export { getActiveSubEpoch, refreshMutagenVoteCaches, snapshotMutagenPositions };
