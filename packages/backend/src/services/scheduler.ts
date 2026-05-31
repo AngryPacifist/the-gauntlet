@@ -22,7 +22,7 @@
 import cron from 'node-cron';
 import { db } from '../db/index.js';
 import { tournaments, rounds, registrations } from '../db/schema.js';
-import { eq, and, asc, gte, lte } from 'drizzle-orm';
+import { eq, and, asc } from 'drizzle-orm';
 import { computeRoundScores, advanceRound } from './tournament-manager.js';
 import { awardDailyFisherPoints, awardDailyAllAroundPoints, awardDaily2DayCategoryPoints } from './season-manager.js';
 import { AdrenaClient } from './adrena-client.js';
@@ -39,8 +39,6 @@ import type { AdrenaPosition, CategoryScoreRow } from '../types.js';
 import { evaluateLeverageProgress, computeLeverageMasterLeaderboard } from './quest-engine.js';
 import { PublicKey } from '@solana/web3.js';
 import {
-    mutagenEpochs,
-    mutagenSubEpochs,
     mutagenUserScores,
     mutagenPositionSnapshots,
 } from '../db/schema.js';
@@ -52,6 +50,7 @@ import {
     type PoolTokenInfo,
 } from './meteora-dlmm-client.js';
 import { refreshVoteCacheForWallet } from './vote-cache.js';
+import { getActiveSubEpoch } from './mutagen-epoch.js';
 import type { EpochConfig } from './mutagen-scorer-types.js';
 
 const schedulerAdrenaClient = new AdrenaClient();
@@ -628,33 +627,6 @@ function computeCurrentQuestWeek(
 // Activity 4 reads snapshots WHERE sub_epoch_id = current).
 // --------------------------------------------------------------------------
 
-interface ActiveSubEpoch {
-    subEpoch: typeof mutagenSubEpochs.$inferSelect;
-    epoch: typeof mutagenEpochs.$inferSelect;
-}
-
-/**
- * Resolves the single active (epoch, sub-epoch) pair straddling `now`.
- * Returns null when no epoch is active or no sub-epoch covers the moment —
- * in which case both Mutagen jobs no-op (nothing to keep warm yet).
- */
-async function getActiveSubEpoch(now: Date): Promise<ActiveSubEpoch | null> {
-    const rows = await db
-        .select()
-        .from(mutagenSubEpochs)
-        .innerJoin(mutagenEpochs, eq(mutagenSubEpochs.epochId, mutagenEpochs.id))
-        .where(
-            and(
-                eq(mutagenEpochs.status, 'active'),
-                lte(mutagenSubEpochs.startAt, now),
-                gte(mutagenSubEpochs.endAt, now),
-            ),
-        )
-        .limit(1);
-    if (rows.length === 0) return null;
-    return { subEpoch: rows[0].mutagen_sub_epochs, epoch: rows[0].mutagen_epochs };
-}
-
 /**
  * Daily: refresh the vote-count cache for every wallet we've ever scored.
  * Sequential to stay well within Helius rate limits (getProgramAccounts is the
@@ -847,5 +819,5 @@ export function stopScheduler(): void {
 
 // Internal re-exports for verification + manual triggering (e.g. a Commit 18/19
 // admin endpoint forcing an immediate refresh). Mirrors the aggregator's
-// testing re-export pattern.
-export { getActiveSubEpoch, refreshMutagenVoteCaches, snapshotMutagenPositions };
+// testing re-export pattern. (getActiveSubEpoch now lives in mutagen-epoch.ts.)
+export { refreshMutagenVoteCaches, snapshotMutagenPositions };

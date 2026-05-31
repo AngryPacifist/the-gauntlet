@@ -29,6 +29,7 @@ import questRoutes from './routes/quests.js';
 import raffleRoutes from './routes/raffle.js';
 import leaderboardRoutes from './routes/leaderboard.js';
 import priceRoutes from './routes/prices.js';
+import mutagenRoutes from './routes/mutagen.js';
 import { startScheduler, stopScheduler } from './services/scheduler.js';
 
 const app = express();
@@ -67,6 +68,9 @@ app.use('/api/quests', questRoutes);
 app.use('/api/raffle', raffleRoutes);
 app.use('/api/leaderboard', leaderboardRoutes);
 app.use('/api/prices', priceRoutes);
+// Mutagen R2 read API. Mounted at /api because its two routes have distinct
+// prefixes: /api/mutagen-leaderboard and /api/mutagen/wallet/:wallet.
+app.use('/api', mutagenRoutes);
 
 // 404 handler
 app.use((_req, res) => {
