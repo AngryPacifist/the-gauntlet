@@ -10,6 +10,7 @@
 // ============================================================================
 
 import { and, asc, eq, gte, lte } from 'drizzle-orm';
+import { addWeeks } from 'date-fns';
 import { db } from '../db/index.js';
 import { mutagenEpochs, mutagenSubEpochs } from '../db/schema.js';
 
@@ -57,4 +58,36 @@ export async function getActiveSubEpoch(now: Date): Promise<ActiveSubEpoch | nul
         .limit(1);
     if (rows.length === 0) return null;
     return { subEpoch: rows[0].mutagen_sub_epochs, epoch: rows[0].mutagen_epochs };
+}
+
+export interface SubEpochWindow {
+    subEpochIndex: number;
+    startAt: Date;
+    endAt: Date;
+}
+
+/**
+ * Pure: computes the contiguous sub-epoch windows that tile [startAt, endAt),
+ * each `subEpochWeeks` long, with the final window truncated to endAt. No DB
+ * access — the caller (admin activate) inserts these inside a transaction so
+ * generation + the status flip are atomic. Kept pure so the window math is
+ * unit-verifiable on its own.
+ */
+export function computeSubEpochWindows(
+    startAt: Date,
+    endAt: Date,
+    subEpochWeeks: number,
+): SubEpochWindow[] {
+    if (subEpochWeeks < 1) throw new Error('subEpochWeeks must be >= 1');
+    const windows: SubEpochWindow[] = [];
+    let cursor = startAt;
+    let index = 0;
+    while (cursor < endAt) {
+        const subEnd = addWeeks(cursor, subEpochWeeks);
+        const effectiveEnd = subEnd > endAt ? endAt : subEnd;
+        windows.push({ subEpochIndex: index, startAt: cursor, endAt: effectiveEnd });
+        cursor = effectiveEnd;
+        index++;
+    }
+    return windows;
 }
