@@ -19,7 +19,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Shield, Trophy, Layers, Users, BarChart3, Lock, Unlock, ChevronRight } from 'lucide-react';
+import { Shield, Trophy, Layers, Users, BarChart3, Lock, Unlock, ChevronRight, Dna } from 'lucide-react';
 import styles from './page.module.css';
 
 const ADMIN_SECRET_KEY = 'adrena_admin_secret';
@@ -55,6 +55,12 @@ const SUB_ROUTES: SubRoute[] = [
         label: 'Analytics',
         icon: <BarChart3 size={20} />,
         description: 'Round stats, top performers. Daily position metrics + quest anomaly detection.',
+    },
+    {
+        href: '/admin/mutagen',
+        label: 'Mutagen R2',
+        icon: <Dna size={20} />,
+        description: 'Mutagen R2 epochs: create, configure scoring weights, activate, marketing awards, bootstrap.',
     },
 ];
 

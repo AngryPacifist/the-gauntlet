@@ -172,6 +172,14 @@ export interface WalletMutagenScore {
     points_marketing: number;
     meta_mutation_multiplier: number;
     total_points: number;
+    /**
+     * The epoch's Activity weights (sum to 1.0). Surfaced so the UI can show
+     * each activity's WEIGHTED contribution, not just its raw score — e.g. a
+     * raw 188.5 staking score at 5% weight contributes less than a raw 39
+     * trading score at 30%. Without this the frontend can't decompose the
+     * weighted sum per activity.
+     */
+    weights: { a1: number; a2: number; a3: number; a4: number; a5: number };
     weighted_sum: number | null;
     qualified_count: number | null;
     details: unknown;
@@ -204,6 +212,7 @@ async function readWalletRow(subEpochId: number, wallet: string): Promise<Wallet
 function shapeWalletRow(
     row: WalletRow,
     epochId: number,
+    weights: WalletMutagenScore['weights'],
     cached: boolean,
     stale: boolean,
 ): WalletMutagenScore {
@@ -219,6 +228,7 @@ function shapeWalletRow(
         points_marketing: parseFloat(row.activity5Score),
         meta_mutation_multiplier: parseFloat(row.metaMutationMultiplier),
         total_points: parseFloat(row.totalMutagen),
+        weights,
         weighted_sum: details?.weightedSum ?? null,
         qualified_count: details?.qualifiedCount ?? null,
         details: row.details,
@@ -248,9 +258,11 @@ export async function getWalletMutagenScore(
     const active = await getActiveSubEpoch(new Date());
     if (!active) return { state: 'no_active_sub_epoch' };
 
+    const weights = (active.epoch.config as EpochConfig).weights;
+
     const existing = await readWalletRow(active.subEpoch.id, walletBase58);
     if (existing && Date.now() - existing.computedAt.getTime() < ttlMs) {
-        return { state: 'ok', data: shapeWalletRow(existing, active.epoch.id, true, false) };
+        return { state: 'ok', data: shapeWalletRow(existing, active.epoch.id, weights, true, false) };
     }
 
     // Stale or missing → compute on demand.
@@ -265,7 +277,7 @@ export async function getWalletMutagenScore(
     if (!outcome.scored) {
         // Another process holds the lock. Prefer last-known over blank.
         if (existing) {
-            return { state: 'ok', data: shapeWalletRow(existing, active.epoch.id, true, true) };
+            return { state: 'ok', data: shapeWalletRow(existing, active.epoch.id, weights, true, true) };
         }
         return { state: 'in_progress' };
     }
@@ -275,5 +287,5 @@ export async function getWalletMutagenScore(
         // scoreWalletForSubEpoch upserts a row on success, so this is defensive.
         return { state: 'in_progress' };
     }
-    return { state: 'ok', data: shapeWalletRow(fresh, active.epoch.id, false, false) };
+    return { state: 'ok', data: shapeWalletRow(fresh, active.epoch.id, weights, false, false) };
 }
