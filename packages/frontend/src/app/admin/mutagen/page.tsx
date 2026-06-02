@@ -15,6 +15,7 @@ import {
 } from '@/lib/api';
 import { Dna, Plus, ChevronRight, ChevronLeft, Lock, Unlock } from 'lucide-react';
 import styles from '../page.module.css';
+import local from './page.module.css';
 
 const ADMIN_SECRET_KEY = 'adrena_admin_secret';
 
@@ -149,7 +150,7 @@ export default function AdminMutagenPage() {
                 {secret && epochs && epochs.length === 0 && <p className={styles.emptyText}>No epochs yet. Create one to begin.</p>}
 
                 {epochs && epochs.map((ep) => (
-                    <Link key={ep.id} href={`/admin/mutagen/${ep.id}`} className={`card card--hoverable ${styles.controlCard}`}>
+                    <Link key={ep.id} href={`/admin/mutagen/${ep.id}`} className={`card card--hoverable ${local.epochCard}`}>
                         <div className={styles.controlHeader}>
                             <div>
                                 <div className={styles.controlName}>{ep.name}</div>

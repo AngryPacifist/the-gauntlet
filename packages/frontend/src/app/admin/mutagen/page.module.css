@@ -1,0 +1,11 @@
+/* /admin/mutagen list-specific styles.
+ *
+ * The epoch row is a <Link> (renders an <a>, which is display:inline by
+ * default). The global .card class doesn't set a display, so without this the
+ * card's border/background fragment across the inline box and paint as "broken
+ * cards". Forcing block makes it a single, contained card. */
+
+.epochCard {
+    display: block;
+    margin-bottom: var(--space-md);
+}
