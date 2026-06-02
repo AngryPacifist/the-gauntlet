@@ -1084,6 +1084,16 @@ export async function adminCompleteMutagenEpoch(id: number, adminSecret: string)
     });
 }
 
+export async function adminDeleteMutagenEpoch(
+    id: number,
+    adminSecret: string,
+): Promise<{ epoch: number; subEpochs: number }> {
+    return apiFetch(`/api/admin/mutagen/epochs/${id}`, {
+        method: 'DELETE',
+        headers: { 'X-Admin-Secret': adminSecret },
+    });
+}
+
 export async function adminMutagenMarketingAward(
     input: { wallet: string; activityType: string; amount: number; reason?: string },
     adminSecret: string,

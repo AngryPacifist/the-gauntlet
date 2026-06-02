@@ -10,13 +10,17 @@
 // (not_found→404, conflict→409, bad_request→400) without string-sniffing.
 // ============================================================================
 
-import { eq } from 'drizzle-orm';
+import { eq, inArray } from 'drizzle-orm';
 import { PublicKey } from '@solana/web3.js';
 import { db } from '../db/index.js';
 import {
     mutagenEpochs,
     mutagenSubEpochs,
     mutagenMarketingAwards,
+    mutagenUserScores,
+    mutagenSnapshots,
+    mutagenPositionSnapshots,
+    mutagenScoringLocks,
     registrations,
 } from '../db/schema.js';
 import { DEFAULT_EPOCH_CONFIG, type EpochConfig } from './mutagen-scorer-types.js';
@@ -177,6 +181,39 @@ export async function completeEpoch(
         .where(eq(mutagenEpochs.id, id))
         .returning();
     return { ok: true, epoch: updated };
+}
+
+/**
+ * Permanently deletes an epoch and ALL data hanging off its sub-epochs
+ * (user scores, audit snapshots, position snapshots, marketing awards, scoring
+ * locks), atomically. Allowed in any status — the admin secret + a UI confirm
+ * are the guard. FK-safe order: children by sub-epoch id → sub-epochs → epoch.
+ */
+export async function deleteEpoch(
+    id: number,
+): Promise<{ ok: true; deleted: { epoch: number; subEpochs: number } } | AdminFail> {
+    const epoch = await getEpochById(id);
+    if (!epoch) return { ok: false, code: 'not_found', error: `epoch ${id} not found` };
+
+    const subs = await db
+        .select({ id: mutagenSubEpochs.id })
+        .from(mutagenSubEpochs)
+        .where(eq(mutagenSubEpochs.epochId, id));
+    const subIds = subs.map((s) => s.id);
+
+    await db.transaction(async (tx) => {
+        if (subIds.length > 0) {
+            await tx.delete(mutagenMarketingAwards).where(inArray(mutagenMarketingAwards.subEpochId, subIds));
+            await tx.delete(mutagenScoringLocks).where(inArray(mutagenScoringLocks.subEpochId, subIds));
+            await tx.delete(mutagenPositionSnapshots).where(inArray(mutagenPositionSnapshots.subEpochId, subIds));
+            await tx.delete(mutagenSnapshots).where(inArray(mutagenSnapshots.subEpochId, subIds));
+            await tx.delete(mutagenUserScores).where(inArray(mutagenUserScores.subEpochId, subIds));
+            await tx.delete(mutagenSubEpochs).where(eq(mutagenSubEpochs.epochId, id));
+        }
+        await tx.delete(mutagenEpochs).where(eq(mutagenEpochs.id, id));
+    });
+
+    return { ok: true, deleted: { epoch: id, subEpochs: subIds.length } };
 }
 
 // ---------- marketing awards (Activity 5 social / discord) ----------

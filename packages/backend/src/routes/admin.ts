@@ -684,6 +684,26 @@ router.post('/mutagen/epochs/:id/complete', async (req, res) => {
     }
 });
 
+// DELETE /api/admin/mutagen/epochs/:id — delete epoch + cascade all its data
+router.delete('/mutagen/epochs/:id', async (req, res) => {
+    try {
+        const id = parseInt(req.params.id, 10);
+        if (isNaN(id)) {
+            res.status(400).json({ success: false, error: 'invalid epoch id' });
+            return;
+        }
+        const result = await mutagenAdmin.deleteEpoch(id);
+        if (!result.ok) {
+            res.status(MUTAGEN_FAIL_STATUS[result.code]).json({ success: false, error: result.error });
+            return;
+        }
+        res.json({ success: true, data: result.deleted });
+    } catch (error) {
+        console.error('[Admin][mutagen] delete epoch error:', error);
+        res.status(500).json({ success: false, error: error instanceof Error ? error.message : 'Internal server error' });
+    }
+});
+
 // POST /api/admin/mutagen/marketing-award — award Activity 5 social/discord points
 router.post('/mutagen/marketing-award', async (req, res) => {
     try {

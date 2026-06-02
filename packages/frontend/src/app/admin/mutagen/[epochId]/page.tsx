@@ -6,7 +6,7 @@
 // ============================================================================
 
 import { useEffect, useState, type FormEvent } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
     adminGetMutagenEpoch,
@@ -15,15 +15,17 @@ import {
     adminCompleteMutagenEpoch,
     adminMutagenMarketingAward,
     adminMutagenBootstrap,
+    adminDeleteMutagenEpoch,
     type MutagenEpoch,
 } from '@/lib/api';
-import { ChevronLeft, Play, CircleCheck, Save, Megaphone, Rocket } from 'lucide-react';
+import { ChevronLeft, Play, CircleCheck, Save, Megaphone, Rocket, Trash2 } from 'lucide-react';
 import styles from '../../page.module.css';
 
 const ADMIN_SECRET_KEY = 'adrena_admin_secret';
 
 export default function AdminMutagenEpochPage() {
     const params = useParams();
+    const router = useRouter();
     const epochId = Number(Array.isArray(params.epochId) ? params.epochId[0] : params.epochId);
 
     const [secret, setSecret] = useState('');
@@ -137,6 +139,15 @@ export default function AdminMutagenEpochPage() {
             const n = Number(topN) || 100;
             const res = await adminMutagenBootstrap(n, secret);
             showToast(`Bootstrap queued ${res.queued} wallets (${res.sources.adrenaLeaderboard} Adrena + ${res.sources.forgeRegistrations} Forge)`, 'success');
+        });
+    }
+
+    function remove() {
+        if (!epoch) return;
+        if (!window.confirm(`Delete "${epoch.name}" and ALL its sub-epochs, scores, snapshots, and marketing awards? This cannot be undone.`)) return;
+        run('delete', async () => {
+            await adminDeleteMutagenEpoch(epochId, secret);
+            router.push('/admin/mutagen');
         });
     }
 
@@ -261,6 +272,19 @@ export default function AdminMutagenEpochPage() {
                             </button>
                             <span className={styles.secretHint}>Scores top-N Adrena-leaderboard + Forge wallets in the background. Best-effort warmup.</span>
                         </form>
+                    </section>
+
+                    {/* danger zone */}
+                    <section className={styles.section}>
+                        <h2 className={styles.sectionTitle}>Danger zone</h2>
+                        <div className={styles.controlActions}>
+                            <button className="btn btn--danger" disabled={busy !== null} onClick={remove}>
+                                <Trash2 size={16} /> {busy === 'delete' ? 'Deleting…' : 'Delete epoch'}
+                            </button>
+                            <span className={styles.completedText}>
+                                Permanently removes this epoch and all its sub-epochs, scores, snapshots, and awards.
+                            </span>
+                        </div>
                     </section>
                 </>
             )}
