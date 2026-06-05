@@ -217,7 +217,7 @@ export default function AdminMutagenEpochPage() {
                     <section className={styles.section}>
                         <div className={styles.sectionHeader}>
                             <h2 className={styles.sectionTitle}>Config (JSON)</h2>
-                            <button className="btn btn--primary" onClick={saveConfig} disabled={busy !== null || epoch.status === 'completed'}>
+                            <button className="btn btn--primary" onClick={saveConfig} disabled={busy !== null || epoch.status !== 'registration'}>
                                 <Save size={16} /> {busy === 'save' ? 'Saving…' : 'Save config'}
                             </button>
                         </div>
@@ -225,10 +225,11 @@ export default function AdminMutagenEpochPage() {
                             className="input input--mono"
                             value={configText}
                             onChange={(e) => setConfigText(e.target.value)}
+                            readOnly={epoch.status !== 'registration'}
                             spellCheck={false}
                             style={{ minHeight: 360, resize: 'vertical', lineHeight: 1.5, whiteSpace: 'pre' }}
                         />
-                        <span className={styles.formHint}>Weights must sum to 1.0 to activate. Editing is locked once an epoch is completed.</span>
+                        <span className={styles.formHint}>Weights must sum to 1.0 to activate. Config is locked once the epoch is activated — the ruleset is frozen for the life of the epoch.</span>
                     </section>
 
                     {/* marketing award */}

@@ -109,8 +109,12 @@ export async function updateEpochConfig(
 ): Promise<{ ok: true; epoch: EpochRow } | AdminFail> {
     const epoch = await getEpochById(id);
     if (!epoch) return { ok: false, code: 'not_found', error: `epoch ${id} not found` };
-    if (epoch.status === 'completed') {
-        return { ok: false, code: 'conflict', error: 'cannot edit config of a completed epoch' };
+    if (epoch.status !== 'registration') {
+        return {
+            ok: false,
+            code: 'conflict',
+            error: `config can only be edited while the epoch is in 'registration' (is '${epoch.status}'); activation freezes the ruleset`,
+        };
     }
     const configErr = validateEpochConfig(config);
     if (configErr) return bad(configErr);
