@@ -26,8 +26,9 @@ const ADMIN_SECRET_KEY = 'adrena_admin_secret';
 
 // Mirrors backend EpochConfig (services/mutagen-scorer-types.ts). Local to the
 // admin form; the wire type (api.ts MutagenEpoch.config) stays Record<string,
-// unknown>, so we cast at the read/write boundary. Bracket tables + increments
-// are edited via the Raw-JSON tab (structured editors land in b2).
+// unknown>, so we cast at the read/write boundary. The form covers every field
+// (weights, per-activity scalars / multipliers / brackets / increments, meta,
+// prize); the Raw-JSON tab remains as a power-user escape.
 type UsdBracket = Array<{ minUsd: number; maxUsd: number | null; pts: number }>;
 type CountBracket = Array<{ minCount: number; maxCount: number | null; pts: number }>;
 type EpochConfig = {
@@ -40,6 +41,53 @@ type EpochConfig = {
     metaMutationTable: Record<number, number>;
     prizePool: { type: 'fixed' | 'percent_fees'; value: number; denominatedIn: 'ADX' | 'USDC' };
 };
+
+// ---- reusable bracket / list editors (decision b2) ----
+type BracketRow = { lo: number; hi: number | null; pts: number };
+function BracketEditor({ rows, loLabel, hiLabel, locked, onChange }: { rows: BracketRow[]; loLabel: string; hiLabel: string; locked: boolean; onChange: (rows: BracketRow[]) => void }) {
+    const set = (i: number, patch: Partial<BracketRow>) => onChange(rows.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
+    return (
+        <div style={{ marginBottom: 'var(--space-sm)' }}>
+            {rows.map((r, i) => (
+                <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 80px auto', gap: 'var(--space-sm)', alignItems: 'end', marginBottom: 'var(--space-xs)' }}>
+                    <div className={styles.formGroup} style={{ marginBottom: 0 }}><label className={styles.formLabel}>{loLabel}</label><input type="number" className="input" value={r.lo} disabled={locked} onChange={(e) => set(i, { lo: Number(e.target.value) })} /></div>
+                    <div className={styles.formGroup} style={{ marginBottom: 0 }}><label className={styles.formLabel}>{hiLabel}</label><input type="number" className="input" placeholder="∞ open" value={r.hi ?? ''} disabled={locked} onChange={(e) => set(i, { hi: e.target.value === '' ? null : Number(e.target.value) })} /></div>
+                    <div className={styles.formGroup} style={{ marginBottom: 0 }}><label className={styles.formLabel}>pts</label><input type="number" className="input" value={r.pts} disabled={locked} onChange={(e) => set(i, { pts: Number(e.target.value) })} /></div>
+                    <button type="button" className="btn btn--danger" disabled={locked} onClick={() => onChange(rows.filter((_, idx) => idx !== i))} style={{ height: 38 }} aria-label="remove row">×</button>
+                </div>
+            ))}
+            {!locked && <button type="button" className="btn btn--secondary" onClick={() => onChange([...rows, { lo: 0, hi: null, pts: 0 }])}>+ row</button>}
+        </div>
+    );
+}
+function TopPctEditor({ rows, locked, onChange }: { rows: Array<{ maxPct: number; pts: number }>; locked: boolean; onChange: (rows: Array<{ maxPct: number; pts: number }>) => void }) {
+    const set = (i: number, patch: Partial<{ maxPct: number; pts: number }>) => onChange(rows.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
+    return (
+        <div style={{ marginBottom: 'var(--space-sm)' }}>
+            {rows.map((r, i) => (
+                <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 80px auto', gap: 'var(--space-sm)', alignItems: 'end', marginBottom: 'var(--space-xs)' }}>
+                    <div className={styles.formGroup} style={{ marginBottom: 0 }}><label className={styles.formLabel}>max percentile (0–1)</label><input type="number" step="0.01" className="input" value={r.maxPct} disabled={locked} onChange={(e) => set(i, { maxPct: Number(e.target.value) })} /></div>
+                    <div className={styles.formGroup} style={{ marginBottom: 0 }}><label className={styles.formLabel}>pts</label><input type="number" className="input" value={r.pts} disabled={locked} onChange={(e) => set(i, { pts: Number(e.target.value) })} /></div>
+                    <button type="button" className="btn btn--danger" disabled={locked} onClick={() => onChange(rows.filter((_, idx) => idx !== i))} style={{ height: 38 }} aria-label="remove tier">×</button>
+                </div>
+            ))}
+            {!locked && <button type="button" className="btn btn--secondary" onClick={() => onChange([...rows, { maxPct: 0, pts: 0 }])}>+ tier</button>}
+        </div>
+    );
+}
+function NumListEditor({ values, locked, onChange }: { values: number[]; locked: boolean; onChange: (v: number[]) => void }) {
+    return (
+        <div style={{ display: 'flex', gap: 'var(--space-xs)', flexWrap: 'wrap', alignItems: 'center', marginBottom: 'var(--space-sm)' }}>
+            {values.map((v, i) => (
+                <span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: 2 }}>
+                    <input type="number" step="0.1" className="input" style={{ width: 80 }} value={v} disabled={locked} onChange={(e) => onChange(values.map((x, idx) => (idx === i ? Number(e.target.value) : x)))} />
+                    {!locked && <button type="button" className="btn btn--danger" onClick={() => onChange(values.filter((_, idx) => idx !== i))} aria-label="remove" style={{ padding: '2px 8px' }}>×</button>}
+                </span>
+            ))}
+            {!locked && <button type="button" className="btn btn--secondary" onClick={() => onChange([...values, 0])} style={{ padding: '2px 10px' }}>+</button>}
+        </div>
+    );
+}
 
 export default function AdminMutagenEpochPage() {
     const params = useParams();
@@ -402,6 +450,10 @@ export default function AdminMutagenEpochPage() {
                                             <div className={styles.formGroup} key={t}><label className={styles.formLabel}>Lock {t}d ×</label><input type="number" step="0.1" className="input" value={c.activity1.lockTierMultipliers[t] ?? 1} disabled={locked} onChange={(e) => setLockMult(t, Number(e.target.value))} /></div>
                                         ))}
                                     </div>
+                                    <label className={styles.formLabel} style={{ marginTop: 'var(--space-md)' }}>Size brackets (USD)</label>
+                                    <BracketEditor rows={c.activity1.sizeBrackets.map((b) => ({ lo: b.minUsd, hi: b.maxUsd, pts: b.pts }))} loLabel="min USD" hiLabel="max USD" locked={locked} onChange={(rows) => setA1({ sizeBrackets: rows.map((r) => ({ minUsd: r.lo, maxUsd: r.hi, pts: r.pts })) })} />
+                                    <label className={styles.formLabel} style={{ marginTop: 'var(--space-sm)' }}>Mutation increments (per extra qualified dim)</label>
+                                    <NumListEditor values={c.activity1.mutationIncrements} locked={locked} onChange={(v) => setA1({ mutationIncrements: v })} />
 
                                     <div className={styles.formDivider} />
                                     <div className={styles.formSectionTitle}>Activity 2 — Staking + Voting</div>
@@ -411,6 +463,12 @@ export default function AdminMutagenEpochPage() {
                                             <div className={styles.formGroup} key={t}><label className={styles.formLabel}>Stake {t}d ×</label><input type="number" step="0.1" className="input" value={c.activity2.stakeTierMultipliers[t] ?? 1} disabled={locked} onChange={(e) => setStakeMult(t, Number(e.target.value))} /></div>
                                         ))}
                                     </div>
+                                    <label className={styles.formLabel} style={{ marginTop: 'var(--space-md)' }}>Size brackets (USD)</label>
+                                    <BracketEditor rows={c.activity2.sizeBrackets.map((b) => ({ lo: b.minUsd, hi: b.maxUsd, pts: b.pts }))} loLabel="min USD" hiLabel="max USD" locked={locked} onChange={(rows) => setA2({ sizeBrackets: rows.map((r) => ({ minUsd: r.lo, maxUsd: r.hi, pts: r.pts })) })} />
+                                    <label className={styles.formLabel} style={{ marginTop: 'var(--space-sm)' }}>Vote-score curve (vote count → pts)</label>
+                                    <BracketEditor rows={c.activity2.voteScoreCurve.map((b) => ({ lo: b.minCount, hi: b.maxCount, pts: b.pts }))} loLabel="min count" hiLabel="max count" locked={locked} onChange={(rows) => setA2({ voteScoreCurve: rows.map((r) => ({ minCount: r.lo, maxCount: r.hi, pts: r.pts })) })} />
+                                    <label className={styles.formLabel} style={{ marginTop: 'var(--space-sm)' }}>Mutation increments</label>
+                                    <NumListEditor values={c.activity2.mutationIncrements} locked={locked} onChange={(v) => setA2({ mutationIncrements: v })} />
 
                                     <div className={styles.formDivider} />
                                     <div className={styles.formSectionTitle}>Activity 3 — Trading</div>
@@ -421,6 +479,14 @@ export default function AdminMutagenEpochPage() {
                                         <div className={styles.formGroup}><label className={styles.formLabel}>Variety min volume / asset</label><input type="number" className="input" value={c.activity3.varietyMinVolumePerAsset} disabled={locked} onChange={(e) => setA3({ varietyMinVolumePerAsset: Number(e.target.value) })} /></div>
                                         <div className={styles.formGroup}><label className={styles.formLabel}>Asset variety</label><label style={{ display: 'flex', alignItems: 'center', gap: 8, paddingTop: 6 }}><input type="checkbox" checked={c.activity3.varietyEnabled} disabled={locked} onChange={(e) => setA3({ varietyEnabled: e.target.checked })} /> enabled</label></div>
                                     </div>
+                                    <label className={styles.formLabel} style={{ marginTop: 'var(--space-md)' }}>Volume brackets (USD)</label>
+                                    <BracketEditor rows={c.activity3.volumeBrackets.map((b) => ({ lo: b.minUsd, hi: b.maxUsd, pts: b.pts }))} loLabel="min USD" hiLabel="max USD" locked={locked} onChange={(rows) => setA3({ volumeBrackets: rows.map((r) => ({ minUsd: r.lo, maxUsd: r.hi, pts: r.pts })) })} />
+                                    <label className={styles.formLabel} style={{ marginTop: 'var(--space-sm)' }}>Forge top-% tiers</label>
+                                    <TopPctEditor rows={c.activity3.topPctTiers} locked={locked} onChange={(rows) => setA3({ topPctTiers: rows })} />
+                                    <label className={styles.formLabel} style={{ marginTop: 'var(--space-sm)' }}>Variety brackets (distinct assets → pts)</label>
+                                    <BracketEditor rows={c.activity3.varietyBrackets.map((b) => ({ lo: b.minCount, hi: b.maxCount, pts: b.pts }))} loLabel="min count" hiLabel="max count" locked={locked} onChange={(rows) => setA3({ varietyBrackets: rows.map((r) => ({ minCount: r.lo, maxCount: r.hi, pts: r.pts })) })} />
+                                    <label className={styles.formLabel} style={{ marginTop: 'var(--space-sm)' }}>Mutation increments</label>
+                                    <NumListEditor values={c.activity3.mutationIncrements} locked={locked} onChange={(v) => setA3({ mutationIncrements: v })} />
 
                                     <div className={styles.formDivider} />
                                     <div className={styles.formSectionTitle}>Activity 4 — ADX-LP pools</div>
@@ -441,6 +507,10 @@ export default function AdminMutagenEpochPage() {
                                             </div>
                                         </div>
                                     ))}
+                                    <label className={styles.formLabel} style={{ marginTop: 'var(--space-md)' }}>Size brackets (USD)</label>
+                                    <BracketEditor rows={c.activity4.sizeBrackets.map((b) => ({ lo: b.minUsd, hi: b.maxUsd, pts: b.pts }))} loLabel="min USD" hiLabel="max USD" locked={locked} onChange={(rows) => setA4({ sizeBrackets: rows.map((r) => ({ minUsd: r.lo, maxUsd: r.hi, pts: r.pts })) })} />
+                                    <label className={styles.formLabel} style={{ marginTop: 'var(--space-sm)' }}>Mutation increments</label>
+                                    <NumListEditor values={c.activity4.mutationIncrements} locked={locked} onChange={(v) => setA4({ mutationIncrements: v })} />
 
                                     <div className={styles.formDivider} />
                                     <div className={styles.formSectionTitle}>Activity 5 — Marketing</div>
@@ -449,8 +519,12 @@ export default function AdminMutagenEpochPage() {
                                         <div className={styles.formGroup}><label className={styles.formLabel}>Per-referee points</label><input type="number" className="input" value={c.activity5.perRefereePts} disabled={locked} onChange={(e) => setA5({ perRefereePts: Number(e.target.value) })} /></div>
                                         <div className={styles.formGroup}><label className={styles.formLabel}>Referee cap</label><input type="number" className="input" value={c.activity5.refereeCap} disabled={locked} onChange={(e) => setA5({ refereeCap: Number(e.target.value) })} /></div>
                                     </div>
+                                    <label className={styles.formLabel} style={{ marginTop: 'var(--space-md)' }}>Referrer brackets (epoch USDC earned → pts)</label>
+                                    <BracketEditor rows={c.activity5.referrerBrackets.map((b) => ({ lo: b.minUsd, hi: b.maxUsd, pts: b.pts }))} loLabel="min USD" hiLabel="max USD" locked={locked} onChange={(rows) => setA5({ referrerBrackets: rows.map((r) => ({ minUsd: r.lo, maxUsd: r.hi, pts: r.pts })) })} />
+                                    <label className={styles.formLabel} style={{ marginTop: 'var(--space-sm)' }}>Mutation increments</label>
+                                    <NumListEditor values={c.activity5.mutationIncrements} locked={locked} onChange={(v) => setA5({ mutationIncrements: v })} />
 
-                                    <span className={styles.formHint}>Brackets, mutation increments, and the vote / variety / top-% tables are edited via Raw JSON. Weights must sum to 1.0 to save.</span>
+                                    <span className={styles.formHint}>The Raw JSON tab remains as a power-user escape. Weights must sum to 1.0 to save.</span>
                                 </>
                             );
                         })()}
