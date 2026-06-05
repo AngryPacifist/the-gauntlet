@@ -42,7 +42,7 @@ import {
     mutagenUserScores,
     mutagenPositionSnapshots,
 } from '../db/schema.js';
-import { fetchScoringPrices } from './mutagen-aggregator.js';
+import { fetchScoringPrices, scoreWalletForSubEpoch } from './mutagen-aggregator.js';
 import { computeUsdValueFromPositions } from './mutagen-adx-lp-scorer.js';
 import {
     getWalletPositionsForPool,
@@ -63,6 +63,8 @@ let isHourlyScoringRunning = false;
 let mutagenVoteRefreshTask: cron.ScheduledTask | null = null;
 let mutagenPositionSnapshotTask: cron.ScheduledTask | null = null;
 let isPositionSnapshotRunning = false;
+let mutagenRescoreTask: cron.ScheduledTask | null = null;
+let isMutagenRescoreRunning = false;
 
 // --------------------------------------------------------------------------
 // Score Refresh: runs every 15 minutes
@@ -757,6 +759,70 @@ async function snapshotMutagenPositions(): Promise<void> {
 }
 
 // --------------------------------------------------------------------------
+// Mutagen R2 — periodic rescore of the SCORED SET (decision c)
+//
+// Re-scores wallets that already have a mutagen_user_scores row in the current
+// sub-epoch, so live standings tick between on-demand searches. This is NOT an
+// all-wallet rescore (the §8.0 pivot dropped that) — the set is bounded by who
+// has been searched/bootstrapped. Scale-safe: oldest-first + a per-tick cap, so
+// per-tick cost is bounded regardless of set size and never starves interactive
+// on-demand scoring (both share the one ~250ms Helius RPC gate). Cadence + cap
+// are env-tunable; self-gates on an active sub-epoch.
+// --------------------------------------------------------------------------
+
+const MUTAGEN_RESCORE_CRON = process.env.MUTAGEN_RESCORE_CRON ?? '0 */6 * * *'; // every 6h
+const MUTAGEN_RESCORE_MAX_PER_TICK = Number(process.env.MUTAGEN_RESCORE_MAX_PER_TICK ?? '250');
+
+async function rescoreActiveMutagenScores(): Promise<void> {
+    if (isMutagenRescoreRunning) {
+        console.warn('[Scheduler][mutagen] Rescore still running, skipping this tick');
+        return;
+    }
+    isMutagenRescoreRunning = true;
+    try {
+        const active = await getActiveSubEpoch(new Date());
+        if (!active) return;
+        const config = active.epoch.config as EpochConfig;
+        const cap = Number.isFinite(MUTAGEN_RESCORE_MAX_PER_TICK) && MUTAGEN_RESCORE_MAX_PER_TICK > 0
+            ? MUTAGEN_RESCORE_MAX_PER_TICK
+            : 250;
+
+        // Oldest-first, capped: the stalest rows refresh first; a large set is
+        // covered over several ticks. One row per wallet per sub-epoch (unique
+        // index), so a plain select already yields one row per wallet — no DISTINCT.
+        const wallets = await db
+            .select({ wallet: mutagenUserScores.wallet })
+            .from(mutagenUserScores)
+            .where(eq(mutagenUserScores.subEpochId, active.subEpoch.id))
+            .orderBy(asc(mutagenUserScores.computedAt))
+            .limit(cap);
+        if (wallets.length === 0) return;
+
+        console.log(`[Scheduler][mutagen] Rescoring ${wallets.length} wallet(s) (cap ${cap}) for sub-epoch ${active.subEpoch.id}`);
+        let ok = 0;
+        for (const { wallet } of wallets) {
+            try {
+                const outcome = await scoreWalletForSubEpoch(
+                    new PublicKey(wallet),
+                    active.subEpoch.id,
+                    active.subEpoch.startAt,
+                    active.subEpoch.endAt,
+                    config,
+                );
+                if (outcome.scored) ok++;
+            } catch (error) {
+                console.warn(`[Scheduler][mutagen] Rescore failed for ${wallet}:`, error instanceof Error ? error.message : error);
+            }
+        }
+        console.log(`[Scheduler][mutagen] Rescore: ${ok}/${wallets.length} recomputed (sub-epoch ${active.subEpoch.id})`);
+    } catch (error) {
+        console.error('[Scheduler][mutagen] Error rescoring:', error);
+    } finally {
+        isMutagenRescoreRunning = false;
+    }
+}
+
+// --------------------------------------------------------------------------
 // Start / Stop
 // --------------------------------------------------------------------------
 
@@ -776,16 +842,22 @@ export function startScheduler(): void {
     // Mutagen R2 (Commit 17): daily vote-cache refresh + hourly position snapshot.
     // NO all-wallet rescore — wallet scoring is on-demand via the API (Commit 18).
     // Position snapshot offset to :15 to avoid the busiest scheduler tick (:00,
-    // where the Forge hourly-category job and 15-min score refresh coincide). It
-    // is the only Helius-RPC consumer among the cron jobs, so there's no cross-job
-    // RPC contention — the offset just spreads event-loop / DB-pool load.
+    // where the Forge hourly-category job and 15-min score refresh coincide).
+    // Both the snapshotter and the rescore job below issue Helius RPC; the global
+    // ~250ms gate (solana-rpc.ts) serializes ALL Helius traffic, so they slow each
+    // other at worst — never 429. The offsets just spread event-loop / DB-pool load.
     mutagenVoteRefreshTask = cron.schedule('0 3 * * *', refreshMutagenVoteCaches, { timezone: 'UTC' });
     mutagenPositionSnapshotTask = cron.schedule('15 * * * *', snapshotMutagenPositions, { timezone: 'UTC' });
+    // Periodic rescore of the scored set (decision c) — bounded (oldest-first +
+    // per-tick cap), env-tunable cadence (default every 6h); self-gates on an
+    // active epoch. Shares the global Helius RPC gate with the snapshotter.
+    mutagenRescoreTask = cron.schedule(MUTAGEN_RESCORE_CRON, rescoreActiveMutagenScores, { timezone: 'UTC' });
 
     console.log(
         '[Scheduler] Started: score refresh every 15 min, advancement check every 1 min, ' +
         'daily categories at midnight UTC, hourly provisional updates every hour, ' +
-        'mutagen vote-cache refresh daily 03:00 UTC, mutagen position snapshot hourly at :15',
+        'mutagen vote-cache refresh daily 03:00 UTC, mutagen position snapshot hourly at :15, ' +
+        `mutagen rescore (${MUTAGEN_RESCORE_CRON})`,
     );
 }
 
@@ -814,10 +886,14 @@ export function stopScheduler(): void {
         mutagenPositionSnapshotTask.stop();
         mutagenPositionSnapshotTask = null;
     }
+    if (mutagenRescoreTask) {
+        mutagenRescoreTask.stop();
+        mutagenRescoreTask = null;
+    }
     console.log('[Scheduler] Stopped');
 }
 
 // Internal re-exports for verification + manual triggering (e.g. a Commit 18/19
 // admin endpoint forcing an immediate refresh). Mirrors the aggregator's
 // testing re-export pattern. (getActiveSubEpoch now lives in mutagen-epoch.ts.)
-export { refreshMutagenVoteCaches, snapshotMutagenPositions };
+export { refreshMutagenVoteCaches, snapshotMutagenPositions, rescoreActiveMutagenScores };
