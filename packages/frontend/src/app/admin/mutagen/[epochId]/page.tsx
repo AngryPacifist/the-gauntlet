@@ -258,7 +258,7 @@ export default function AdminMutagenEpochPage() {
                                 {busy === 'award' ? 'Awarding…' : 'Award points'}
                             </button>
                             <span className={styles.formHint} style={{ marginLeft: 'var(--space-md)' }}>
-                                Awards land in the current sub-epoch · requires an active epoch.
+                                Awards land in the current sub-epoch · requires an active epoch · the wallet&apos;s score refreshes within seconds.
                             </span>
                         </form>
                     </section>

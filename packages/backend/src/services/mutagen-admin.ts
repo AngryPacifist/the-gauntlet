@@ -10,7 +10,7 @@
 // (not_found→404, conflict→409, bad_request→400) without string-sniffing.
 // ============================================================================
 
-import { eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import { PublicKey } from '@solana/web3.js';
 import { db } from '../db/index.js';
 import {
@@ -258,6 +258,28 @@ export async function addMarketingAward(
             awardedBy: input.awardedBy ?? null,
         })
         .returning({ id: mutagenMarketingAwards.id });
+
+    // Eager refresh (decision d): invalidate this wallet's cached score for the
+    // current sub-epoch, then fire-and-forget a recompute so the award reflects in
+    // BOTH the wallet view and the leaderboard within seconds (Activity 5 reads
+    // mutagen_marketing_awards). The awaited stale stamp alone guarantees correctness
+    // on the next read if the recompute fails; the recompute never blocks this
+    // response. No row yet ⇒ the UPDATE is a harmless no-op (first score includes it).
+    await db
+        .update(mutagenUserScores)
+        .set({ computedAt: new Date(0) })
+        .where(and(
+            eq(mutagenUserScores.subEpochId, active.subEpoch.id),
+            eq(mutagenUserScores.wallet, input.wallet),
+        ));
+    void scoreWalletForSubEpoch(
+        new PublicKey(input.wallet),
+        active.subEpoch.id,
+        active.subEpoch.startAt,
+        active.subEpoch.endAt,
+        active.epoch.config as EpochConfig,
+    ).catch((e) => console.warn('[mutagen] post-award rescore failed (recomputes on next read):', e instanceof Error ? e.message : e));
+
     return { ok: true, awardId: award.id, subEpochId: active.subEpoch.id };
 }
 
