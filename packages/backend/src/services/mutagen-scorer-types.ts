@@ -217,8 +217,12 @@ export interface EpochConfig {
          *     (Trade Performance + Trade Duration × Size Multiplier) across
          *     closed positions in the epoch window; use as the volume metric
          *
-         * Admin-switchable per epoch. Default 'wrap_existing_formula' per
-         * teardown §10.2 lean — honors the live MECHANICS calculator.
+         * Admin-switchable per epoch. Default 'volume_brackets' per ZeDef's
+         * 2026-05-27 reply (#14: "keep a) and c) as options ... I personally
+         * lean a)" — the simpler volume-bracket model for newcomers).
+         * 'wrap_existing_formula' stays selectable per epoch. NOTE: the
+         * volumeBrackets *values* below are our defaults — ZeDef confirmed the
+         * mode, not the specific thresholds (those remain admin-tunable).
          */
         mode: 'volume_brackets' | 'wrap_existing_formula';
         /** When wrapping: weight applied to the existing per-trade points sum. */
@@ -310,7 +314,7 @@ export const DEFAULT_EPOCH_CONFIG: EpochConfig = {
     },
 
     activity3: {
-        mode: 'wrap_existing_formula',
+        mode: 'volume_brackets',
         existingFormulaWeight: 1.0,
         volumeBrackets: [
             { minUsd: 0, maxUsd: 1000, pts: 0 },
