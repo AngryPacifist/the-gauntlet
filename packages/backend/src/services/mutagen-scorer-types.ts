@@ -280,12 +280,22 @@ export const DEFAULT_EPOCH_CONFIG: EpochConfig = {
     weights: { a1: 0.30, a2: 0.05, a3: 0.30, a4: 0.30, a5: 0.05 },
 
     activity1: {
+        // ZeDef 2026-05-27 (#21): fixed 10-step ladder regardless of TVL (NOT
+        // %-of-TVL — TVL swings: ALP ~500k vs RWALP ~50k would over-reward
+        // RWALP), $250 floor / $250k cap, "like leverage master". Geometric
+        // boundaries (~2–2.5x/step), +20 pts/step, cap 200. Anchors locked by
+        // ZeDef; per-step values approved by OUTIS 2026-06-07, admin-tunable.
         sizeBrackets: [
             { minUsd: 0, maxUsd: 250, pts: 0 },
-            { minUsd: 250, maxUsd: 1000, pts: 10 },
-            { minUsd: 1000, maxUsd: 10000, pts: 30 },
-            { minUsd: 10000, maxUsd: 100000, pts: 80 },
-            { minUsd: 100000, maxUsd: 250000, pts: 150 },
+            { minUsd: 250, maxUsd: 500, pts: 20 },
+            { minUsd: 500, maxUsd: 1000, pts: 40 },
+            { minUsd: 1000, maxUsd: 2500, pts: 60 },
+            { minUsd: 2500, maxUsd: 5000, pts: 80 },
+            { minUsd: 5000, maxUsd: 10000, pts: 100 },
+            { minUsd: 10000, maxUsd: 25000, pts: 120 },
+            { minUsd: 25000, maxUsd: 50000, pts: 140 },
+            { minUsd: 50000, maxUsd: 100000, pts: 160 },
+            { minUsd: 100000, maxUsd: 250000, pts: 180 },
             { minUsd: 250000, maxUsd: null, pts: 200 },
         ],
         lockTierMultipliers: { '30': 1.0, '90': 1.5, '180': 2.5, '360': 4.0 },
