@@ -19,10 +19,12 @@
 // concurrency control). Stale locks (older than the TTL) are reaped on
 // acquisition attempt.
 //
-// SOL price comes from Pyth Hermes (the official Pyth price API, free,
-// no auth). ADX/ALP/RWALP from Adrena's own /last-price; USDC = $1
-// by convention. Hermes used over Jupiter Lite because the latter has
-// been failing TLS handshakes from this environment (verified 2026-05-26).
+// SOL/USD comes from the shared Pyth OHLC client (Pyth Benchmarks primary,
+// Adrena Lazer fallback, both with retry/backoff): the same source the rest
+// of the platform prices against, using the latest intraday close as spot.
+// It is cached briefly with a last-known fallback so a transient miss never
+// zeroes the SOL side of a position. ADX/ALP/RWALP from Adrena's /last-price;
+// USDC = $1 by convention.
 // ============================================================================
 
 import { PublicKey } from '@solana/web3.js';
@@ -34,6 +36,7 @@ import {
     mutagenScoringLocks,
 } from '../db/schema.js';
 import { AdrenaClient } from './adrena-client.js';
+import { fetchIntradayOHLC } from './pyth-client.js';
 import { scoreActivity1 } from './mutagen-lp-scorer.js';
 import { scoreActivity2 } from './mutagen-staking-scorer.js';
 import { scoreActivity3 } from './mutagen-trading-scorer.js';
@@ -274,36 +277,54 @@ async function releaseLock(wallet: string, subEpochId: number): Promise<void> {
         );
 }
 
-// Pyth Hermes SOL/USD feed (hex feed ID — distinct from Lazer's numeric IDs).
-const PYTH_SOL_USD_FEED_HEX = 'ef0d8b6fda2ceba41da15d4095d1da392a0d2f8ed0c6c7bc0f4cfac8c280b56d';
+// SOL/USD: cache the last good price so a transient fetch miss reuses it
+// instead of zeroing the SOL side of any SOL-paired LP valuation. Short TTL
+// so we hit the network at most once a minute (SOL/USD is stable within that
+// window, and many wallet scoring runs can share one value).
+let solCache: { usd: number; at: number } | null = null;
+const SOL_PRICE_TTL_MS = 60 * 1000;
 
 /**
- * Fetches the price record needed by all 5 scorers. ADX/ALP/RWALP via
- * Adrena's own /last-price; SOL via Pyth Hermes; USDC = 1.0 by convention.
- *
- * If SOL fetch fails, falls back to 0 so the run still completes —
- * Activity 4's SOL-paired pool valuation would value the SOL side at 0
- * for the run. Logged loudly so we notice.
+ * SOL/USD via the shared Pyth OHLC client (Pyth Benchmarks primary, Adrena
+ * Lazer fallback, both with retry/backoff). Uses the latest intraday close as
+ * the spot value. On a transient miss, reuses the last known price (and backs
+ * off so we retry at most once per TTL during an outage). Returns 0 only if a
+ * price has never been obtained.
  */
-async function fetchScoringPrices(): Promise<ScorerContext['prices']> {
-    const adrenaPrices = await adrenaClient.getLastPrices();
-    let sol = 0;
+async function fetchSolUsd(): Promise<number> {
+    if (solCache && Date.now() - solCache.at < SOL_PRICE_TTL_MS) {
+        return solCache.usd;
+    }
     try {
-        const url = `https://hermes.pyth.network/v2/updates/price/latest?ids%5B%5D=${PYTH_SOL_USD_FEED_HEX}`;
-        const res = await fetch(url);
-        if (res.ok) {
-            const body = await res.json() as {
-                parsed?: Array<{ price?: { price?: string; expo?: number } }>;
-            };
-            const p = body.parsed?.[0]?.price;
-            if (p?.price && typeof p.expo === 'number') {
-                sol = Number(p.price) * Math.pow(10, p.expo);
-            }
+        const today = new Date().toISOString().slice(0, 10);
+        const bar = await fetchIntradayOHLC('SOL', today);
+        if (bar && Number.isFinite(bar.close) && bar.close > 0) {
+            solCache = { usd: bar.close, at: Date.now() };
+            return bar.close;
         }
     } catch (e) {
-        console.warn('[mutagen-aggregator] Pyth Hermes SOL price fetch failed:', (e as Error).message);
+        console.warn('[mutagen-aggregator] SOL price fetch threw:', e instanceof Error ? e.message : e);
     }
+    if (solCache && solCache.usd > 0) {
+        // Reuse last known; bump the timestamp so we back off to one retry per
+        // TTL instead of hammering the failing source every run.
+        solCache = { usd: solCache.usd, at: Date.now() };
+        console.warn(`[mutagen-aggregator] SOL price unavailable; using last known ${solCache.usd}`);
+        return solCache.usd;
+    }
+    console.warn('[mutagen-aggregator] SOL price unavailable and no cached value; using 0');
+    return 0;
+}
 
+/**
+ * Fetches the price record needed by all 5 scorers. ADX/ALP/RWALP via Adrena's
+ * /last-price; SOL via fetchSolUsd (Pyth OHLC client); USDC = 1.0 by convention.
+ */
+async function fetchScoringPrices(): Promise<ScorerContext['prices']> {
+    const [adrenaPrices, sol] = await Promise.all([
+        adrenaClient.getLastPrices(),
+        fetchSolUsd(),
+    ]);
     return {
         adx: parseFloat(adrenaPrices.adx.price),
         alp: parseFloat(adrenaPrices.alp.price),
