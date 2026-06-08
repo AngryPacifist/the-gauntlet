@@ -232,7 +232,7 @@ export const raffleDraws = pgTable('raffle_draws', {
 // 9 tables.
 // ============================================================================
 
-// --- Mutagen Epochs (Y-month epochs per teardown, default 3 months) ---
+// --- Mutagen Epochs (multi-month epochs, default 3 months) ---
 
 export const mutagenEpochs = pgTable('mutagen_epochs', {
     id: serial('id').primaryKey(),

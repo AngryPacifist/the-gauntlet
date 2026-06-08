@@ -322,7 +322,7 @@ CREATE INDEX IF NOT EXISTS idx_bracket_entries_bracket_cpi_desc ON bracket_entri
 // ============================================================================
 
 const MUTAGEN_TABLES_SQL = `
--- Mutagen Epochs (Y-month epochs per teardown, default 3 months)
+-- Mutagen Epochs (multi-month epochs, default 3 months)
 CREATE TABLE IF NOT EXISTS mutagen_epochs (
   id SERIAL PRIMARY KEY,
   name VARCHAR(120) NOT NULL,

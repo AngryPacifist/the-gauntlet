@@ -27,8 +27,8 @@ export const ADRENA_STAKING_POOL_SIZE = 2304;
 
 // ---------- Token mints ----------
 // ADX + ALP mint pubkeys are PDAs of the Adrena program. The values below
-// are the canonical pubkeys (verified empirically); the future adrena-pda
-// helper module will re-assert this match at boot via assertCanonicalPdas().
+// are the canonical pubkeys (verified empirically); the adrena-pda helper
+// re-asserts this match at boot via assertCanonicalPdas().
 export const ADX_MINT = new PublicKey('AuQaustGiaqxRvj2gtCdrd22PBzTn8kM3kEPEkZCtuDw');
 export const ALP_MINT = new PublicKey('4yCLi5yWGzpTWMQ1iWHG5CrGYAdBkhyEdsuSugjDUqwj');
 export const RWALP_MINT = new PublicKey('GMZ7hCGeHyDr1giM4dyP2eTkj9GQ2T1G9cBDridLz5Cx');

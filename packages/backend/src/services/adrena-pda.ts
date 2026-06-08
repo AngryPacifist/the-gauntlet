@@ -124,7 +124,7 @@ export function deriveUserStaking(owner: PublicKey, stakingPool: PublicKey): Pub
  *   - Adrena changes the seed scheme upstream (extremely unlikely but
  *     theoretically possible across a major version bump)
  *
- * Either case = silent data corruption across every R2 scorer if undetected.
+ * Either case = silent data corruption across every Mutagen scorer if undetected.
  * We trade ~2ms of boot cost for an immediate, loud failure mode.
  */
 export function assertCanonicalPdas(): void {

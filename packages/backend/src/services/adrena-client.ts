@@ -19,7 +19,7 @@ import type { AdrenaPosition } from '../types.js';
 const DEFAULT_BASE_URL = 'https://datapi.adrena.trade';
 
 // ============================================================================
-// Mutagen R2 — endpoint response types (inline; client-specific shapes)
+// Mutagen — endpoint response types (inline; client-specific shapes)
 // ============================================================================
 
 export interface AdrenaStake {
@@ -324,9 +324,9 @@ export class AdrenaClient {
 
     // GET /stake?user_wallet=X&start_date=... — per-user stake list.
     //
-    // The endpoint defaults to a ~25-day lookback window (verified empirically
-    // 2026-05-26: response includes start_date matching ~25 days ago). For
-    // Mutagen R2 staking scoring, we need ALL currently-open stakes including
+    // The endpoint defaults to a ~25-day lookback window (verified empirically:
+    // response includes start_date matching ~25 days ago). For Mutagen staking
+    // scoring, we need ALL currently-open stakes including
     // those started before the default window. Max ADX lock duration is 540
     // days, so passing `startDate` ≥ 540 days back captures every stake that
     // could still be active. Callers that don't pass startDate get the API
@@ -398,7 +398,7 @@ export class AdrenaClient {
 
     // GET /trader-volume[?user_wallet=X] — per-wallet DAILY trader volume aggregate.
     //
-    // ⚠ NOT used by Mutagen R2 scoring path. Activity 3 aggregates per-epoch volume
+    // ⚠ NOT used by the Mutagen scoring path. Activity 3 aggregates per-epoch volume
     // from /v4/position instead (multi-day window). This method is here for ad-hoc
     // analytics + future use. When called with `user_wallet`, returns empty array
     // if the wallet hasn't traded today (by design — endpoint is daily-only).

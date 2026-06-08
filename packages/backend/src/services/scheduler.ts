@@ -893,7 +893,7 @@ export function stopScheduler(): void {
     console.log('[Scheduler] Stopped');
 }
 
-// Internal re-exports for verification + manual triggering (e.g. a Commit 18/19
-// admin endpoint forcing an immediate refresh). Mirrors the aggregator's
+// Internal re-exports for verification + manual triggering (e.g. an admin
+// endpoint forcing an immediate refresh). Mirrors the aggregator's
 // testing re-export pattern. (getActiveSubEpoch now lives in mutagen-epoch.ts.)
 export { refreshMutagenVoteCaches, snapshotMutagenPositions, rescoreActiveMutagenScores };

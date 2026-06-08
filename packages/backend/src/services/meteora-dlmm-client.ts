@@ -183,7 +183,7 @@ export interface PoolDataPiInfo {
 /**
  * Pool-level data via Meteora's public datapi (no auth).
  * Used for: TVL display, USD-context for position values, activity
- * health metrics shown to ZeDef on the admin panel.
+ * health metrics shown on the admin panel.
  */
 export async function fetchPoolDataPiInfo(
     poolAddress: PublicKey,

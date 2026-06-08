@@ -729,7 +729,7 @@ router.post('/mutagen/marketing-award', async (req, res) => {
     }
 });
 
-// POST /api/admin/mutagen/bootstrap — one-time R2 seeding (fire-and-forget background scoring)
+// POST /api/admin/mutagen/bootstrap — one-time seeding (fire-and-forget background scoring)
 router.post('/mutagen/bootstrap', async (req, res) => {
     try {
         const { topN } = req.body as { topN?: number };

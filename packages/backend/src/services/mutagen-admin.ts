@@ -44,7 +44,7 @@ const bad = (error: string): AdminFail => ({ ok: false, code: 'bad_request', err
 // ---------- config validation ----------
 
 /**
- * Structural safety only — NOT opinion-policing ZeDef's tuning. The one
+ * Structural safety only, NOT opinion-policing the admin's tuning. The one
  * invariant that would corrupt scoring if violated: Activity weights must sum
  * to 1.0. Bracket shapes / multipliers are deliberately left to the admin.
  */
@@ -284,7 +284,7 @@ export async function addMarketingAward(
     return { ok: true, awardId: award.id, subEpochId: active.subEpoch.id };
 }
 
-// ---------- bootstrap (one-time R2 seeding) ----------
+// ---------- bootstrap (one-time seeding) ----------
 
 export interface BootstrapSources {
     adrenaLeaderboard: number;
@@ -329,13 +329,13 @@ export async function gatherBootstrapWallets(
 }
 
 /**
- * One-time R2 seeding: gather wallets, then score them for the current
+ * One-time seeding: gather wallets, then score them for the current
  * sub-epoch. Default is fire-and-forget (responds immediately, scores in the
  * background, rate-limit-safe via sequential per-wallet scoring). The on-demand
  * API path remains the source of truth — every wallet is also scored on first
  * search — so this is best-effort warmup, NOT durable across restarts. If
  * recurring re-seeds ever matter, the upgrade is a small queue table processed
- * by the existing scheduler (see commit notes).
+ * by the existing scheduler.
  *
  * `background: false` awaits completion — used by the verifier (and small runs)
  * to score deterministically and avoid a teardown race.

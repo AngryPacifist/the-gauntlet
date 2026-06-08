@@ -1,5 +1,5 @@
 // ============================================================================
-// Mutagen R2 — active epoch + sub-epoch resolver
+// Mutagen — active epoch + sub-epoch resolver
 // ============================================================================
 //
 // Single source of truth for "which epoch / sub-epoch is live right now".

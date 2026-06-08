@@ -5,13 +5,14 @@
 // Activity 3: weight 30% of total Mutagen. Three dimensions:
 //   1. Volume         — sum of trading activity in the epoch window. Admin
 //                       picks one of two modes via epoch.config.activity3.mode:
-//                       - 'wrap_existing_formula' (default): sum each closed
-//                         position's `total_points` (Adrena's existing per-trade
-//                         mutagen formula: (Performance + Duration) × Size).
-//                         Multiplied by `existingFormulaWeight`. Honors the
-//                         live MECHANICS calculator users already see.
-//                       - 'volume_brackets': aggregate `position.volume` (USD
-//                         notional) per epoch → bracketLookupUsd.
+//                       - 'volume_brackets' (default): aggregate
+//                         `position.volume` (USD notional) per epoch →
+//                         bracketLookupUsd.
+//                       - 'wrap_existing_formula': sum each closed position's
+//                         `total_points` (Adrena's existing per-trade mutagen
+//                         formula: (Performance + Duration) × Size), multiplied
+//                         by `existingFormulaWeight`. Honors the live MECHANICS
+//                         calculator users already see.
 //   2. Forge top-X%   — wallet's percentile rank in the latest Adrena-Forge
 //                       rank_only tournament (active or recently completed).
 //                       Top 1% / 5% / 10% / 25% tiers per config.

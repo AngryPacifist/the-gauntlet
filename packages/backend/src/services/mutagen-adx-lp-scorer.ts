@@ -189,8 +189,8 @@ export async function scoreActivity4(ctx: ScorerContext): Promise<ActivityScoreR
         let coldStart = false;
         if (snapshots.length === 0) {
             // Cold start: no historical snapshots. Live read + treat as
-            // single datapoint. Scheduler (Commit 17) will fill in the
-            // time series so subsequent runs get a proper TWA.
+            // single datapoint. The scheduler job fills in the time series
+            // so subsequent runs get a proper TWA.
             coldStart = true;
             try {
                 const positions = await getWalletPositionsForPool(ctx.wallet, poolPk);
@@ -228,9 +228,9 @@ export async function scoreActivity4(ctx: ScorerContext): Promise<ActivityScoreR
     }
 
     // ---------- Within-Activity mutation ----------
-    // ZeDef's "Activity on both pools" framing → being LP in multiple enabled
-    // pools is the bonus dim. extraQualified = activePoolCount - 1 (the first
-    // active pool earns base; each additional adds an increment).
+    // Being LP in multiple enabled pools is the bonus dim. extraQualified =
+    // activePoolCount - 1 (the first active pool earns base; each additional
+    // adds an increment).
     const extraQualified = Math.max(0, activePoolCount - 1);
     const mutationFactor =
         1 + sumMutationIncrements(ctx.config.activity4.mutationIncrements, extraQualified);
