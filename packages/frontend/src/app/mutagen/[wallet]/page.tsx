@@ -258,7 +258,7 @@ export default function MutagenWalletPage() {
                                 {a.qualified ? (
                                     <span className={styles.check}><BadgeCheck size={12} /> Qualified</span>
                                 ) : (
-                                    <span className={styles.dash}>— Not qualified</span>
+                                    <span className={styles.dash}>Not qualified</span>
                                 )}
                             </div>
                         </div>

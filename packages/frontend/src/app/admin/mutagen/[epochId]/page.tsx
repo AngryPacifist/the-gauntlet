@@ -442,7 +442,7 @@ export default function AdminMutagenEpochPage() {
                                     </div>
 
                                     <div className={styles.formDivider} />
-                                    <div className={styles.formSectionTitle}>Activity 1 — LP minting</div>
+                                    <div className={styles.formSectionTitle}>Activity 1: LP minting</div>
                                     <div className={styles.formGrid}>
                                         <div className={styles.formGroup}><label className={styles.formLabel}>Qualifying threshold</label><input type="number" className="input" value={c.activity1.qualifyingThreshold} disabled={locked} onChange={(e) => setA1({ qualifyingThreshold: Number(e.target.value) })} /></div>
                                         <div className={styles.formGroup}><label className={styles.formLabel}>Per-lock USD cap</label><input type="number" className="input" value={c.activity1.lockUsdCap} disabled={locked} onChange={(e) => setA1({ lockUsdCap: Number(e.target.value) })} /></div>
@@ -456,7 +456,7 @@ export default function AdminMutagenEpochPage() {
                                     <NumListEditor values={c.activity1.mutationIncrements} locked={locked} onChange={(v) => setA1({ mutationIncrements: v })} />
 
                                     <div className={styles.formDivider} />
-                                    <div className={styles.formSectionTitle}>Activity 2 — Staking + Voting</div>
+                                    <div className={styles.formSectionTitle}>Activity 2: Staking + Voting</div>
                                     <div className={styles.formGrid}>
                                         <div className={styles.formGroup}><label className={styles.formLabel}>Qualifying threshold</label><input type="number" className="input" value={c.activity2.qualifyingThreshold} disabled={locked} onChange={(e) => setA2({ qualifyingThreshold: Number(e.target.value) })} /></div>
                                         {['0', '90', '180', '360', '540'].map((t) => (
@@ -471,7 +471,7 @@ export default function AdminMutagenEpochPage() {
                                     <NumListEditor values={c.activity2.mutationIncrements} locked={locked} onChange={(v) => setA2({ mutationIncrements: v })} />
 
                                     <div className={styles.formDivider} />
-                                    <div className={styles.formSectionTitle}>Activity 3 — Trading</div>
+                                    <div className={styles.formSectionTitle}>Activity 3: Trading</div>
                                     <div className={styles.formGrid}>
                                         <div className={styles.formGroup}><label className={styles.formLabel}>Qualifying threshold</label><input type="number" className="input" value={c.activity3.qualifyingThreshold} disabled={locked} onChange={(e) => setA3({ qualifyingThreshold: Number(e.target.value) })} /></div>
                                         <div className={styles.formGroup}><label className={styles.formLabel}>Volume mode</label><select className="input" value={c.activity3.mode} disabled={locked} onChange={(e) => setA3({ mode: e.target.value as 'volume_brackets' | 'wrap_existing_formula' })}><option value="wrap_existing_formula">wrap_existing_formula</option><option value="volume_brackets">volume_brackets</option></select></div>
@@ -489,7 +489,7 @@ export default function AdminMutagenEpochPage() {
                                     <NumListEditor values={c.activity3.mutationIncrements} locked={locked} onChange={(v) => setA3({ mutationIncrements: v })} />
 
                                     <div className={styles.formDivider} />
-                                    <div className={styles.formSectionTitle}>Activity 4 — ADX-LP pools</div>
+                                    <div className={styles.formSectionTitle}>Activity 4: ADX-LP pools</div>
                                     <div className={styles.formGrid}>
                                         <div className={styles.formGroup}><label className={styles.formLabel}>Qualifying threshold</label><input type="number" className="input" value={c.activity4.qualifyingThreshold} disabled={locked} onChange={(e) => setA4({ qualifyingThreshold: Number(e.target.value) })} /></div>
                                     </div>
@@ -513,7 +513,7 @@ export default function AdminMutagenEpochPage() {
                                     <NumListEditor values={c.activity4.mutationIncrements} locked={locked} onChange={(v) => setA4({ mutationIncrements: v })} />
 
                                     <div className={styles.formDivider} />
-                                    <div className={styles.formSectionTitle}>Activity 5 — Marketing</div>
+                                    <div className={styles.formSectionTitle}>Activity 5: Marketing</div>
                                     <div className={styles.formGrid}>
                                         <div className={styles.formGroup}><label className={styles.formLabel}>Qualifying threshold</label><input type="number" className="input" value={c.activity5.qualifyingThreshold} disabled={locked} onChange={(e) => setA5({ qualifyingThreshold: Number(e.target.value) })} /></div>
                                         <div className={styles.formGroup}><label className={styles.formLabel}>Per-referee points</label><input type="number" className="input" value={c.activity5.perRefereePts} disabled={locked} onChange={(e) => setA5({ perRefereePts: Number(e.target.value) })} /></div>

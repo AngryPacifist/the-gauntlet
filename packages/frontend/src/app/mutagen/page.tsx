@@ -86,7 +86,7 @@ export default function MutagenLeaderboardPage() {
             {rows && rows.length === 0 && (
                 <div className="card empty-state">
                     <p className="empty-state__title">No scores yet</p>
-                    <p>Search a wallet above to compute the first live score — it joins the board automatically.</p>
+                    <p>Search a wallet above to compute the first live score; it joins the board automatically.</p>
                 </div>
             )}
             {rows && rows.length > 0 && (
