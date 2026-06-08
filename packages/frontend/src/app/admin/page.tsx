@@ -58,9 +58,9 @@ const SUB_ROUTES: SubRoute[] = [
     },
     {
         href: '/admin/mutagen',
-        label: 'Mutagen R2',
+        label: 'Mutagen',
         icon: <Dna size={20} />,
-        description: 'Mutagen R2 epochs: create, configure scoring weights, activate, marketing awards, bootstrap.',
+        description: 'Mutagen epochs: create, configure scoring weights, activate, marketing awards, bootstrap.',
     },
 ];
 
