@@ -114,7 +114,7 @@ export default function AdminMutagenPage() {
                     <Dna size={24} style={{ verticalAlign: 'middle', marginRight: 8 }} />
                     Mutagen Epochs
                 </h1>
-                <p className="page-header__subtitle">Create, configure, and run R2 scoring epochs.</p>
+                <p className="page-header__subtitle">Create, configure, and run scoring epochs.</p>
             </header>
 
             {/* secret */}
@@ -192,7 +192,7 @@ export default function AdminMutagenPage() {
                             <div className={styles.formGroup}>
                                 <label className={styles.formLabel}>Sub-epoch length (weeks)</label>
                                 <input type="number" min={1} className="input" value={weeks} onChange={(e) => setWeeks(e.target.value)} />
-                                <span className={styles.formHint}>Config defaults to the standard 30/5/30/30/5 weights — tune it after creating, on the epoch page.</span>
+                                <span className={styles.formHint}>Config defaults to the standard 30/5/30/30/5 weights; tune it after creating, on the epoch page.</span>
                             </div>
                             <div className={styles.modalActions}>
                                 <button type="button" className="btn btn--secondary" onClick={() => setShowCreate(false)}>Cancel</button>

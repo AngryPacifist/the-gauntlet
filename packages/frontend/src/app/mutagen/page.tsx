@@ -56,7 +56,7 @@ export default function MutagenLeaderboardPage() {
                     <h1 className={styles.title}>
                         <Dna size={24} className={styles.titleIcon} /> Mutagen Leaderboard
                     </h1>
-                    <p className={styles.sub}>Live R2 scoring across 5 activities · search any wallet for its live breakdown</p>
+                    <p className={styles.sub}>Live scoring across 5 activities · search any wallet for its live breakdown</p>
                 </div>
                 <form className={styles.search} onSubmit={onSearch}>
                     <Search size={16} />

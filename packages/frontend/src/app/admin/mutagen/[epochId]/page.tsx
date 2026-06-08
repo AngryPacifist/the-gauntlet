@@ -361,7 +361,7 @@ export default function AdminMutagenEpochPage() {
 
                         {epoch.status !== 'registration' && (
                             <p className={styles.formHint} style={{ marginBottom: 'var(--space-md)' }}>
-                                Config is frozen — editing is only allowed while the epoch is in registration. Activation locks the ruleset.
+                                Config is frozen: editing is only allowed while the epoch is in registration. Activation locks the ruleset.
                             </p>
                         )}
 
@@ -395,7 +395,7 @@ export default function AdminMutagenEpochPage() {
                                     <div className={styles.formSectionTitle}>
                                         Weights
                                         <span style={{ marginLeft: 8, color: wok ? 'var(--status-success)' : 'var(--status-danger)' }}>
-                                            Σ {wsum.toFixed(2)} {wok ? '✓' : '— must equal 1.0'}
+                                            Σ {wsum.toFixed(2)} {wok ? '✓' : ': must equal 1.0'}
                                         </span>
                                     </div>
                                     <div className={styles.formGrid}>
