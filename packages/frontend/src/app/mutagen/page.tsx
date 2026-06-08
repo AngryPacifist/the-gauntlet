@@ -1,7 +1,7 @@
 'use client';
 
 // ============================================================================
-// /mutagen — public Mutagen R2 leaderboard + wallet search.
+// /mutagen: public Mutagen leaderboard + wallet search.
 //
 // Search routes to /mutagen/[wallet] (on-demand live score). Leaderboard reads
 // existing rows: Current sub-epoch (default) or Cumulative across the epoch.

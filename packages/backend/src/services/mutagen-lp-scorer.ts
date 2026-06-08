@@ -1,24 +1,24 @@
 // ============================================================================
-// Activity 1 scorer — LP minting (ALP + RWALP)
+// Activity 1 scorer: LP minting (ALP + RWALP)
 // ============================================================================
 //
-// ZeDef R2 Activity 1: weight 30% of total Mutagen. Three dimensions:
+// Activity 1: weight 30% of total Mutagen. Three dimensions:
 //   1. Mint   — has a non-zero ALP or RWALP balance (net of redemption)
 //   2. Size   — USD value of LP position via admin-tunable bracket table
 //   3. Lock   — sum of lock-duration-weighted USD value per active lock,
 //               capped per-lock to avoid whale dominance
 //
 // Mint + Size + Lock all "qualified" → within-Activity mutation triggers.
-// Increments are admin-tunable per-tier (default [0.3, 0.5, 0.7, 0.9] —
-// per-tier-increasing slope, matches ZeDef's "steeper slope" language).
+// Increments are admin-tunable per-tier (default [0.3, 0.5, 0.7, 0.9]):
+// a per-tier-increasing slope, steeper as more dimensions qualify.
 //
 // Lock reads go through the LockSource interface so Streamflow can later
 // plug in without touching this file. Today only AdrenaNativeLockSource
 // is wired (see lock-sources/adrena-native.ts).
 //
-// USD prices arrive via ctx.prices, populated by the aggregator
-// (Commit 16) — this scorer doesn't fetch prices itself, so a single
-// price fetch covers all 5 Activity scorers for a given wallet.
+// USD prices arrive via ctx.prices, populated by the aggregator, so this
+// scorer doesn't fetch prices itself: a single price fetch covers all 5
+// Activity scorers for a given wallet.
 // ============================================================================
 
 import { PublicKey } from '@solana/web3.js';
@@ -77,7 +77,7 @@ export async function scoreActivity1(ctx: ScorerContext): Promise<ActivityScoreR
     let lockScore = 0;
     for (const lock of allLocks) {
         // Pick the right per-mint price via the LockEntry.sourceMint field
-        // (the v2 Gap 7 patch — no fragile array-membership inference).
+        // (explicit, not fragile array-membership inference).
         const price = lock.sourceMint.equals(ALP_MINT) ? ctx.prices.alp : ctx.prices.rwalp;
         const lockUsd = (Number(lock.amountRaw) / LP_DIVISOR) * price;
         const cappedUsd = Math.min(lockUsd, ctx.config.activity1.lockUsdCap);

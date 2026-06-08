@@ -1,9 +1,9 @@
 'use client';
 
 // ============================================================================
-// /admin/mutagen/[epochId] — epoch detail: config editor (structured form +
+// /admin/mutagen/[epochId]: epoch detail. Config editor (structured form +
 // raw-JSON tab) + lifecycle (activate / complete) + marketing award + bootstrap.
-// Config is read-only once activated (decision a). Utilitarian admin.
+// Config is read-only once activated. Utilitarian admin.
 // ============================================================================
 
 import { useEffect, useState, type FormEvent } from 'react';
@@ -42,7 +42,7 @@ type EpochConfig = {
     prizePool: { type: 'fixed' | 'percent_fees'; value: number; denominatedIn: 'ADX' | 'USDC' };
 };
 
-// ---- reusable bracket / list editors (decision b2) ----
+// ---- reusable bracket / list editors ----
 type BracketRow = { lo: number; hi: number | null; pts: number };
 function BracketEditor({ rows, loLabel, hiLabel, locked, onChange }: { rows: BracketRow[]; loLabel: string; hiLabel: string; locked: boolean; onChange: (rows: BracketRow[]) => void }) {
     const set = (i: number, patch: Partial<BracketRow>) => onChange(rows.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
@@ -157,7 +157,7 @@ export default function AdminMutagenEpochPage() {
         }
     }
 
-    // ---- structured config updaters (decision b) ----
+    // ---- structured config updaters ----
     function setW(k: 'a1' | 'a2' | 'a3' | 'a4' | 'a5', v: number) {
         setConfig((c) => (c ? { ...c, weights: { ...c.weights, [k]: v } } : c));
     }

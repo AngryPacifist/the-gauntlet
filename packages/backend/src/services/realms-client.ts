@@ -1,5 +1,5 @@
 // ============================================================================
-// Realms / SPL Governance client — pure SPL Gov reads (no DB coupling)
+// Realms / SPL Governance client: pure SPL Gov reads (no DB coupling)
 // ============================================================================
 //
 // Used by Activity 2 scoring (DAO voting dimension). All vote / TOR / proposal
@@ -7,16 +7,9 @@
 // this module is pure RPC reads.
 //
 // Account-type byte offsets and memcmp positions were verified empirically
-// during the inventory phase against AdrenaDAO realm
-// `GWe1VYTRMujAtGVhSLwSn4YPsXBLe5qfkzNAYAKD44Nk` — see
-// `.agent/brain/mutagen_rework_r2_inventory.md` §3c and §6 amendment #26
-// (TokenOwnerRecord owner at offset 65, NOT 33 — common SPL Gov pitfall).
-//
-// Empirical baselines from the inventory:
-//   - ZeDef vote count = 142
-//   - OUTIS vote count = 0
-//   - OUTIS has a TokenOwnerRecord in the AdrenaDAO realm
-//   - Total proposals across both governances = 330 (7 + 323)
+// against the AdrenaDAO realm
+// `GWe1VYTRMujAtGVhSLwSn4YPsXBLe5qfkzNAYAKD44Nk`.
+// (TokenOwnerRecord owner is at offset 65, NOT 33: a common SPL Gov pitfall.)
 // ============================================================================
 
 import { PublicKey } from '@solana/web3.js';
@@ -79,7 +72,7 @@ async function getProgramAccountsRaw(
  * realm we care about, and a wallet's vote records under other realms
  * would only inflate the count beyond what we want to score.
  *
- * For Mutagen R2 scoring this is good enough because:
+ * For Mutagen scoring this is good enough because:
  *   - 99.9% of community wallets are AdrenaDAO-only (the relevant realm
  *     for this ecosystem)
  *   - Activity 2 voting score is bracketed, not literal-count, so a small

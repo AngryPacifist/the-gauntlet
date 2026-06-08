@@ -227,11 +227,9 @@ export const raffleDraws = pgTable('raffle_draws', {
 });
 
 // ============================================================================
-// MUTAGEN R2 — new domain alongside Forge
+// Mutagen: new domain alongside Forge
 // ============================================================================
-// 9 tables. See:
-//   .agent/brain/zedef_mutagen_rework_r2_teardown.md (architecture)
-//   .agent/brain/zedef_mutagen_rework_r2_implementation_plan.md (per-table spec)
+// 9 tables.
 // ============================================================================
 
 // --- Mutagen Epochs (Y-month epochs per teardown, default 3 months) ---
@@ -302,7 +300,7 @@ export const mutagenMarketingAwards = pgTable('mutagen_marketing_awards', {
     awardedAt: timestamp('awarded_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
-// --- Mutagen Legacy Scores (snapshot-freeze of pre-R2 leaderboard, for migration path c) ---
+// --- Mutagen Legacy Scores (snapshot-freeze of the legacy leaderboard) ---
 
 export const mutagenLegacyScores = pgTable('mutagen_legacy_scores', {
     id: serial('id').primaryKey(),

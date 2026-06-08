@@ -553,7 +553,7 @@ router.get('/tradable-assets', async (_req, res) => {
 });
 
 // ============================================================================
-// Mutagen R2 admin — epoch lifecycle + marketing awards + bootstrap.
+// Mutagen admin: epoch lifecycle + marketing awards + bootstrap.
 // Thin handlers over services/mutagen-admin.ts. All inherit the ADMIN_SECRET
 // middleware (router.use) at the top of this router.
 // ============================================================================

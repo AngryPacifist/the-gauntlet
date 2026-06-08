@@ -1,5 +1,5 @@
 // ============================================================================
-// AdrenaNativeLockSource — reads UserStaking accounts on-chain
+// AdrenaNativeLockSource: reads UserStaking accounts on-chain
 // ============================================================================
 //
 // Reads Adrena's native UserStaking account for a given (wallet, mint) pair
@@ -21,22 +21,10 @@
 // withdrawn the principal yet. We DON'T count those (they're not active
 // in any meaningful sense for ongoing Mutagen scoring).
 //
-// Authority for using on-chain reads as the source of truth (over the
-// Adrena datapi /stake endpoint): verified empirically against the
-// Adrena program's own transaction logs. Specifically, ZeDef's
-// UserStaking PDA has an upgradeLockedStake TX from 2026-05-08 that
-// logged `new total amount: 4727799524423 ... current locked days: 540`,
-// matching our on-chain decode exactly. Datapi /stake does NOT return
-// that 4.7M position — it appears to miss upgradeLockedStake events.
-// We trust the chain. See investigate_zedef_userstaking_tx_history.ts
-// in scripts/ for the verification harness.
-//
-// Empirical baselines:
-//   - OUTIS's ADX UserStaking: 1 active locked stake (300K ADX, 180d)
-//   - ZeDef's ADX UserStaking: 7 active locked stakes (~4.77M ADX total,
-//     largest 4.72M in slot 2 via 540d upgradeLockedStake) + 1.54M liquid
-//   - ZeDef's ALP UserStaking: 0 active locked stakes; past locks
-//     finalized + withdrawn (locked_stake_id_counter > 0)
+// On-chain reads are authoritative over the Adrena datapi /stake endpoint:
+// /stake misses upgradeLockedStake events. Verified against the program's
+// own transaction logs, where an upgraded 540-day locked position present
+// on-chain was absent from /stake. We trust the chain.
 //
 // RWALP staking pool doesn't exist today; if Adrena ever creates one,
 // add the mint→pool mapping to `stakingPoolForMint()` below and the rest

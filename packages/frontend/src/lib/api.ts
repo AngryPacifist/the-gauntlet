@@ -940,13 +940,12 @@ export async function getPayouts(tournamentId: number): Promise<PayoutsResponse>
 }
 
 // ============================================================================
-// Mutagen R2
+// Mutagen
 //
 // Public reads: leaderboard (current/cumulative) + per-wallet on-demand score.
-// Admin: epoch lifecycle + marketing award + bootstrap. R2-native NAMED
-// activity fields (points_lp_mint/staking/trading/adx_lp/marketing) under the
-// shared envelope keys (rank, user_wallet, total_points) — see backend
-// services/mutagen-read.ts.
+// Admin: epoch lifecycle + marketing award + bootstrap. NAMED activity fields
+// (points_lp_mint/staking/trading/adx_lp/marketing) under the shared envelope
+// keys (rank, user_wallet, total_points); see backend services/mutagen-read.ts.
 // ============================================================================
 
 export interface MutagenLeaderboardRow {

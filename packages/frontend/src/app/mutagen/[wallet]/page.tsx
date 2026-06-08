@@ -1,7 +1,7 @@
 'use client';
 
 // ============================================================================
-// /mutagen/[wallet] — per-wallet Mutagen R2 breakdown (the demo centerpiece).
+// /mutagen/[wallet]: per-wallet Mutagen breakdown.
 //
 // On-demand: the first lookup of a wallet computes its live score (~3-5s);
 // subsequent lookups hit the 1h cache. Handles the API's distinct states —

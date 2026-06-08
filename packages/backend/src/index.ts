@@ -12,8 +12,8 @@ validateEnv();
 // Boot-time PDA sanity check. Verifies Adrena's program-derived mint
 // addresses still reproduce the canonical pubkeys pinned in
 // solana-constants.ts. Throws loudly if Adrena's program ID or seed scheme
-// has changed upstream — protects against silent corruption in every
-// Mutagen R2 scorer.
+// has changed upstream, protecting against silent corruption in every
+// Mutagen scorer.
 import { assertCanonicalPdas } from './services/adrena-pda.js';
 assertCanonicalPdas();
 
@@ -68,7 +68,7 @@ app.use('/api/quests', questRoutes);
 app.use('/api/raffle', raffleRoutes);
 app.use('/api/leaderboard', leaderboardRoutes);
 app.use('/api/prices', priceRoutes);
-// Mutagen R2 read API. Mounted at /api because its two routes have distinct
+// Mutagen read API. Mounted at /api because its two routes have distinct
 // prefixes: /api/mutagen-leaderboard and /api/mutagen/wallet/:wallet.
 app.use('/api', mutagenRoutes);
 

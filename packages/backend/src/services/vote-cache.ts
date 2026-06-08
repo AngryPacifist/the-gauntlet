@@ -5,12 +5,12 @@
 // SPL Gov getProgramAccounts is expensive (cross-realm scan + per-account
 // type filter on the client side). Activity 2 scoring would hit it on
 // every wallet scoring run if we read live. Instead, we cache per-wallet
-// vote counts in `mutagen_vote_cache` and refresh daily (per OUTIS).
+// vote counts in `mutagen_vote_cache` and refresh daily.
 //
 // Refresh strategy:
 //   - On-demand: scorer calls refreshVoteCacheForWallet() if cache is stale
 //     (>24h since refreshedAt) or missing
-//   - Daily scheduled: a background job (Commit 17 scheduler reshape) walks
+//   - Daily scheduled: a background job (the daily scheduler) walks
 //     wallets present in mutagen_user_scores and refreshes their entries
 //     so the next scoring run hits a warm cache
 //

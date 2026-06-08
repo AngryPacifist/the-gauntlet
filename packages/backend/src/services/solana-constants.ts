@@ -1,13 +1,12 @@
 // ============================================================================
-// Solana on-chain constants — single source of truth
+// Solana on-chain constants: single source of truth
 // ============================================================================
 //
 // Program IDs, token mints, pool addresses, account-layout offsets, and
-// discriminators used across the Mutagen R2 engine. All values are
+// discriminators used across the Mutagen engine. All values are
 // chain-invariant facts (not env-configurable, not secret).
 //
-// Every value here was verified empirically during the inventory phase
-// (see .agent/brain/mutagen_rework_r2_inventory.md §10 reference appendix).
+// Every value here is a chain-invariant fact, verified empirically on mainnet.
 // ============================================================================
 
 import { PublicKey } from '@solana/web3.js';
@@ -23,7 +22,7 @@ export const ADRENA_USER_STAKING_DISCRIMINATOR = new Uint8Array([
     0x22, 0x53, 0xca, 0x5d, 0x19, 0xf3, 0x3f, 0x36,
 ]);
 
-// Staking pool account (one per staked-token mint, 2304 bytes per inventory)
+// Staking pool account (one per staked-token mint, 2304 bytes)
 export const ADRENA_STAKING_POOL_SIZE = 2304;
 
 // ---------- Token mints ----------
@@ -54,7 +53,7 @@ export const SPL_GOV_ACCOUNT_TYPE = {
     GovernanceV2: 18,
 } as const;
 
-// Memcmp offsets inside SPL Gov structs (per inventory primary-source check)
+// Memcmp offsets inside SPL Gov structs
 //   TokenOwnerRecord: realm at offset 1, governing_token_owner at offset 65
 //   VoteRecord:       governing_token_owner at offset 33
 export const SPL_GOV_OFFSET = {
@@ -66,8 +65,8 @@ export const SPL_GOV_OFFSET = {
 // ---------- Meteora DLMM ----------
 export const METEORA_DLMM_PROGRAM_ID = new PublicKey('LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo');
 
-// The 2 incentivized ADX-Meteora pools from ZeDef's spec (enabled by default
-// in DEFAULT_EPOCH_CONFIG)
+// The 2 incentivized ADX-Meteora pools (enabled by default in
+// DEFAULT_EPOCH_CONFIG)
 export const METEORA_POOL_ADX_SOL = new PublicKey('JCaK6qFS4e3YDAnmR2L84KhnrDf5NMwgRjbXgFvxFDnX');
 export const METEORA_POOL_ADX_USDC = new PublicKey('JCYMX9Nx7DTUdguptRR5LLSc62MEbNmFYsbT5R9yCDGy');
 
@@ -80,8 +79,8 @@ export const RAYDIUM_POOL_ADX_SOL = new PublicKey('7KFMHSyLzeEFebofSLS4zFbHZgkSD
 export const RAYDIUM_POOL_ADX_USDC = new PublicKey('2QNwSWsp1deYmNbuZgjFrZ55jnUbiwGrnPk6FMiZ1mEf');
 
 // ---------- Streamflow ----------
-// Kept for future StreamflowLockSource implementation. v1 does not enumerate
-// these (Activity 1 uses Adrena native primitive). See teardown §3.3.
+// Kept for a future StreamflowLockSource. Activity 1 currently uses the
+// Adrena native primitive, so these are not enumerated yet.
 export const STREAMFLOW_STREAMS_PROGRAM_ID = new PublicKey('strmRqUCoQUgGUan5YhzUZa6KqdzwX5L6FpUxfmKg5m');
 export const STREAMFLOW_ALIGNED_PROGRAM_ID = new PublicKey('aSTRM2NKoKxNnkmLWk9sz3k74gKBk9t7bpPrTGxMszH');
 

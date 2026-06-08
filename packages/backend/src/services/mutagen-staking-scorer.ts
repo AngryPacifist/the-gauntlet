@@ -1,14 +1,14 @@
 // ============================================================================
-// Activity 2 scorer — ADX Staking + DAO Voting
+// Activity 2 scorer: ADX Staking + DAO Voting
 // ============================================================================
 //
-// ZeDef R2 Activity 2: weight 5% of total Mutagen. Two dimensions:
+// Activity 2: weight 5% of total Mutagen. Two dimensions:
 //   1. Stake — sum over ADX stakes (liquid + active locked):
 //              stakeTierMultiplier(locked_days) × sizeBracketLookup(usd)
 //   2. Vote  — bracketLookupCount(voteScoreCurve, voteCount_from_cache)
 //
-// Both dimensions qualified → 2-of-2 within-Activity mutation (ZeDef
-// explicit: "I see a mutation linked to staking and also to dao voting").
+// Both dimensions qualified → 2-of-2 within-Activity mutation (staking
+// and DAO voting combined).
 //
 // Stake data source: on-chain UserStaking account via AdrenaNativeLockSource
 // (same path as Activity 1's lock dim). Empirically verified via Adrena
@@ -16,8 +16,8 @@
 // misses upgradeLockedStake updates and undercounts by significant amounts
 // for some wallets. See lock-sources/adrena-native.ts header for details.
 //
-// Vote count: vote-cache (24h TTL, hits realms-client on miss). Daily
-// scheduler keeps known wallets warm (Commit 17).
+// Vote count: vote-cache (24h TTL, hits realms-client on miss). The daily
+// scheduler keeps known wallets warm.
 // ============================================================================
 
 import { AdrenaNativeLockSource } from './lock-sources/adrena-native.js';
@@ -157,4 +157,4 @@ export async function scoreActivity2(ctx: ScorerContext): Promise<ActivityScoreR
 // dim is "active" for meta-mutation — that's the within-Activity 2 mutation
 // (vote dim qualified iff voteCount > 0). The Activity-level qualifyingThreshold
 // is applied to the final score (after × mutationFactor), not to individual dims.
-// This matches Activity 1 and the meta-mutation design in §9.
+// This matches Activity 1 and the meta-mutation design.

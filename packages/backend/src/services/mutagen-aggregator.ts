@@ -1,13 +1,13 @@
 // ============================================================================
-// Mutagen R2 Aggregator — per-wallet, per-sub-epoch orchestrator
+// Mutagen Aggregator: per-wallet, per-sub-epoch orchestrator
 // ============================================================================
 //
 // One-call entry point for "score this wallet for this sub-epoch":
-//   1. Acquire a row in mutagen_scoring_locks (Gap 12) — prevents two
-//      schedulers / API hits from racing on the same wallet.
+//   1. Acquire a row in mutagen_scoring_locks (prevents two schedulers /
+//      API hits from racing on the same wallet).
 //   2. Fetch live USD prices for ADX/ALP/RWALP/SOL/USDC.
-//   3. Run all 5 Activity scorers in parallel via safeScoreActivity (Gap 14)
-//      — a thrown scorer becomes an emptyActivityResult + an entry in the
+//   3. Run all 5 Activity scorers in parallel via safeScoreActivity:
+//      a thrown scorer becomes an emptyActivityResult + an entry in the
 //      audit's `errors[]`, doesn't fail the whole run.
 //   4. Aggregate via aggregateAndApplyMetaMutation (cross-Activity weights +
 //      meta-mutation multiplier).
@@ -201,7 +201,7 @@ export async function scoreWalletForSubEpoch(
 
 /**
  * Wraps a scorer call. Throws are caught and converted to an emptyActivityResult
- * + an entry in the errors[] array. Per Gap 14, this isolates a failing scorer
+ * + an entry in the errors[] array. This isolates a failing scorer
  * from collapsing the whole run.
  */
 async function safeScoreActivity(

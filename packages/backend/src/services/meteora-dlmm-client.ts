@@ -166,7 +166,7 @@ export async function getWalletPositionsAcrossAdrenaAdxPools(
 
 /**
  * Subset of Meteora's `/pools/{address}` response — only the fields we
- * actually consume. Full schema in inventory §3a if more is needed later.
+ * actually consume. Full schema is in Meteora's public docs.
  */
 export interface PoolDataPiInfo {
     address: string;

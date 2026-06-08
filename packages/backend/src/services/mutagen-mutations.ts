@@ -6,11 +6,11 @@
 // (sumMutationIncrements inside scoreActivityN's mutationFactor → finalScore).
 // This module handles the CROSS-Activity meta-mutation: take the 5
 // per-Activity finalScores, weight them, and apply a multiplier based on
-// how many Activities the wallet qualified in (= ZeDef's "meta-mutation
-// for performing all 5, or a lower combination" from RAW line 229).
+// how many Activities the wallet qualified in (the cross-Activity
+// meta-mutation for performing all 5, or a lower combination).
 //
-// Per teardown §9 + Gap 9: qualifiedCount is "count of Activities where
-// activity_score ≥ activity.qualifyingThreshold" — that gating happens
+// qualifiedCount is "count of Activities where activity_score ≥
+// activity.qualifyingThreshold"; that gating happens
 // inside each scorer (ActivityScoreResult.qualified). This module just
 // reads it and looks up the multiplier from config.metaMutationTable.
 //
@@ -83,8 +83,8 @@ export function aggregateAndApplyMetaMutation(
 
 /**
  * Convenience for building an Activity result that represents "this Activity
- * errored or wasn't run" — zero score, not qualified, with an error note in
- * details. The aggregator (Commit 16) uses this when a scorer throws so
+ * errored or wasn't run": zero score, not qualified, with an error note in
+ * details. The aggregator uses this when a scorer throws so
  * the meta-mutation count isn't poisoned by missing entries.
  */
 export function emptyActivityResult(

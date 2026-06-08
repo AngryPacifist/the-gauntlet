@@ -1,8 +1,8 @@
 // ============================================================================
-// Activity 3 scorer — Trading
+// Activity 3 scorer: Trading
 // ============================================================================
 //
-// ZeDef R2 Activity 3: weight 30% of total Mutagen. Three dimensions:
+// Activity 3: weight 30% of total Mutagen. Three dimensions:
 //   1. Volume         — sum of trading activity in the epoch window. Admin
 //                       picks one of two modes via epoch.config.activity3.mode:
 //                       - 'wrap_existing_formula' (default): sum each closed

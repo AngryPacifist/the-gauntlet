@@ -1,8 +1,8 @@
 // ============================================================================
-// LockSource interface — pluggable lock-source abstraction
+// LockSource interface: pluggable lock-source abstraction
 // ============================================================================
 //
-// The Mutagen R2 LP-scorer (Activity 1) needs to read locked-stake entries
+// The Mutagen LP-scorer (Activity 1) needs to read locked-stake entries
 // for ALP and RWALP regardless of which on-chain primitive actually holds
 // the locks. Today only Adrena's native locked-staking primitive is wired
 // (`addLockedStake(stakingType=2)`). The /buy_alp UI's "Lock Provider:
@@ -12,14 +12,10 @@
 // matches in any AdrenaFoundation repo, no SDK wrapper).
 //
 // To keep Activity 1 scoring agnostic to mechanism, all lock readers
-// implement this interface. v1 ships `AdrenaNativeLockSource`. A future
+// implement this interface. Today it ships `AdrenaNativeLockSource`. A future
 // `StreamflowLockSource` plugs in WITHOUT touching scoring logic — the
 // aggregator just adds a new source to the registry and the LP scorer
 // transparently consumes both.
-//
-// See `.agent/brain/zedef_mutagen_rework_r2_teardown.md` §3.3 for the
-// design rationale and the three options (A native / B Streamflow / C both)
-// presented to ZeDef.
 // ============================================================================
 
 import type { PublicKey } from '@solana/web3.js';

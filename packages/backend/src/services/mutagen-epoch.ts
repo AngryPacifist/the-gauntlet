@@ -3,10 +3,10 @@
 // ============================================================================
 //
 // Single source of truth for "which epoch / sub-epoch is live right now".
-// Used by the scheduler background jobs (Commit 17), the read API
-// (leaderboard + per-wallet on-demand, Commit 18), and the admin endpoints
-// (Commit 19). Centralized so the "straddling" boundary logic lives in
-// exactly one place instead of drifting across callers.
+// Used by the scheduler background jobs, the read API (leaderboard +
+// per-wallet on-demand), and the admin endpoints. Centralized so the
+// "straddling" boundary logic lives in exactly one place instead of
+// drifting across callers.
 // ============================================================================
 
 import { and, asc, eq, gte, lte } from 'drizzle-orm';

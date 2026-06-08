@@ -4,17 +4,16 @@
 //
 // Pure web3.js derivations of Adrena program PDAs (mints, staking pools,
 // per-user staking accounts). Mirrors the seed scheme used by Adrena's on-
-// chain program — verified empirically during the inventory phase against
-// canonical pubkeys at the chain (see `.agent/brain/mutagen_rework_r2_
-// inventory.md` §3.1).
+// chain program, verified empirically against the canonical pubkeys on
+// mainnet.
 //
 // No codama / Anchor SDK dependency at runtime. Keeps the bundle small and
 // avoids a hard pin to Adrena's TS SDK version.
 //
 // `assertCanonicalPdas()` runs at boot and throws loudly if the derivations
 // no longer reproduce the canonical mint pubkeys (signals either a program-
-// ID change or a seed-scheme change upstream — either of which breaks every
-// Mutagen R2 scorer that reads chain state).
+// ID change or a seed-scheme change upstream, either of which breaks every
+// Mutagen scorer that reads chain state).
 // ============================================================================
 
 import { PublicKey } from '@solana/web3.js';
@@ -69,8 +68,8 @@ export function deriveLpTokenMint(pool: PublicKey = ADRENA_MAIN_POOL): PublicKey
  *
  * Note: the canonical addresses are not asserted at boot because they are
  * deterministically derived from {program_id, mint, seed} — if the mint
- * assertions pass, these will too. The staking pool addresses ARE pinned
- * empirically in inventory §3.1 for cross-reference:
+ * assertions pass, these will too. The staking pool addresses, for
+ * cross-reference:
  *   - LM (ADX) staking pool: 5Feq2MKbimA44dqgFHLWr7h77xAqY9cet5zn9eMCj78p
  *   - LP (ALP) staking pool: 7UWcLAzcCRuJF5U2iyZs2ybwDWZWWMVp1y6KgnRJP2C
  */

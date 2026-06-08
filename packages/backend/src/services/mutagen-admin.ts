@@ -1,5 +1,5 @@
 // ============================================================================
-// Mutagen R2 — admin domain logic (epoch lifecycle + marketing + bootstrap)
+// Mutagen: admin domain logic (epoch lifecycle + marketing + bootstrap)
 // ============================================================================
 //
 // Behind the admin routes in routes/admin.ts, which supply the ADMIN_SECRET
@@ -260,7 +260,7 @@ export async function addMarketingAward(
         })
         .returning({ id: mutagenMarketingAwards.id });
 
-    // Eager refresh (decision d): invalidate this wallet's cached score for the
+    // Eager refresh: invalidate this wallet's cached score for the
     // current sub-epoch, then fire-and-forget a recompute so the award reflects in
     // BOTH the wallet view and the leaderboard within seconds (Activity 5 reads
     // mutagen_marketing_awards). The awaited stale stamp alone guarantees correctness
@@ -395,20 +395,20 @@ export async function bootstrapSeed(
     }
 }
 
-// ---------- snapshot-freeze (migration policy "c" — ZeDef reply #5) ----------
+// ---------- snapshot-freeze (store the past, start fresh) ----------
 
 /**
- * Archives Adrena's CURRENT (pre-R2) /mutagen-leaderboard into mutagen_legacy_scores
- * as a read-only historical reference, so R2 epoch 1 can start clean while the old
- * scores are preserved — ZeDef's migration choice "c" ("store the past, complete
- * fresh start").
+ * Archives Adrena's CURRENT (legacy) /mutagen-leaderboard into mutagen_legacy_scores
+ * as a read-only historical reference, so the first Mutagen epoch can start clean
+ * while the old scores are preserved (the "store the past, complete fresh start"
+ * migration).
  *
  * Runs ONCE at cutover. The upsert (keyed on wallet) is for idempotent retry, not
  * periodic refresh. The /mutagen-leaderboard API ignores its server-side limit and
  * returns the full board (~2782 rows), so the default high `limit` archives everyone.
  *
- * Reads external Adrena datapi; writes ONLY to mutagen_legacy_scores. Touches no R2
- * epoch/score table and no Forge table.
+ * Reads external Adrena datapi; writes ONLY to mutagen_legacy_scores. Touches no
+ * Mutagen epoch/score table and no Forge table.
  */
 export async function snapshotLegacyMutagen(
     opts: { limit?: number } = {},

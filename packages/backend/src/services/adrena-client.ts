@@ -3,7 +3,7 @@
 //
 // Wraps the Adrena public API at datapi.adrena.trade. Endpoints:
 //   Forge:        getPositions, filterPositionsForRound, filterValidPositions
-//   Mutagen R2:   getV4Positions, getStakes, getReferrerStatus,
+//   Mutagen:      getV4Positions, getStakes, getReferrerStatus,
 //                 getReferrerRewards, getLastPrices, getLiquidityInfo,
 //                 getTraderVolume, getAdrenaMutagenLeaderboard
 //
@@ -11,8 +11,7 @@
 // services/adrena-canonical.ts (synced from github.com/AdrenaFoundation/adrena-abi).
 // admin/tradable-assets reads the static-mirror; no runtime HTTP needed for that data.
 //
-// Reference: resources/adrena-api-reference.md +
-//            .agent/brain/mutagen_rework_r2_inventory.md §4a (datapi swagger)
+// Reference: resources/adrena-api-reference.md
 // ============================================================================
 
 import type { AdrenaPosition } from '../types.js';
@@ -30,9 +29,8 @@ export interface AdrenaStake {
     initial_amount: number;
     /**
      * Currently-staked ADX after any unstakes / early exits. API field is
-     * `remaining_amount` (not `current_amount` — the Commit 4 declaration
-     * mismatched the live response shape; corrected here when first
-     * consumed by Activity 2 scorer in Commit 11).
+     * `remaining_amount` (not `current_amount`): the field name matches the
+     * live response shape.
      */
     remaining_amount: number;
     locked_days: number;
@@ -57,10 +55,9 @@ export interface ReferrerRewardItem {
     position_id: number;
     /**
      * The /referrer-rewards API returns this as a decimal STRING in current
-     * production (verified empirically 2026-05-26 — OUTIS/ZeDef both came
-     * back with string values). Typed as string|number so consumers must
-     * coerce explicitly via Number() — see mutagen-referrer-scorer's
-     * NaN-safe reducer. If Adrena ever normalizes to number-only, this
+     * production (verified empirically). Typed as string|number so consumers
+     * must coerce explicitly via Number() (see mutagen-referrer-scorer's
+     * NaN-safe reducer). If Adrena ever normalizes to number-only, this
      * union is still safe.
      */
     usdc_amount: string | number;
@@ -290,7 +287,7 @@ export class AdrenaClient {
     }
 
     // ==========================================================================
-    // MUTAGEN R2 — 8 new endpoint wrappers
+    // Mutagen: 8 datapi endpoint wrappers
     //
     // - getV4Positions(wallet, limit?)         GET /v4/position?user_wallet=X
     // - getStakes(wallet)                       GET /stake?user_wallet=X
@@ -301,7 +298,7 @@ export class AdrenaClient {
     // - getTraderVolume(wallet?)                GET /trader-volume[?user_wallet=X]
     // - getAdrenaMutagenLeaderboard(limit?)     GET /mutagen-leaderboard
     //
-    // Param convention quirks (verified live in inventory phase):
+    // Param convention quirks (verified live):
     //   - referrer/*  + fee-rebates/*: `account=X`  (NOT `wallet` / `user_wallet`)
     //   - stake / position / v4/position / trader-volume: `user_wallet=X`
     // ==========================================================================
@@ -418,12 +415,12 @@ export class AdrenaClient {
         return data?.traders ?? [];
     }
 
-    // GET /mutagen-leaderboard?limit=N — Adrena's current Mutagen leaderboard.
-    // Used by the one-time bootstrap script to seed our R2 leaderboard with the
-    // wallets already on Adrena's current system (implementation_plan §8.4).
+    // GET /mutagen-leaderboard?limit=N: Adrena's current Mutagen leaderboard.
+    // Used by the one-time bootstrap to seed the leaderboard with wallets
+    // already on Adrena's current system.
     //
     // ⚠ API quirk: the server-side `limit` param is IGNORED. The endpoint always
-    // returns the full leaderboard (~2782 rows as of 2026-05-26). We pass `limit`
+    // returns the full leaderboard (~2782 rows). We pass `limit`
     // anyway for forward-compat in case they fix it server-side, but we ALSO
     // slice client-side to honor the method's contract.
     async getAdrenaMutagenLeaderboard(limit: number = 1000): Promise<AdrenaMutagenRow[]> {

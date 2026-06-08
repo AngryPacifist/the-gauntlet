@@ -1,14 +1,14 @@
 // ============================================================================
-// Activity 4 scorer — ADX LP on Meteora (governance-token liquidity)
+// Activity 4 scorer: ADX LP on Meteora (governance-token liquidity)
 // ============================================================================
 //
-// ZeDef R2 Activity 4: weight 30% of total Mutagen. Per teardown §6, scoring
-// rewards time-weighted size of LP positions across enabled pools.
+// Activity 4: weight 30% of total Mutagen. Scoring rewards the
+// time-weighted size of LP positions across enabled pools.
 //
 // Algorithm per enabled pool (config.activity4.pools where enabled=true):
 //   1. Read time-series of position-value snapshots from
 //      mutagen_position_snapshots (one row per hourly snapshot, written by
-//      the scheduler in Commit 17).
+//      the scheduler job).
 //   2. Compute trapezoidal time-weighted average (TWA) of position USD value
 //      over the snapshots within the current sub-epoch. With ≥2 snapshots
 //      we have intervals; with 1 we use that single value; with 0 we cold-
@@ -19,8 +19,8 @@
 // Aggregate:
 //   - size_score = Σ size_score(pool) across enabled pools
 //   - active_pool_count = count(has_been_active)
-//   - within-Activity mutation rewards being LP in MULTIPLE pools per
-//     ZeDef's "Activity on both pools" framing. extraQualified =
+//   - within-Activity mutation rewards being LP in MULTIPLE pools (the
+//     "Activity on both pools" dimension). extraQualified =
 //     active_pool_count - 1 → sumMutationIncrements over config.activity4.
 //
 // USD valuation: positions hold X + Y token amounts; we look up each token's
@@ -29,10 +29,9 @@
 // (e.g. BONK if ever in a pool) value to 0 — Activity 4 default scope is
 // the 4 ADX/ALP Meteora pools, all using known tokens.
 //
-// Snapshot writer NOT in this commit. Commit 17 reshape adds the hourly
-// background job that writes to mutagen_position_snapshots. Until then,
-// every scoring run cold-starts (live RPC). Documented in the cold-start
-// path comment.
+// The hourly scheduler job writes to mutagen_position_snapshots; a wallet
+// with no snapshots yet cold-starts with a live RPC read (see the cold-start
+// path below).
 // ============================================================================
 
 import { PublicKey } from '@solana/web3.js';

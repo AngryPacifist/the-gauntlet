@@ -1,12 +1,12 @@
 // ============================================================================
-// Mutagen R2 — read service (leaderboard + per-wallet on-demand score)
+// Mutagen: read service (leaderboard + per-wallet on-demand score)
 // ============================================================================
 //
 // Thin domain layer behind routes/mutagen.ts (mirrors the Forge
 // leaderboard.ts → cumulative-leaderboard.ts split). Framework-free so the
 // verifier can exercise it without standing up HTTP.
 //
-// Per the v2 architectural pivot (plan §8.0):
+// Per the on-demand + cached model:
 //   - Leaderboard reads existing mutagen_user_scores rows. Default view is the
 //     CURRENT sub-epoch; ?view=cumulative SUMs across the active epoch's
 //     sub-epochs.
@@ -14,11 +14,10 @@
 //     current sub-epoch is returned as-is; otherwise we compute live, persist,
 //     and return.
 //
-// Response fields are R2-native and NAMED (points_lp_mint, points_staking, …)
-// — not opaque a1..a5, and not Adrena's legacy trading/mutations/streaks/quests
-// columns. The legacy-column bridge is a deferred, ZeDef-gated decision
-// (plan §0.2 / §5); we expose the true 5-Activity model and keep only the
-// shared envelope keys (rank, user_wallet, total_points).
+// Response fields are NAMED (points_lp_mint, points_staking, …), not opaque
+// a1..a5, and not Adrena's legacy trading/mutations/streaks/quests columns.
+// The legacy-column bridge is deferred; we expose the true 5-Activity model
+// and keep only the shared envelope keys (rank, user_wallet, total_points).
 //
 // Activity → field mapping (the one place it's defined):
 //   1 LP minting  → points_lp_mint
@@ -38,7 +37,7 @@ import type { EpochConfig } from './mutagen-scorer-types.js';
 
 const DEFAULT_LIMIT = 1000;
 const MAX_LIMIT = 5000;
-const WALLET_CACHE_TTL_MS = 60 * 60 * 1000; // 1h per §8.0
+const WALLET_CACHE_TTL_MS = 60 * 60 * 1000; // 1h
 
 export type LeaderboardView = 'current' | 'cumulative';
 

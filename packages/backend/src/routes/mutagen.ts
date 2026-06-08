@@ -1,5 +1,5 @@
 // ============================================================================
-// Mutagen R2 — public read API
+// Mutagen: public read API
 //
 //   GET /api/mutagen-leaderboard?view=current|cumulative&limit=N
 //   GET /api/mutagen/wallet/:wallet     (score-on-demand with 1h cache)

@@ -611,10 +611,10 @@ function computeCurrentQuestWeek(
 }
 
 // --------------------------------------------------------------------------
-// Mutagen R2 background jobs (Commit 17 — Scheduler RESHAPE)
+// Mutagen background jobs
 //
-// Per the v2 plan (§8.0 architectural pivot): NO all-wallet rescore. Wallet
-// scoring is on-demand via the API (Commit 18). The scheduler only keeps the
+// No all-wallet rescore: wallet scoring is on-demand via the API. The
+// scheduler only keeps the
 // two slow inputs warm for wallets we've already seen:
 //   1. Daily  — refresh each known wallet's vote-count cache (the SPL-Gov
 //               getProgramAccounts scan is heavy; daily is plenty since vote
@@ -759,11 +759,11 @@ async function snapshotMutagenPositions(): Promise<void> {
 }
 
 // --------------------------------------------------------------------------
-// Mutagen R2 — periodic rescore of the SCORED SET (decision c)
+// Mutagen: periodic rescore of the scored set
 //
 // Re-scores wallets that already have a mutagen_user_scores row in the current
 // sub-epoch, so live standings tick between on-demand searches. This is NOT an
-// all-wallet rescore (the §8.0 pivot dropped that) — the set is bounded by who
+// all-wallet rescore (the on-demand model dropped that): the set is bounded by who
 // has been searched/bootstrapped. Scale-safe: oldest-first + a per-tick cap, so
 // per-tick cost is bounded regardless of set size and never starves interactive
 // on-demand scoring (both share the one ~250ms Helius RPC gate). Cadence + cap
@@ -839,8 +839,8 @@ export function startScheduler(): void {
     // Hourly provisional category scoring: every hour on the hour
     hourlyCategoryTask = cron.schedule('0 * * * *', scoreHourlyCategories, { timezone: 'UTC' });
 
-    // Mutagen R2 (Commit 17): daily vote-cache refresh + hourly position snapshot.
-    // NO all-wallet rescore — wallet scoring is on-demand via the API (Commit 18).
+    // Mutagen: daily vote-cache refresh + hourly position snapshot.
+    // No all-wallet rescore: wallet scoring is on-demand via the API.
     // Position snapshot offset to :15 to avoid the busiest scheduler tick (:00,
     // where the Forge hourly-category job and 15-min score refresh coincide).
     // Both the snapshotter and the rescore job below issue Helius RPC; the global
@@ -848,7 +848,7 @@ export function startScheduler(): void {
     // other at worst — never 429. The offsets just spread event-loop / DB-pool load.
     mutagenVoteRefreshTask = cron.schedule('0 3 * * *', refreshMutagenVoteCaches, { timezone: 'UTC' });
     mutagenPositionSnapshotTask = cron.schedule('15 * * * *', snapshotMutagenPositions, { timezone: 'UTC' });
-    // Periodic rescore of the scored set (decision c) — bounded (oldest-first +
+    // Periodic rescore of the scored set: bounded (oldest-first +
     // per-tick cap), env-tunable cadence (default every 6h); self-gates on an
     // active epoch. Shares the global Helius RPC gate with the snapshotter.
     mutagenRescoreTask = cron.schedule(MUTAGEN_RESCORE_CRON, rescoreActiveMutagenScores, { timezone: 'UTC' });

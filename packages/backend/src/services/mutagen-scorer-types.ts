@@ -1,5 +1,5 @@
 // ============================================================================
-// Mutagen R2 — shared scorer types + DEFAULT_EPOCH_CONFIG
+// Mutagen: shared scorer types + DEFAULT_EPOCH_CONFIG
 // ============================================================================
 //
 // Single source of truth for what every scorer takes in (ScorerContext) and
@@ -15,12 +15,6 @@
 // They are separate types so a value-as-USD can't accidentally be looked up
 // through a count-keyed table (the unit semantics would silently mismatch).
 // Bracket lookup helpers below dispatch by table type.
-//
-// Patches applied vs the v1 plan sketch:
-//   - Gap 8: activity1.lockUsdCap (per-lock USD cap, anti-whale)
-//   - Gap 4: activity3.mode toggle + existingFormulaWeight (wrap-existing vs
-//            volume-brackets, admin-switchable per epoch)
-//   - Gap 9: UsdBracket / CountBracket type split (was one BracketTable)
 // ============================================================================
 
 import type { PublicKey } from '@solana/web3.js';
@@ -75,7 +69,7 @@ export function bracketLookupCount(table: CountBracket, value: number): number {
 // ADX UI tiers from /stake page header (0d liquid / 90d / 180d / 360d / 540d).
 // ALP UI tiers from /buy_alp Lock buttons (30d / 90d / 180d / 1yr).
 // The "1yr" button is treated as 360d per native-staking convention;
-// ZeDef open question #31 reconciles whether it should be 365 instead.
+// whether it should be 365 instead is an open question.
 
 export const ADX_TIERS_DAYS: readonly number[] = [0, 90, 180, 360, 540];
 export const ALP_TIERS_DAYS: readonly number[] = [30, 90, 180, 360];
@@ -183,7 +177,7 @@ export interface ActivityScoreResult {
 // ---------- Epoch configuration ----------
 
 export interface EpochConfig {
-    /** Activity weights — must sum to 1.0. ZeDef-locked at 30/5/30/30/5. */
+    /** Activity weights, must sum to 1.0. Fixed at 30/5/30/30/5. */
     weights: { a1: number; a2: number; a3: number; a4: number; a5: number };
 
     activity1: {
@@ -217,12 +211,10 @@ export interface EpochConfig {
          *     (Trade Performance + Trade Duration × Size Multiplier) across
          *     closed positions in the epoch window; use as the volume metric
          *
-         * Admin-switchable per epoch. Default 'volume_brackets' per ZeDef's
-         * 2026-05-27 reply (#14: "keep a) and c) as options ... I personally
-         * lean a)" — the simpler volume-bracket model for newcomers).
-         * 'wrap_existing_formula' stays selectable per epoch. NOTE: the
-         * volumeBrackets *values* below are our defaults — ZeDef confirmed the
-         * mode, not the specific thresholds (those remain admin-tunable).
+         * Admin-switchable per epoch. Default 'volume_brackets' (the simpler
+         * volume-bracket model, easier to explain to newcomers);
+         * 'wrap_existing_formula' stays selectable per epoch. The
+         * volumeBrackets values below are defaults, admin-tunable.
          */
         mode: 'volume_brackets' | 'wrap_existing_formula';
         /** When wrapping: weight applied to the existing per-trade points sum. */
@@ -273,18 +265,18 @@ export interface EpochConfig {
 // ---------- Default config ----------
 //
 // Applied when admin creates a new epoch without specifying overrides.
-// All values are starting points for ZeDef to tune via the admin panel.
+// All values are starting points, tunable via the admin panel.
 // ============================================================================
 
 export const DEFAULT_EPOCH_CONFIG: EpochConfig = {
     weights: { a1: 0.30, a2: 0.05, a3: 0.30, a4: 0.30, a5: 0.05 },
 
     activity1: {
-        // ZeDef 2026-05-27 (#21): fixed 10-step ladder regardless of TVL (NOT
-        // %-of-TVL — TVL swings: ALP ~500k vs RWALP ~50k would over-reward
-        // RWALP), $250 floor / $250k cap, "like leverage master". Geometric
-        // boundaries (~2–2.5x/step), +20 pts/step, cap 200. Anchors locked by
-        // ZeDef; per-step values approved by OUTIS 2026-06-07, admin-tunable.
+        // Fixed 10-step ladder regardless of TVL (not %-of-TVL: TVL swings,
+        // e.g. ALP ~500k vs RWALP ~50k, would over-reward RWALP). $250 floor,
+        // $250k cap, "like leverage master". Geometric boundaries
+        // (~2-2.5x/step), +20 pts/step, cap 200. Per-step values are defaults,
+        // admin-tunable.
         sizeBrackets: [
             { minUsd: 0, maxUsd: 250, pts: 0 },
             { minUsd: 250, maxUsd: 500, pts: 20 },

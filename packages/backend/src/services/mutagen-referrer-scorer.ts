@@ -1,10 +1,10 @@
 // ============================================================================
-// Activity 5 scorer — Marketing (Referrer + admin-manual social/Discord)
+// Activity 5 scorer: Marketing (Referrer + admin-manual social/Discord)
 // ============================================================================
 //
-// ZeDef R2 Activity 5: weight 5% of total Mutagen. Three dimensions:
+// Activity 5: weight 5% of total Mutagen. Three dimensions:
 //   1. Referrer — datapi /referrer-rewards: USDC earned via referrals in the
-//                 epoch window (Gap 3 — epoch-window filter applied) +
+//                 epoch window +
 //                 per-referee bonus (capped). Only counts when wallet is
 //                 is_approved=true.
 //   2. Social   — admin-manual awards via mutagen_marketing_awards
@@ -18,13 +18,11 @@
 // All 3 dims qualified → 3-of-3 within-Activity mutation. Default
 // increments [0.3, 0.5] (one for going 1→2 dims, one for 2→3).
 //
-// ZeDef noted referrals are "currently not active" — but empirically both
-// OUTIS and ZeDef are is_approved=true with accrued USDC pending. The
-// program IS live, just not actively promoted. See inventory §4.5 +
-// teardown §7.
+// The referral program is live (approved wallets accrue USDC), just not
+// actively promoted.
 //
-// Social + Discord stub for v1 — admin-manual via mutagen_marketing_awards.
-// Per teardown §7.3 lean (b): no automation yet, admin awards via UI form.
+// Social + Discord are admin-manual via mutagen_marketing_awards: no
+// automation yet, admin awards via the UI form.
 // When/if Discord bot or Twitter API integration ships, those feed into
 // the SAME table with source='discord-bot' / 'twitter-api'.
 // ============================================================================
@@ -70,8 +68,8 @@ export async function scoreActivity5(ctx: ScorerContext): Promise<ActivityScoreR
         const data = await adrenaClient.getReferrerRewards(walletStr);
 
         if (data.is_approved) {
-            // Filter rewards to the epoch window (Gap 3 patch — without this,
-            // we'd credit accumulated lifetime rewards every epoch).
+            // Filter rewards to the epoch window (without this we'd credit
+            // accumulated lifetime rewards every epoch).
             const startMs = ctx.subEpochStart.getTime();
             const endMs = ctx.subEpochEnd.getTime();
             const epochRewards = data.rewards.filter((r) => {
@@ -79,8 +77,8 @@ export async function scoreActivity5(ctx: ScorerContext): Promise<ActivityScoreR
                 return t >= startMs && t < endMs;
             });
             // The /referrer-rewards API returns usdc_amount as a string in some
-            // response variants (verified empirically against OUTIS/ZeDef on
-            // 2026-05-26 — raw response numbers came back as decimal strings).
+            // response variants (verified empirically: raw response numbers
+            // came back as decimal strings).
             // Coerce via Number() to handle both number and string shapes.
             // NaN-safe: malformed strings sum into NaN which would then poison
             // downstream math, so we filter to finite values before summing.

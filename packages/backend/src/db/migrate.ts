@@ -318,12 +318,10 @@ CREATE INDEX IF NOT EXISTS idx_bracket_entries_bracket_cpi_desc ON bracket_entri
 `;
 
 // ============================================================================
-// MUTAGEN R2 — 9 new tables for the new scoring domain
+// Mutagen: 9 new tables for the new scoring domain
 // ============================================================================
-// See .agent/brain/zedef_mutagen_rework_r2_implementation_plan.md §8.1
-// for table specs and rationale.
 
-const MUTAGEN_R2_TABLES_SQL = `
+const MUTAGEN_TABLES_SQL = `
 -- Mutagen Epochs (Y-month epochs per teardown, default 3 months)
 CREATE TABLE IF NOT EXISTS mutagen_epochs (
   id SERIAL PRIMARY KEY,
@@ -385,7 +383,7 @@ CREATE TABLE IF NOT EXISTS mutagen_marketing_awards (
   awarded_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- Mutagen Legacy Scores (snapshot-freeze of pre-R2 leaderboard, migration path c)
+-- Mutagen Legacy Scores (snapshot-freeze of the legacy leaderboard)
 CREATE TABLE IF NOT EXISTS mutagen_legacy_scores (
   id SERIAL PRIMARY KEY,
   wallet VARCHAR(44) NOT NULL UNIQUE,
@@ -431,7 +429,7 @@ CREATE TABLE IF NOT EXISTS mutagen_scoring_locks (
 );
 `;
 
-const MUTAGEN_R2_INDEXES_SQL = `
+const MUTAGEN_INDEXES_SQL = `
 CREATE INDEX IF NOT EXISTS idx_mutagen_sub_epochs_epoch ON mutagen_sub_epochs(epoch_id);
 CREATE INDEX IF NOT EXISTS idx_mutagen_user_scores_leaderboard ON mutagen_user_scores(sub_epoch_id, total_mutagen DESC);
 CREATE INDEX IF NOT EXISTS idx_mutagen_user_scores_wallet ON mutagen_user_scores(wallet);
@@ -464,13 +462,13 @@ async function migrate() {
         await client.query(INDEXES_SQL);
         console.log('   ✅ Forge indexes created');
 
-        // Step 3: Mutagen R2 tables (new domain alongside Forge)
-        await client.query(MUTAGEN_R2_TABLES_SQL);
-        console.log('   ✅ Mutagen R2 tables created');
+        // Step 3: Mutagen tables (new domain alongside Forge)
+        await client.query(MUTAGEN_TABLES_SQL);
+        console.log('   ✅ Mutagen tables created');
 
-        // Step 4: Mutagen R2 indexes
-        await client.query(MUTAGEN_R2_INDEXES_SQL);
-        console.log('   ✅ Mutagen R2 indexes created');
+        // Step 4: Mutagen indexes
+        await client.query(MUTAGEN_INDEXES_SQL);
+        console.log('   ✅ Mutagen indexes created');
 
         console.log('✅ Database schema created successfully');
     } catch (error) {
