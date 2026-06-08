@@ -22,6 +22,8 @@ import { db } from '../db/index.js';
 import { tournaments, registrations, dailyCategoryScores } from '../db/schema.js';
 import { eq, asc } from 'drizzle-orm';
 import { computeAllTickets, executeDeterministicDraw, resetDraw } from '../services/raffle-engine.js';
+import * as mutagenAdmin from '../services/mutagen-admin.js';
+import type { EpochConfig } from '../services/mutagen-scorer-types.js';
 
 const router = Router();
 
@@ -547,6 +549,200 @@ router.get('/tradable-assets', async (_req, res) => {
             success: false,
             error: error instanceof Error ? error.message : 'Internal server error',
         });
+    }
+});
+
+// ============================================================================
+// Mutagen admin: epoch lifecycle + marketing awards + bootstrap.
+// Thin handlers over services/mutagen-admin.ts. All inherit the ADMIN_SECRET
+// middleware (router.use) at the top of this router.
+// ============================================================================
+
+const MUTAGEN_FAIL_STATUS: Record<mutagenAdmin.AdminFail['code'], number> = {
+    not_found: 404,
+    conflict: 409,
+    bad_request: 400,
+};
+
+// POST /api/admin/mutagen/epochs — create an epoch (config defaults to DEFAULT_EPOCH_CONFIG)
+router.post('/mutagen/epochs', async (req, res) => {
+    try {
+        const { name, startAt, endAt, subEpochWeeks, config } = req.body as {
+            name?: string; startAt?: string; endAt?: string; subEpochWeeks?: number; config?: EpochConfig;
+        };
+        const result = await mutagenAdmin.createEpoch({
+            name: name ?? '',
+            startAt: startAt ? new Date(startAt) : new Date(NaN),
+            endAt: endAt ? new Date(endAt) : new Date(NaN),
+            subEpochWeeks,
+            config,
+        });
+        if (!result.ok) {
+            res.status(MUTAGEN_FAIL_STATUS[result.code]).json({ success: false, error: result.error });
+            return;
+        }
+        res.json({ success: true, data: result.epoch });
+    } catch (error) {
+        console.error('[Admin][mutagen] create epoch error:', error);
+        res.status(500).json({ success: false, error: error instanceof Error ? error.message : 'Internal server error' });
+    }
+});
+
+// GET /api/admin/mutagen/epochs — list all epochs
+router.get('/mutagen/epochs', async (_req, res) => {
+    try {
+        const epochs = await mutagenAdmin.listEpochs();
+        res.json({ success: true, data: epochs });
+    } catch (error) {
+        console.error('[Admin][mutagen] list epochs error:', error);
+        res.status(500).json({ success: false, error: error instanceof Error ? error.message : 'Internal server error' });
+    }
+});
+
+// GET /api/admin/mutagen/epochs/:id — one epoch
+router.get('/mutagen/epochs/:id', async (req, res) => {
+    try {
+        const id = parseInt(req.params.id, 10);
+        if (isNaN(id)) {
+            res.status(400).json({ success: false, error: 'invalid epoch id' });
+            return;
+        }
+        const epoch = await mutagenAdmin.getEpochById(id);
+        if (!epoch) {
+            res.status(404).json({ success: false, error: `epoch ${id} not found` });
+            return;
+        }
+        res.json({ success: true, data: epoch });
+    } catch (error) {
+        console.error('[Admin][mutagen] get epoch error:', error);
+        res.status(500).json({ success: false, error: error instanceof Error ? error.message : 'Internal server error' });
+    }
+});
+
+// PATCH /api/admin/mutagen/epochs/:id — update epoch config
+router.patch('/mutagen/epochs/:id', async (req, res) => {
+    try {
+        const id = parseInt(req.params.id, 10);
+        if (isNaN(id)) {
+            res.status(400).json({ success: false, error: 'invalid epoch id' });
+            return;
+        }
+        const { config } = req.body as { config?: EpochConfig };
+        if (!config) {
+            res.status(400).json({ success: false, error: 'config is required' });
+            return;
+        }
+        const result = await mutagenAdmin.updateEpochConfig(id, config);
+        if (!result.ok) {
+            res.status(MUTAGEN_FAIL_STATUS[result.code]).json({ success: false, error: result.error });
+            return;
+        }
+        res.json({ success: true, data: result.epoch });
+    } catch (error) {
+        console.error('[Admin][mutagen] update epoch error:', error);
+        res.status(500).json({ success: false, error: error instanceof Error ? error.message : 'Internal server error' });
+    }
+});
+
+// POST /api/admin/mutagen/epochs/:id/activate — registration → active + generate sub-epochs (atomic)
+router.post('/mutagen/epochs/:id/activate', async (req, res) => {
+    try {
+        const id = parseInt(req.params.id, 10);
+        if (isNaN(id)) {
+            res.status(400).json({ success: false, error: 'invalid epoch id' });
+            return;
+        }
+        const result = await mutagenAdmin.activateEpoch(id);
+        if (!result.ok) {
+            res.status(MUTAGEN_FAIL_STATUS[result.code]).json({ success: false, error: result.error });
+            return;
+        }
+        res.json({ success: true, data: { epoch: result.epoch, subEpochIds: result.subEpochIds } });
+    } catch (error) {
+        console.error('[Admin][mutagen] activate epoch error:', error);
+        res.status(500).json({ success: false, error: error instanceof Error ? error.message : 'Internal server error' });
+    }
+});
+
+// POST /api/admin/mutagen/epochs/:id/complete — active → completed
+router.post('/mutagen/epochs/:id/complete', async (req, res) => {
+    try {
+        const id = parseInt(req.params.id, 10);
+        if (isNaN(id)) {
+            res.status(400).json({ success: false, error: 'invalid epoch id' });
+            return;
+        }
+        const result = await mutagenAdmin.completeEpoch(id);
+        if (!result.ok) {
+            res.status(MUTAGEN_FAIL_STATUS[result.code]).json({ success: false, error: result.error });
+            return;
+        }
+        res.json({ success: true, data: result.epoch });
+    } catch (error) {
+        console.error('[Admin][mutagen] complete epoch error:', error);
+        res.status(500).json({ success: false, error: error instanceof Error ? error.message : 'Internal server error' });
+    }
+});
+
+// DELETE /api/admin/mutagen/epochs/:id — delete epoch + cascade all its data
+router.delete('/mutagen/epochs/:id', async (req, res) => {
+    try {
+        const id = parseInt(req.params.id, 10);
+        if (isNaN(id)) {
+            res.status(400).json({ success: false, error: 'invalid epoch id' });
+            return;
+        }
+        const result = await mutagenAdmin.deleteEpoch(id);
+        if (!result.ok) {
+            res.status(MUTAGEN_FAIL_STATUS[result.code]).json({ success: false, error: result.error });
+            return;
+        }
+        res.json({ success: true, data: result.deleted });
+    } catch (error) {
+        console.error('[Admin][mutagen] delete epoch error:', error);
+        res.status(500).json({ success: false, error: error instanceof Error ? error.message : 'Internal server error' });
+    }
+});
+
+// POST /api/admin/mutagen/marketing-award — award Activity 5 social/discord points
+router.post('/mutagen/marketing-award', async (req, res) => {
+    try {
+        const { wallet, activityType, amount, reason, awardedBy, source } = req.body as {
+            wallet?: string; activityType?: string; amount?: number; reason?: string; awardedBy?: string; source?: string;
+        };
+        const result = await mutagenAdmin.addMarketingAward({
+            wallet: wallet ?? '',
+            activityType: activityType ?? '',
+            amount: typeof amount === 'number' ? amount : NaN,
+            reason,
+            awardedBy,
+            source,
+        });
+        if (!result.ok) {
+            res.status(MUTAGEN_FAIL_STATUS[result.code]).json({ success: false, error: result.error });
+            return;
+        }
+        res.json({ success: true, data: { awardId: result.awardId, subEpochId: result.subEpochId } });
+    } catch (error) {
+        console.error('[Admin][mutagen] marketing-award error:', error);
+        res.status(500).json({ success: false, error: error instanceof Error ? error.message : 'Internal server error' });
+    }
+});
+
+// POST /api/admin/mutagen/bootstrap — one-time seeding (fire-and-forget background scoring)
+router.post('/mutagen/bootstrap', async (req, res) => {
+    try {
+        const { topN } = req.body as { topN?: number };
+        const result = await mutagenAdmin.bootstrapSeed(typeof topN === 'number' ? topN : 1000);
+        if (!result.ok) {
+            res.status(400).json({ success: false, error: result.error });
+            return;
+        }
+        // 202 Accepted: scoring runs in the background; the response returns now.
+        res.status(202).json({ success: true, data: { queued: result.queued, sources: result.sources } });
+    } catch (error) {
+        console.error('[Admin][mutagen] bootstrap error:', error);
+        res.status(500).json({ success: false, error: error instanceof Error ? error.message : 'Internal server error' });
     }
 });
 

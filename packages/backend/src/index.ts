@@ -2,7 +2,21 @@
 // Express Server Entry Point
 // ============================================================================
 
-import 'dotenv/config';
+// Boot-time env validation. Side effect of importing config/env.js is loading
+// the monorepo-root .env via path traversal; calling validateEnv() throws
+// loudly if any required var is missing. Must run before any module that
+// reads process.env directly.
+import { validateEnv } from './config/env.js';
+validateEnv();
+
+// Boot-time PDA sanity check. Verifies Adrena's program-derived mint
+// addresses still reproduce the canonical pubkeys pinned in
+// solana-constants.ts. Throws loudly if Adrena's program ID or seed scheme
+// has changed upstream, protecting against silent corruption in every
+// Mutagen scorer.
+import { assertCanonicalPdas } from './services/adrena-pda.js';
+assertCanonicalPdas();
+
 import express from 'express';
 import cors from 'cors';
 import tournamentRoutes from './routes/tournaments.js';
@@ -15,6 +29,7 @@ import questRoutes from './routes/quests.js';
 import raffleRoutes from './routes/raffle.js';
 import leaderboardRoutes from './routes/leaderboard.js';
 import priceRoutes from './routes/prices.js';
+import mutagenRoutes from './routes/mutagen.js';
 import { startScheduler, stopScheduler } from './services/scheduler.js';
 
 const app = express();
@@ -53,6 +68,9 @@ app.use('/api/quests', questRoutes);
 app.use('/api/raffle', raffleRoutes);
 app.use('/api/leaderboard', leaderboardRoutes);
 app.use('/api/prices', priceRoutes);
+// Mutagen read API. Mounted at /api because its two routes have distinct
+// prefixes: /api/mutagen-leaderboard and /api/mutagen/wallet/:wallet.
+app.use('/api', mutagenRoutes);
 
 // 404 handler
 app.use((_req, res) => {

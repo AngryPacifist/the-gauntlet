@@ -9,6 +9,7 @@ import {
     integer,
     boolean,
     real,
+    numeric,
     timestamp,
     jsonb,
     date,
@@ -224,3 +225,132 @@ export const raffleDraws = pgTable('raffle_draws', {
     winners: jsonb('winners').notNull(), // string[]: wallet addresses
     drawnAt: timestamp('drawn_at', { withTimezone: true }).notNull().defaultNow(),
 });
+
+// ============================================================================
+// Mutagen: new domain alongside Forge
+// ============================================================================
+// 9 tables.
+// ============================================================================
+
+// --- Mutagen Epochs (multi-month epochs, default 3 months) ---
+
+export const mutagenEpochs = pgTable('mutagen_epochs', {
+    id: serial('id').primaryKey(),
+    name: varchar('name', { length: 120 }).notNull(),
+    status: varchar('status', { length: 20 }).notNull().default('registration'),
+    startAt: timestamp('start_at', { withTimezone: true }).notNull(),
+    endAt: timestamp('end_at', { withTimezone: true }).notNull(),
+    subEpochWeeks: integer('sub_epoch_weeks').notNull().default(3),
+    config: jsonb('config').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+// --- Mutagen Sub-Epochs (X-week buckets within an epoch, default 3 weeks) ---
+
+export const mutagenSubEpochs = pgTable('mutagen_sub_epochs', {
+    id: serial('id').primaryKey(),
+    epochId: integer('epoch_id').notNull().references(() => mutagenEpochs.id),
+    subEpochIndex: integer('sub_epoch_index').notNull(),
+    startAt: timestamp('start_at', { withTimezone: true }).notNull(),
+    endAt: timestamp('end_at', { withTimezone: true }).notNull(),
+}, (table) => ({
+    uniqueEpochIndex: uniqueIndex('idx_mutagen_sub_epochs_unique').on(table.epochId, table.subEpochIndex),
+}));
+
+// --- Mutagen User Scores (per-wallet per-sub-epoch result, on-demand-cached) ---
+
+export const mutagenUserScores = pgTable('mutagen_user_scores', {
+    id: serial('id').primaryKey(),
+    subEpochId: integer('sub_epoch_id').notNull().references(() => mutagenSubEpochs.id),
+    wallet: varchar('wallet', { length: 44 }).notNull(),
+    activity1Score: numeric('activity_1_score', { precision: 20, scale: 4 }).notNull().default('0'),
+    activity2Score: numeric('activity_2_score', { precision: 20, scale: 4 }).notNull().default('0'),
+    activity3Score: numeric('activity_3_score', { precision: 20, scale: 4 }).notNull().default('0'),
+    activity4Score: numeric('activity_4_score', { precision: 20, scale: 4 }).notNull().default('0'),
+    activity5Score: numeric('activity_5_score', { precision: 20, scale: 4 }).notNull().default('0'),
+    metaMutationMultiplier: numeric('meta_mutation_multiplier', { precision: 6, scale: 3 }).notNull().default('1.0'),
+    totalMutagen: numeric('total_mutagen', { precision: 20, scale: 4 }).notNull().default('0'),
+    details: jsonb('details').notNull(),
+    computedAt: timestamp('computed_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => ({
+    uniqueSubEpochWallet: uniqueIndex('idx_mutagen_user_scores_unique').on(table.subEpochId, table.wallet),
+}));
+
+// --- Mutagen Snapshots (audit trail of raw inputs per scoring run) ---
+
+export const mutagenSnapshots = pgTable('mutagen_snapshots', {
+    id: serial('id').primaryKey(),
+    subEpochId: integer('sub_epoch_id').notNull().references(() => mutagenSubEpochs.id),
+    wallet: varchar('wallet', { length: 44 }).notNull(),
+    rawInputs: jsonb('raw_inputs').notNull(),
+    computedAt: timestamp('computed_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+// --- Mutagen Marketing Awards (Activity 5: admin-manual + future automated feeds) ---
+
+export const mutagenMarketingAwards = pgTable('mutagen_marketing_awards', {
+    id: serial('id').primaryKey(),
+    subEpochId: integer('sub_epoch_id').notNull().references(() => mutagenSubEpochs.id),
+    wallet: varchar('wallet', { length: 44 }).notNull(),
+    source: varchar('source', { length: 32 }).notNull(),  // 'admin' | 'discord-bot' | 'twitter-api' | ...
+    activityType: varchar('activity_type', { length: 64 }).notNull(),
+    amount: numeric('amount', { precision: 20, scale: 4 }).notNull(),
+    reason: varchar('reason', { length: 500 }),
+    awardedBy: varchar('awarded_by', { length: 80 }),
+    awardedAt: timestamp('awarded_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+// --- Mutagen Legacy Scores (snapshot-freeze of the legacy leaderboard) ---
+
+export const mutagenLegacyScores = pgTable('mutagen_legacy_scores', {
+    id: serial('id').primaryKey(),
+    wallet: varchar('wallet', { length: 44 }).notNull().unique(),
+    snapshotAt: timestamp('snapshot_at', { withTimezone: true }).notNull(),
+    pointsTrading: numeric('points_trading', { precision: 20, scale: 4 }),
+    pointsMutations: numeric('points_mutations', { precision: 20, scale: 4 }),
+    pointsStreaks: numeric('points_streaks', { precision: 20, scale: 4 }),
+    pointsQuests: numeric('points_quests', { precision: 20, scale: 4 }),
+    totalPoints: numeric('total_points', { precision: 20, scale: 4 }),
+    totalVolume: numeric('total_volume', { precision: 20, scale: 4 }),
+    rawRow: jsonb('raw_row').notNull(),
+});
+
+// --- Mutagen Position Snapshots (Activity 4 time-weighted size, hourly snapshots) ---
+
+export const mutagenPositionSnapshots = pgTable('mutagen_position_snapshots', {
+    id: serial('id').primaryKey(),
+    wallet: varchar('wallet', { length: 44 }).notNull(),
+    subEpochId: integer('sub_epoch_id').notNull().references(() => mutagenSubEpochs.id),
+    poolAddress: varchar('pool_address', { length: 44 }).notNull(),
+    source: varchar('source', { length: 32 }).notNull(),  // 'meteora-dlmm' | future
+    positionValueUsd: numeric('position_value_usd', { precision: 20, scale: 4 }).notNull(),
+    totalXAmount: numeric('total_x_amount', { precision: 40, scale: 0 }).notNull(),
+    totalYAmount: numeric('total_y_amount', { precision: 40, scale: 0 }).notNull(),
+    lastUpdatedAtChain: integer('last_updated_at_chain'),  // unix seconds (INTEGER; safe through 2038)
+    snapshottedAt: timestamp('snapshotted_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => ({
+    walletSubepochIdx: index('idx_mutagen_position_snapshots_wallet_subepoch').on(table.wallet, table.subEpochId),
+    snapshottedAtIdx: index('idx_mutagen_position_snapshots_snapshotted_at').on(table.snapshottedAt),
+}));
+
+// --- Mutagen Vote Cache (daily refresh; expensive getProgramAccounts query) ---
+
+export const mutagenVoteCache = pgTable('mutagen_vote_cache', {
+    wallet: varchar('wallet', { length: 44 }).primaryKey(),
+    voteCount: integer('vote_count').notNull(),
+    hasTokenOwnerRecord: boolean('has_token_owner_record').notNull(),
+    refreshedAt: timestamp('refreshed_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => ({
+    refreshedAtIdx: index('idx_mutagen_vote_cache_refreshed_at').on(table.refreshedAt),
+}));
+
+// --- Mutagen Scoring Locks (prevent concurrent scoring runs per wallet+sub-epoch) ---
+
+export const mutagenScoringLocks = pgTable('mutagen_scoring_locks', {
+    wallet: varchar('wallet', { length: 44 }).notNull(),
+    subEpochId: integer('sub_epoch_id').notNull(),
+    acquiredAt: timestamp('acquired_at', { withTimezone: true }).notNull().defaultNow(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+}, (table) => ({
+    primaryKey: uniqueIndex('idx_mutagen_scoring_locks_pk').on(table.wallet, table.subEpochId),
+}));

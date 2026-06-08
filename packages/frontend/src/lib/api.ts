@@ -938,3 +938,179 @@ export interface PayoutsResponse {
 export async function getPayouts(tournamentId: number): Promise<PayoutsResponse> {
     return apiFetch<PayoutsResponse>(`/api/tournaments/${tournamentId}/payouts`);
 }
+
+// ============================================================================
+// Mutagen
+//
+// Public reads: leaderboard (current/cumulative) + per-wallet on-demand score.
+// Admin: epoch lifecycle + marketing award + bootstrap. NAMED activity fields
+// (points_lp_mint/staking/trading/adx_lp/marketing) under the shared envelope
+// keys (rank, user_wallet, total_points); see backend services/mutagen-read.ts.
+// ============================================================================
+
+export interface MutagenLeaderboardRow {
+    rank: number;
+    user_wallet: string;
+    points_lp_mint: number;
+    points_staking: number;
+    points_trading: number;
+    points_adx_lp: number;
+    points_marketing: number;
+    total_points: number;
+}
+
+export type MutagenLeaderboardView = 'current' | 'cumulative';
+
+export async function getMutagenLeaderboard(
+    view: MutagenLeaderboardView = 'current',
+    limit?: number,
+): Promise<MutagenLeaderboardRow[]> {
+    const params = new URLSearchParams({ view });
+    if (limit !== undefined) params.set('limit', String(limit));
+    return apiFetch<MutagenLeaderboardRow[]>(`/api/mutagen-leaderboard?${params.toString()}`);
+}
+
+export interface MutagenWalletScore {
+    wallet: string;
+    sub_epoch_id: number;
+    epoch_id: number;
+    points_lp_mint: number;
+    points_staking: number;
+    points_trading: number;
+    points_adx_lp: number;
+    points_marketing: number;
+    meta_mutation_multiplier: number;
+    total_points: number;
+    /** Epoch Activity weights (sum to 1.0) — used to show weighted contribution per activity. */
+    weights: { a1: number; a2: number; a3: number; a4: number; a5: number };
+    weighted_sum: number | null;
+    qualified_count: number | null;
+    details: unknown;
+    computed_at: string;
+    cached: boolean;
+    stale: boolean;
+}
+
+// The wallet endpoint is on-demand-with-cache and returns distinct HTTP
+// statuses the shared apiFetch wrapper would flatten into a thrown error:
+//   200 → score; 202 → scoring in progress (retry); 404 → no active epoch;
+//   400 → malformed address. A dedicated status-aware fetch keeps those states
+//   first-class so the page can render loading / retry / empty cleanly.
+export type MutagenWalletResult =
+    | { state: 'ok'; data: MutagenWalletScore }
+    | { state: 'in_progress' }
+    | { state: 'no_epoch' }
+    | { state: 'invalid' };
+
+export async function getMutagenWalletScore(wallet: string): Promise<MutagenWalletResult> {
+    const res = await fetch(`${API_BASE}/api/mutagen/wallet/${encodeURIComponent(wallet)}`, {
+        headers: { 'Content-Type': 'application/json' },
+    });
+    if (res.status === 202) return { state: 'in_progress' };
+    if (res.status === 404) return { state: 'no_epoch' };
+    if (res.status === 400) return { state: 'invalid' };
+    const contentType = res.headers.get('content-type') || '';
+    if (!contentType.includes('application/json')) {
+        throw new Error((await res.text()) || `Server returned ${res.status}`);
+    }
+    const json: ApiResponse<MutagenWalletScore> = await res.json();
+    if (!json.success) throw new Error(json.error || 'Mutagen wallet lookup failed');
+    return { state: 'ok', data: json.data };
+}
+
+// --- Mutagen Admin ---
+
+export interface MutagenEpoch {
+    id: number;
+    name: string;
+    status: string; // 'registration' | 'active' | 'completed'
+    startAt: string;
+    endAt: string;
+    subEpochWeeks: number;
+    config: Record<string, unknown>;
+    createdAt: string;
+}
+
+export async function adminListMutagenEpochs(adminSecret: string): Promise<MutagenEpoch[]> {
+    return apiFetch<MutagenEpoch[]>('/api/admin/mutagen/epochs', {
+        headers: { 'X-Admin-Secret': adminSecret },
+    });
+}
+
+export async function adminGetMutagenEpoch(id: number, adminSecret: string): Promise<MutagenEpoch> {
+    return apiFetch<MutagenEpoch>(`/api/admin/mutagen/epochs/${id}`, {
+        headers: { 'X-Admin-Secret': adminSecret },
+    });
+}
+
+export async function adminCreateMutagenEpoch(
+    input: { name: string; startAt: string; endAt: string; subEpochWeeks?: number; config?: Record<string, unknown> },
+    adminSecret: string,
+): Promise<MutagenEpoch> {
+    return apiFetch<MutagenEpoch>('/api/admin/mutagen/epochs', {
+        method: 'POST',
+        body: JSON.stringify(input),
+        headers: { 'X-Admin-Secret': adminSecret },
+    });
+}
+
+export async function adminUpdateMutagenEpochConfig(
+    id: number,
+    config: Record<string, unknown>,
+    adminSecret: string,
+): Promise<MutagenEpoch> {
+    return apiFetch<MutagenEpoch>(`/api/admin/mutagen/epochs/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ config }),
+        headers: { 'X-Admin-Secret': adminSecret },
+    });
+}
+
+export async function adminActivateMutagenEpoch(
+    id: number,
+    adminSecret: string,
+): Promise<{ epoch: MutagenEpoch; subEpochIds: number[] }> {
+    return apiFetch(`/api/admin/mutagen/epochs/${id}/activate`, {
+        method: 'POST',
+        headers: { 'X-Admin-Secret': adminSecret },
+    });
+}
+
+export async function adminCompleteMutagenEpoch(id: number, adminSecret: string): Promise<MutagenEpoch> {
+    return apiFetch<MutagenEpoch>(`/api/admin/mutagen/epochs/${id}/complete`, {
+        method: 'POST',
+        headers: { 'X-Admin-Secret': adminSecret },
+    });
+}
+
+export async function adminDeleteMutagenEpoch(
+    id: number,
+    adminSecret: string,
+): Promise<{ epoch: number; subEpochs: number }> {
+    return apiFetch(`/api/admin/mutagen/epochs/${id}`, {
+        method: 'DELETE',
+        headers: { 'X-Admin-Secret': adminSecret },
+    });
+}
+
+export async function adminMutagenMarketingAward(
+    input: { wallet: string; activityType: string; amount: number; reason?: string },
+    adminSecret: string,
+): Promise<{ awardId: number; subEpochId: number }> {
+    return apiFetch('/api/admin/mutagen/marketing-award', {
+        method: 'POST',
+        body: JSON.stringify(input),
+        headers: { 'X-Admin-Secret': adminSecret },
+    });
+}
+
+export async function adminMutagenBootstrap(
+    topN: number,
+    adminSecret: string,
+): Promise<{ queued: number; sources: { adrenaLeaderboard: number; forgeRegistrations: number; unique: number } }> {
+    return apiFetch('/api/admin/mutagen/bootstrap', {
+        method: 'POST',
+        body: JSON.stringify({ topN }),
+        headers: { 'X-Admin-Secret': adminSecret },
+    });
+}
