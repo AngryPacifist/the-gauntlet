@@ -7,7 +7,7 @@
 // Meteora client (MeteoraPositionSummary + PoolTokenInfo). The Meteora DLMM SDK
 // cannot decode Raydium pools, so this decodes the CPMM PoolState directly.
 //
-// PoolState layout (verified on-chain 2026-06-08: owner
+// PoolState layout (verified on-chain: owner
 // CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C, 637-byte account, decode
 // cross-checked to the ADX/SOL + ADX/USDC pools). 8-byte anchor discriminator,
 // then pubkeys/scalars at the offsets below. Token order is NOT fixed (one pool
