@@ -196,9 +196,20 @@ export interface EpochConfig {
     activity2: {
         /** Stake-tier multipliers per UI duration ("0", "90", "180", "360", "540"). */
         stakeTierMultipliers: Record<string, number>;
+        /**
+         * Size brackets keyed on a wallet's TOTAL LOCKED ADX AMOUNT (not USD,
+         * liquid excluded). Reuses the UsdBracket {min,max,pts} shape; the
+         * min/max values are ADX amounts. Mirrors the "$ADX Locked" column.
+         */
         sizeBrackets: UsdBracket;
-        /** Vote-count → points curve. */
+        /** Vote-count → points curve. Only consulted when `voteEnabled` is true. */
         voteScoreCurve: CountBracket;
+        /**
+         * When false, the vote dimension is skipped entirely (0 score, no
+         * within-Activity mutation, no governance RPC). Default off: voting is
+         * zero-weighted until forward/per-epoch vote windowing exists.
+         */
+        voteEnabled: boolean;
         mutationIncrements: number[];
         qualifyingThreshold: number;
     };
@@ -298,12 +309,22 @@ export const DEFAULT_EPOCH_CONFIG: EpochConfig = {
 
     activity2: {
         stakeTierMultipliers: { '0': 1.0, '90': 1.5, '180': 2.5, '360': 3.25, '540': 4.0 },
+        // Size brackets on a wallet's TOTAL LOCKED ADX amount (min/max are ADX,
+        // not USD). 10 steps from 50k to 10mln (the "$ADX Locked" column
+        // anchors), linear +12/step, cap 120 (= the prior max, so a 5% activity
+        // stays a 5% nudge). Per-step values are defaults, admin-tunable.
         sizeBrackets: [
-            { minUsd: 0, maxUsd: 100, pts: 0 },
-            { minUsd: 100, maxUsd: 1000, pts: 5 },
-            { minUsd: 1000, maxUsd: 10000, pts: 20 },
-            { minUsd: 10000, maxUsd: 100000, pts: 60 },
-            { minUsd: 100000, maxUsd: null, pts: 120 },
+            { minUsd: 0, maxUsd: 50000, pts: 0 },
+            { minUsd: 50000, maxUsd: 100000, pts: 12 },
+            { minUsd: 100000, maxUsd: 250000, pts: 24 },
+            { minUsd: 250000, maxUsd: 500000, pts: 36 },
+            { minUsd: 500000, maxUsd: 1000000, pts: 48 },
+            { minUsd: 1000000, maxUsd: 2000000, pts: 60 },
+            { minUsd: 2000000, maxUsd: 3500000, pts: 72 },
+            { minUsd: 3500000, maxUsd: 5000000, pts: 84 },
+            { minUsd: 5000000, maxUsd: 7000000, pts: 96 },
+            { minUsd: 7000000, maxUsd: 10000000, pts: 108 },
+            { minUsd: 10000000, maxUsd: null, pts: 120 },
         ],
         voteScoreCurve: [
             { minCount: 0, maxCount: 1, pts: 0 },
@@ -311,6 +332,10 @@ export const DEFAULT_EPOCH_CONFIG: EpochConfig = {
             { minCount: 5, maxCount: 15, pts: 30 },
             { minCount: 15, maxCount: null, pts: 60 },
         ],
+        // Vote zero-weighted for now (no impact from past voting). The as-built
+        // read is all-time; forward/per-epoch windowing is a separate build
+        // before this flips on.
+        voteEnabled: false,
         mutationIncrements: [0.3, 0.5],
         qualifyingThreshold: 5,
     },
