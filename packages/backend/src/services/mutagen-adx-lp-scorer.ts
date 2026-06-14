@@ -44,6 +44,7 @@ import {
     type MeteoraPositionSummary,
     type PoolTokenInfo,
 } from './meteora-dlmm-client.js';
+import * as raydiumClient from './raydium-cpmm-client.js';
 import {
     ADX_MINT,
     ALP_MINT,
@@ -193,13 +194,16 @@ export async function scoreActivity4(ctx: ScorerContext): Promise<ActivityScoreR
             // so subsequent runs get a proper TWA.
             coldStart = true;
             try {
-                const positions = await getWalletPositionsForPool(ctx.wallet, poolPk);
-                const poolInfo = await getCachedPoolInfo(poolPk);
+                const positions = pool.source === 'raydium-cpmm'
+                    ? await raydiumClient.getWalletPositionsForPool(ctx.wallet, poolPk)
+                    : await getWalletPositionsForPool(ctx.wallet, poolPk);
+                const poolInfo = pool.source === 'raydium-cpmm'
+                    ? await raydiumClient.getPoolTokenInfo(poolPk)
+                    : await getCachedPoolInfo(poolPk);
                 twaUsd = computeUsdValueFromPositions(positions, poolInfo, ctx.prices);
             } catch (e) {
-                // If the SDK can't decode the pool (e.g., admin enabled a
-                // Raydium pool by mistake), score it as 0 and log. Don't
-                // fail the whole Activity 4 run.
+                // A read failure (unreadable pool, RPC error) scores 0 rather
+                // than failing the whole Activity 4 run.
                 console.warn(`[mutagen-activity-4] Failed to read pool ${pool.address} (${pool.label}): ${(e as Error).message}`);
                 twaUsd = 0;
             }

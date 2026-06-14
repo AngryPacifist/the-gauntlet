@@ -49,6 +49,7 @@ import {
     getPoolTokenInfo,
     type PoolTokenInfo,
 } from './meteora-dlmm-client.js';
+import * as raydiumClient from './raydium-cpmm-client.js';
 import { refreshVoteCacheForWallet } from './vote-cache.js';
 import { getActiveEpoch, getActiveSubEpoch } from './mutagen-epoch.js';
 import type { EpochConfig } from './mutagen-scorer-types.js';
@@ -708,7 +709,9 @@ async function snapshotMutagenPositions(): Promise<void> {
         const poolInfo = new Map<string, PoolTokenInfo>();
         for (const pool of enabledPools) {
             try {
-                poolInfo.set(pool.address, await getPoolTokenInfo(new PublicKey(pool.address)));
+                poolInfo.set(pool.address, pool.source === 'raydium-cpmm'
+                    ? await raydiumClient.getPoolTokenInfo(new PublicKey(pool.address))
+                    : await getPoolTokenInfo(new PublicKey(pool.address)));
             } catch (error) {
                 console.warn(
                     `[Scheduler][mutagen] Pool info fetch failed for ${pool.label} (${pool.address}):`,
@@ -724,7 +727,9 @@ async function snapshotMutagenPositions(): Promise<void> {
                 const info = poolInfo.get(pool.address);
                 if (!info) continue; // pool-info fetch failed above; skip this pool
                 try {
-                    const positions = await getWalletPositionsForPool(walletPk, new PublicKey(pool.address));
+                    const positions = pool.source === 'raydium-cpmm'
+                        ? await raydiumClient.getWalletPositionsForPool(walletPk, new PublicKey(pool.address))
+                        : await getWalletPositionsForPool(walletPk, new PublicKey(pool.address));
                     if (positions.length === 0) continue; // no exposure → no row
 
                     const usd = computeUsdValueFromPositions(positions, info, prices);
@@ -741,7 +746,7 @@ async function snapshotMutagenPositions(): Promise<void> {
                         wallet,
                         subEpochId: active.subEpoch.id,
                         poolAddress: pool.address,
-                        source: 'meteora-dlmm',
+                        source: pool.source,
                         positionValueUsd: usd.toFixed(4),
                         totalXAmount: sumX.toString(),
                         totalYAmount: sumY.toString(),
