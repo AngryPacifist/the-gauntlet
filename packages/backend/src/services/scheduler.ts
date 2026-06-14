@@ -50,7 +50,7 @@ import {
     type PoolTokenInfo,
 } from './meteora-dlmm-client.js';
 import { refreshVoteCacheForWallet } from './vote-cache.js';
-import { getActiveSubEpoch } from './mutagen-epoch.js';
+import { getActiveEpoch, getActiveSubEpoch } from './mutagen-epoch.js';
 import type { EpochConfig } from './mutagen-scorer-types.js';
 
 const schedulerAdrenaClient = new AdrenaClient();
@@ -637,6 +637,15 @@ function computeCurrentQuestWeek(
  */
 async function refreshMutagenVoteCaches(): Promise<void> {
     try {
+        // Skip entirely when the active epoch has voting disabled: the vote
+        // cache only feeds Activity 2's vote dim, and this getProgramAccounts
+        // scan is the heaviest Helius call in the system.
+        const activeEpoch = await getActiveEpoch();
+        if (activeEpoch && (activeEpoch.config as EpochConfig).activity2?.voteEnabled === false) {
+            console.log('[Scheduler][mutagen] Voting disabled for the active epoch; skipping vote-cache refresh');
+            return;
+        }
+
         const wallets = await db
             .selectDistinct({ wallet: mutagenUserScores.wallet })
             .from(mutagenUserScores);
