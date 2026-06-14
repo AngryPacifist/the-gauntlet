@@ -34,7 +34,7 @@ type CountBracket = Array<{ minCount: number; maxCount: number | null; pts: numb
 type EpochConfig = {
     weights: { a1: number; a2: number; a3: number; a4: number; a5: number };
     activity1: { sizeBrackets: UsdBracket; lockTierMultipliers: Record<string, number>; lockUsdCap: number; mutationIncrements: number[]; qualifyingThreshold: number };
-    activity2: { stakeTierMultipliers: Record<string, number>; sizeBrackets: UsdBracket; voteScoreCurve: CountBracket; mutationIncrements: number[]; qualifyingThreshold: number };
+    activity2: { stakeTierMultipliers: Record<string, number>; sizeBrackets: UsdBracket; voteScoreCurve: CountBracket; voteEnabled: boolean; mutationIncrements: number[]; qualifyingThreshold: number };
     activity3: { mode: 'volume_brackets' | 'wrap_existing_formula'; existingFormulaWeight: number; volumeBrackets: UsdBracket; topPctTiers: Array<{ maxPct: number; pts: number }>; varietyEnabled: boolean; varietyMinVolumePerAsset: number; varietyBrackets: CountBracket; mutationIncrements: number[]; qualifyingThreshold: number };
     activity4: { pools: Array<{ address: string; enabled: boolean; weight: number; label: string }>; sizeBrackets: UsdBracket; mutationIncrements: number[]; qualifyingThreshold: number };
     activity5: { referrerBrackets: UsdBracket; perRefereePts: number; refereeCap: number; mutationIncrements: number[]; qualifyingThreshold: number };
@@ -462,9 +462,10 @@ export default function AdminMutagenEpochPage() {
                                         {['0', '90', '180', '360', '540'].map((t) => (
                                             <div className={styles.formGroup} key={t}><label className={styles.formLabel}>Stake {t}d ×</label><input type="number" step="0.1" className="input" value={c.activity2.stakeTierMultipliers[t] ?? 1} disabled={locked} onChange={(e) => setStakeMult(t, Number(e.target.value))} /></div>
                                         ))}
+                                        <div className={styles.formGroup}><label className={styles.formLabel}>Voting</label><label style={{ display: 'flex', alignItems: 'center', gap: 8, paddingTop: 6 }}><input type="checkbox" checked={c.activity2.voteEnabled} disabled={locked} onChange={(e) => setA2({ voteEnabled: e.target.checked })} /> enabled</label></div>
                                     </div>
-                                    <label className={styles.formLabel} style={{ marginTop: 'var(--space-md)' }}>Size brackets (USD)</label>
-                                    <BracketEditor rows={c.activity2.sizeBrackets.map((b) => ({ lo: b.minUsd, hi: b.maxUsd, pts: b.pts }))} loLabel="min USD" hiLabel="max USD" locked={locked} onChange={(rows) => setA2({ sizeBrackets: rows.map((r) => ({ minUsd: r.lo, maxUsd: r.hi, pts: r.pts })) })} />
+                                    <label className={styles.formLabel} style={{ marginTop: 'var(--space-md)' }}>Size brackets (ADX locked)</label>
+                                    <BracketEditor rows={c.activity2.sizeBrackets.map((b) => ({ lo: b.minUsd, hi: b.maxUsd, pts: b.pts }))} loLabel="min ADX" hiLabel="max ADX" locked={locked} onChange={(rows) => setA2({ sizeBrackets: rows.map((r) => ({ minUsd: r.lo, maxUsd: r.hi, pts: r.pts })) })} />
                                     <label className={styles.formLabel} style={{ marginTop: 'var(--space-sm)' }}>Vote-score curve (vote count → pts)</label>
                                     <BracketEditor rows={c.activity2.voteScoreCurve.map((b) => ({ lo: b.minCount, hi: b.maxCount, pts: b.pts }))} loLabel="min count" hiLabel="max count" locked={locked} onChange={(rows) => setA2({ voteScoreCurve: rows.map((r) => ({ minCount: r.lo, maxCount: r.hi, pts: r.pts })) })} />
                                     <label className={styles.formLabel} style={{ marginTop: 'var(--space-sm)' }}>Mutation increments</label>
