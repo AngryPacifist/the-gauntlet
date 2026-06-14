@@ -36,7 +36,7 @@ type EpochConfig = {
     activity1: { sizeBrackets: UsdBracket; lockTierMultipliers: Record<string, number>; lockUsdCap: number; mutationIncrements: number[]; qualifyingThreshold: number };
     activity2: { stakeTierMultipliers: Record<string, number>; sizeBrackets: UsdBracket; voteScoreCurve: CountBracket; voteEnabled: boolean; mutationIncrements: number[]; qualifyingThreshold: number };
     activity3: { mode: 'volume_brackets' | 'wrap_existing_formula'; existingFormulaWeight: number; volumeBrackets: UsdBracket; topPctTiers: Array<{ maxPct: number; pts: number }>; varietyEnabled: boolean; varietyMinVolumePerAsset: number; varietyBrackets: CountBracket; mutationIncrements: number[]; qualifyingThreshold: number };
-    activity4: { pools: Array<{ address: string; enabled: boolean; weight: number; label: string }>; sizeBrackets: UsdBracket; mutationIncrements: number[]; qualifyingThreshold: number };
+    activity4: { pools: Array<{ address: string; enabled: boolean; weight: number; label: string; source: 'meteora-dlmm' | 'raydium-cpmm' }>; sizeBrackets: UsdBracket; mutationIncrements: number[]; qualifyingThreshold: number };
     activity5: { referrerBrackets: UsdBracket; perRefereePts: number; refereeCap: number; mutationIncrements: number[]; qualifyingThreshold: number };
     metaMutationTable: Record<number, number>;
     prizePool: { type: 'fixed' | 'percent_fees'; value: number; denominatedIn: 'ADX' | 'USDC' };
