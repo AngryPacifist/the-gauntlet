@@ -373,8 +373,8 @@ export const DEFAULT_EPOCH_CONFIG: EpochConfig = {
             { address: 'JCYMX9Nx7DTUdguptRR5LLSc62MEbNmFYsbT5R9yCDGy', enabled: true, weight: 1.0, label: 'ADX-USDC Meteora', source: 'meteora-dlmm' },
             { address: '4wM3eJMduZBFytW6VqV5DC2CaSovRrM2RJG8bJkroqLD', enabled: false, weight: 0, label: 'ALP-USDC Meteora (dormant)', source: 'meteora-dlmm' },
             { address: '39xxvte8BMaW7qBxeedFk9iauG42vxFsTA7yzM9X9cQN', enabled: false, weight: 0, label: 'ALP-SOL Meteora (dormant)', source: 'meteora-dlmm' },
-            { address: '7KFMHSyLzeEFebofSLS4zFbHZgkSDJY3CWpd9rJq2Jio', enabled: false, weight: 0, label: 'ADX-SOL Raydium', source: 'raydium-cpmm' },
-            { address: '2QNwSWsp1deYmNbuZgjFrZ55jnUbiwGrnPk6FMiZ1mEf', enabled: false, weight: 0, label: 'ADX-USDC Raydium (abandoned)', source: 'raydium-cpmm' },
+            { address: '7KFMHSyLzeEFebofSLS4zFbHZgkSDJY3CWpd9rJq2Jio', enabled: true, weight: 1.0, label: 'ADX-SOL Raydium', source: 'raydium-cpmm' },
+            { address: '2QNwSWsp1deYmNbuZgjFrZ55jnUbiwGrnPk6FMiZ1mEf', enabled: true, weight: 1.0, label: 'ADX-USDC Raydium', source: 'raydium-cpmm' },
         ],
         sizeBrackets: [
             { minUsd: 0, maxUsd: 100, pts: 0 },
