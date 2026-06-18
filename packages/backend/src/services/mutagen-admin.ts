@@ -25,7 +25,7 @@ import {
     registrations,
 } from '../db/schema.js';
 import { DEFAULT_EPOCH_CONFIG, type EpochConfig } from './mutagen-scorer-types.js';
-import { getActiveEpoch, getActiveSubEpoch, computeSubEpochWindows } from './mutagen-epoch.js';
+import { getActiveEpoch, getActiveSubEpoch, getSubEpochWithEpoch, computeSubEpochWindows } from './mutagen-epoch.js';
 import { AdrenaClient } from './adrena-client.js';
 import { scoreWalletForSubEpoch } from './mutagen-aggregator.js';
 
@@ -125,6 +125,36 @@ export async function updateEpochConfig(
         .where(eq(mutagenEpochs.id, id))
         .returning();
     return { ok: true, epoch: updated };
+}
+
+/**
+ * Set a sub-epoch's activity weights (weights-only rotation). Forward-only:
+ * editable only while the epoch is active AND the sub-epoch has not yet started
+ * (so no already-scored sub-epoch is disturbed). Sub-epoch 0 starts at epoch
+ * start, so once active it is locked and inherits the epoch config's weights.
+ */
+export async function setSubEpochWeights(
+    subEpochId: number,
+    weights: { a1: number; a2: number; a3: number; a4: number; a5: number },
+): Promise<{ ok: true; subEpoch: typeof mutagenSubEpochs.$inferSelect } | AdminFail> {
+    const found = await getSubEpochWithEpoch(subEpochId);
+    if (!found) return { ok: false, code: 'not_found', error: `sub-epoch ${subEpochId} not found` };
+    if (found.epoch.status !== 'active') {
+        return { ok: false, code: 'conflict', error: `sub-epoch weights are editable only while the epoch is active (is '${found.epoch.status}')` };
+    }
+    if (found.subEpoch.startAt <= new Date()) {
+        return { ok: false, code: 'conflict', error: 'this sub-epoch has already started; its weights are locked' };
+    }
+    const sum = weights.a1 + weights.a2 + weights.a3 + weights.a4 + weights.a5;
+    if (!Number.isFinite(sum) || Math.abs(sum - 1.0) > 1e-6) {
+        return bad(`weights must sum to 1.0 (got ${sum})`);
+    }
+    const [updated] = await db
+        .update(mutagenSubEpochs)
+        .set({ weights })
+        .where(eq(mutagenSubEpochs.id, subEpochId))
+        .returning();
+    return { ok: true, subEpoch: updated };
 }
 
 export async function activateEpoch(

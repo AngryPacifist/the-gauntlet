@@ -746,4 +746,29 @@ router.post('/mutagen/bootstrap', async (req, res) => {
     }
 });
 
+// PATCH /api/admin/mutagen/sub-epochs/:id/weights — set a sub-epoch's weights (forward-only)
+router.patch('/mutagen/sub-epochs/:id/weights', async (req, res) => {
+    try {
+        const id = parseInt(req.params.id, 10);
+        if (isNaN(id)) {
+            res.status(400).json({ success: false, error: 'invalid sub-epoch id' });
+            return;
+        }
+        const { weights } = req.body as { weights?: { a1: number; a2: number; a3: number; a4: number; a5: number } };
+        if (!weights) {
+            res.status(400).json({ success: false, error: 'weights is required' });
+            return;
+        }
+        const result = await mutagenAdmin.setSubEpochWeights(id, weights);
+        if (!result.ok) {
+            res.status(MUTAGEN_FAIL_STATUS[result.code]).json({ success: false, error: result.error });
+            return;
+        }
+        res.json({ success: true, data: result.subEpoch });
+    } catch (error) {
+        console.error('[Admin][mutagen] set sub-epoch weights error:', error);
+        res.status(500).json({ success: false, error: error instanceof Error ? error.message : 'Internal server error' });
+    }
+});
+
 export default router;

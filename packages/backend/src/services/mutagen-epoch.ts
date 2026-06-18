@@ -60,6 +60,21 @@ export async function getActiveSubEpoch(now: Date): Promise<ActiveSubEpoch | nul
     return { subEpoch: rows[0].mutagen_sub_epochs, epoch: rows[0].mutagen_epochs };
 }
 
+/**
+ * One sub-epoch + its epoch, by sub-epoch id. Used by admin weight-setting to
+ * gate on the epoch status + the sub-epoch's start time (forward-only edits).
+ */
+export async function getSubEpochWithEpoch(id: number): Promise<ActiveSubEpoch | null> {
+    const rows = await db
+        .select()
+        .from(mutagenSubEpochs)
+        .innerJoin(mutagenEpochs, eq(mutagenSubEpochs.epochId, mutagenEpochs.id))
+        .where(eq(mutagenSubEpochs.id, id))
+        .limit(1);
+    if (rows.length === 0) return null;
+    return { subEpoch: rows[0].mutagen_sub_epochs, epoch: rows[0].mutagen_epochs };
+}
+
 export interface SubEpochWindow {
     subEpochIndex: number;
     startAt: Date;
