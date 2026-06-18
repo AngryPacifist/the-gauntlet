@@ -34,6 +34,7 @@ import {
     mutagenUserScores,
     mutagenSnapshots,
     mutagenScoringLocks,
+    mutagenSubEpochs,
 } from '../db/schema.js';
 import { AdrenaClient } from './adrena-client.js';
 import { fetchIntradayOHLC } from './pyth-client.js';
@@ -121,8 +122,17 @@ export async function scoreWalletForSubEpoch(
         ]);
         const results: ActivityScoreResult[] = [a1, a2, a3, a4, a5];
 
-        // --- 4. Aggregate ---
-        const agg = aggregateAndApplyMetaMutation(results, config);
+        // --- 4. Aggregate (with per-sub-epoch weight override, weights-only) ---
+        // A sub-epoch may carry its own weights (set forward via admin before it
+        // starts); null = inherit the epoch config's weights. Resolved here, the
+        // single place weights are applied, so no caller can bypass the override.
+        const [seRow] = await db
+            .select({ weights: mutagenSubEpochs.weights })
+            .from(mutagenSubEpochs)
+            .where(eq(mutagenSubEpochs.id, subEpochId))
+            .limit(1);
+        const effectiveConfig = seRow?.weights ? { ...config, weights: seRow.weights } : config;
+        const agg = aggregateAndApplyMetaMutation(results, effectiveConfig);
 
         // --- 5. Upsert mutagen_user_scores ---
         // Stores both the aggregate fields (for leaderboard queries) and the

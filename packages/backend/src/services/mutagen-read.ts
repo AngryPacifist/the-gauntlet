@@ -257,7 +257,9 @@ export async function getWalletMutagenScore(
     const active = await getActiveSubEpoch(new Date());
     if (!active) return { state: 'no_active_sub_epoch' };
 
-    const weights = (active.epoch.config as EpochConfig).weights;
+    // Show the EFFECTIVE weights for this sub-epoch (per-sub-epoch override if set,
+    // else the epoch config's), so the breakdown's weighted contributions are correct.
+    const weights = active.subEpoch.weights ?? (active.epoch.config as EpochConfig).weights;
 
     const existing = await readWalletRow(active.subEpoch.id, walletBase58);
     if (existing && Date.now() - existing.computedAt.getTime() < ttlMs) {
