@@ -22,7 +22,7 @@
 import cron from 'node-cron';
 import { db } from '../db/index.js';
 import { tournaments, rounds, registrations } from '../db/schema.js';
-import { eq, and, asc } from 'drizzle-orm';
+import { eq, and, asc, inArray } from 'drizzle-orm';
 import { computeRoundScores, advanceRound } from './tournament-manager.js';
 import { awardDailyFisherPoints, awardDailyAllAroundPoints, awardDaily2DayCategoryPoints } from './season-manager.js';
 import { AdrenaClient } from './adrena-client.js';
@@ -41,6 +41,7 @@ import { PublicKey } from '@solana/web3.js';
 import {
     mutagenUserScores,
     mutagenPositionSnapshots,
+    mutagenSubEpochs,
 } from '../db/schema.js';
 import { fetchScoringPrices, scoreWalletForSubEpoch } from './mutagen-aggregator.js';
 import { computeUsdValueFromPositions } from './mutagen-adx-lp-scorer.js';
@@ -804,11 +805,20 @@ async function rescoreActiveMutagenScores(): Promise<void> {
         // Oldest-first, capped: the stalest rows refresh first; a large set is
         // covered over several ticks. One row per wallet per sub-epoch (unique
         // index), so a plain select already yields one row per wallet — no DISTINCT.
+        // Population carry-forward: rescore the current sub-epoch for every wallet
+        // scored in ANY sub-epoch of this epoch (not just the current one). Ensures
+        // each ended sub-epoch has a row per participant, so the cumulative ENDED-
+        // average's absences are real (genuinely never-scored) rather than not-yet-
+        // looked-up. Capped per tick.
+        const epochSubIds = (await db
+            .select({ id: mutagenSubEpochs.id })
+            .from(mutagenSubEpochs)
+            .where(eq(mutagenSubEpochs.epochId, active.epoch.id)))
+            .map((s) => s.id);
         const wallets = await db
-            .select({ wallet: mutagenUserScores.wallet })
+            .selectDistinct({ wallet: mutagenUserScores.wallet })
             .from(mutagenUserScores)
-            .where(eq(mutagenUserScores.subEpochId, active.subEpoch.id))
-            .orderBy(asc(mutagenUserScores.computedAt))
+            .where(inArray(mutagenUserScores.subEpochId, epochSubIds))
             .limit(cap);
         if (wallets.length === 0) return;
 

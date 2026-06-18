@@ -126,16 +126,28 @@ export async function getMutagenLeaderboard(
         );
     }
 
-    // cumulative — across all sub-epochs of the active epoch
+    // cumulative — ENDED-average across the active epoch's sub-epochs
     const epoch = await getActiveEpoch();
     if (!epoch) return [];
-    const subEpochs = await db
-        .select({ id: mutagenSubEpochs.id })
-        .from(mutagenSubEpochs)
-        .where(eq(mutagenSubEpochs.epochId, epoch.id));
-    const subEpochIds = subEpochs.map((s) => s.id);
-    if (subEpochIds.length === 0) return [];
+    return computeEpochCumulative(epoch.id, limit);
+}
 
+/**
+ * Cumulative epoch board: each wallet's per-sub-epoch Mutagen AVERAGED over the
+ * epoch's ENDED sub-epochs (sum across ended sub-epochs / ended count). A wallet
+ * with no score in an ended sub-epoch averages a 0 there, so the board rewards
+ * consistency across the epoch's weight shifts. Empty until the first sub-epoch
+ * ends. Reused by the payouts endpoint (takes any epoch id, not just the active one).
+ */
+export async function computeEpochCumulative(epochId: number, limit = DEFAULT_LIMIT): Promise<MutagenLeaderboardRow[]> {
+    const subs = await db
+        .select({ id: mutagenSubEpochs.id, endAt: mutagenSubEpochs.endAt })
+        .from(mutagenSubEpochs)
+        .where(eq(mutagenSubEpochs.epochId, epochId));
+    const now = new Date();
+    const endedIds = subs.filter((s) => s.endAt <= now).map((s) => s.id);
+    if (endedIds.length === 0) return []; // cumulative opens after the first sub-epoch closes
+    const n = endedIds.length;
     const rows = await db
         .select({
             wallet: mutagenUserScores.wallet,
@@ -147,13 +159,20 @@ export async function getMutagenLeaderboard(
             total: sql<string>`SUM(${mutagenUserScores.totalMutagen})`,
         })
         .from(mutagenUserScores)
-        .where(inArray(mutagenUserScores.subEpochId, subEpochIds))
+        .where(inArray(mutagenUserScores.subEpochId, endedIds))
         .groupBy(mutagenUserScores.wallet)
         .orderBy(desc(sql`SUM(${mutagenUserScores.totalMutagen})`))
         .limit(limit);
-    return rows.map((r, i) =>
-        shapeLeaderboardRow(i + 1, r.wallet, r.a1, r.a2, r.a3, r.a4, r.a5, r.total),
-    );
+    return rows.map((r, i) => ({
+        rank: i + 1,
+        user_wallet: r.wallet,
+        points_lp_mint: parseFloat(r.a1) / n,
+        points_staking: parseFloat(r.a2) / n,
+        points_trading: parseFloat(r.a3) / n,
+        points_adx_lp: parseFloat(r.a4) / n,
+        points_marketing: parseFloat(r.a5) / n,
+        total_points: parseFloat(r.total) / n,
+    }));
 }
 
 // ---------------------------------------------------------------------------

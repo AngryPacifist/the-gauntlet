@@ -86,7 +86,9 @@ export default function MutagenLeaderboardPage() {
             {rows && rows.length === 0 && (
                 <div className="card empty-state">
                     <p className="empty-state__title">No scores yet</p>
-                    <p>Search a wallet above to compute the first live score; it joins the board automatically.</p>
+                    {view === 'cumulative'
+                        ? <p>The cumulative board averages each wallet across the epoch&apos;s completed sub-epochs. It opens once the first sub-epoch closes.</p>
+                        : <p>Search a wallet above to compute the first live score; it joins the board automatically.</p>}
                 </div>
             )}
             {rows && rows.length > 0 && (
