@@ -341,6 +341,7 @@ CREATE TABLE IF NOT EXISTS mutagen_sub_epochs (
   sub_epoch_index INTEGER NOT NULL,
   start_at TIMESTAMPTZ NOT NULL,
   end_at TIMESTAMPTZ NOT NULL,
+  weights JSONB,
   UNIQUE(epoch_id, sub_epoch_index)
 );
 
@@ -427,6 +428,17 @@ CREATE TABLE IF NOT EXISTS mutagen_scoring_locks (
   expires_at TIMESTAMPTZ NOT NULL,
   PRIMARY KEY (wallet, sub_epoch_id)
 );
+
+-- Per-sub-epoch weights column (weights-only rotation). Idempotent ADD for
+-- existing DBs; fresh DBs already get it via the CREATE above.
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'mutagen_sub_epochs' AND column_name = 'weights' AND table_schema = 'public'
+  ) THEN
+    ALTER TABLE mutagen_sub_epochs ADD COLUMN weights JSONB;
+  END IF;
+END $$;
 `;
 
 const MUTAGEN_INDEXES_SQL = `

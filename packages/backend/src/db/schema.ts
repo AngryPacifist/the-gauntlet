@@ -253,6 +253,9 @@ export const mutagenSubEpochs = pgTable('mutagen_sub_epochs', {
     subEpochIndex: integer('sub_epoch_index').notNull(),
     startAt: timestamp('start_at', { withTimezone: true }).notNull(),
     endAt: timestamp('end_at', { withTimezone: true }).notNull(),
+    // Per-sub-epoch activity weights (weights-only rotation). Null = inherit the
+    // epoch config's weights. Set forward via admin before a sub-epoch starts.
+    weights: jsonb('weights').$type<{ a1: number; a2: number; a3: number; a4: number; a5: number }>(),
 }, (table) => ({
     uniqueEpochIndex: uniqueIndex('idx_mutagen_sub_epochs_unique').on(table.epochId, table.subEpochIndex),
 }));
