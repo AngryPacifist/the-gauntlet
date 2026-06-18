@@ -619,6 +619,19 @@ router.get('/mutagen/epochs/:id', async (req, res) => {
     }
 });
 
+// GET /api/admin/mutagen/epochs/:id/sub-epochs — list an epoch's sub-epochs (+ weights)
+router.get('/mutagen/epochs/:id/sub-epochs', async (req, res) => {
+    try {
+        const id = parseInt(req.params.id, 10);
+        if (isNaN(id)) { res.status(400).json({ success: false, error: 'invalid epoch id' }); return; }
+        const subEpochs = await mutagenAdmin.listSubEpochs(id);
+        res.json({ success: true, data: subEpochs });
+    } catch (error) {
+        console.error('[Admin][mutagen] list sub-epochs error:', error);
+        res.status(500).json({ success: false, error: error instanceof Error ? error.message : 'Internal server error' });
+    }
+});
+
 // PATCH /api/admin/mutagen/epochs/:id — update epoch config
 router.patch('/mutagen/epochs/:id', async (req, res) => {
     try {

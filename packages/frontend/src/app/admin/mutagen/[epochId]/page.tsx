@@ -17,7 +17,10 @@ import {
     adminMutagenMarketingAward,
     adminMutagenBootstrap,
     adminDeleteMutagenEpoch,
+    adminListMutagenSubEpochs,
+    adminSetSubEpochWeights,
     type MutagenEpoch,
+    type MutagenSubEpoch,
 } from '@/lib/api';
 import { ChevronLeft, Play, CircleCheck, Save, Megaphone, Rocket, Trash2 } from 'lucide-react';
 import styles from '../../page.module.css';
@@ -111,6 +114,8 @@ export default function AdminMutagenEpochPage() {
     const [awAmount, setAwAmount] = useState('');
     const [awReason, setAwReason] = useState('');
     const [topN, setTopN] = useState('100');
+    const [subEpochs, setSubEpochs] = useState<MutagenSubEpoch[] | null>(null);
+    const [seDraft, setSeDraft] = useState<Record<number, { a1: number; a2: number; a3: number; a4: number; a5: number }>>({});
 
     useEffect(() => {
         const s = localStorage.getItem(ADMIN_SECRET_KEY) ?? '';
@@ -133,6 +138,22 @@ export default function AdminMutagenEpochPage() {
             .catch((e) => { if (!cancelled) setErr(e instanceof Error ? e.message : 'Failed to load epoch'); });
         return () => { cancelled = true; };
     }, [hydrated, secret, epochId]);
+
+    // Load sub-epochs (for per-sub-epoch weight rotation) once the epoch is active.
+    useEffect(() => {
+        if (!secret || !epoch || epoch.status !== 'active') { setSubEpochs(null); return; }
+        let cancelled = false;
+        adminListMutagenSubEpochs(epochId, secret)
+            .then((se) => {
+                if (cancelled) return;
+                setSubEpochs(se);
+                const d: Record<number, { a1: number; a2: number; a3: number; a4: number; a5: number }> = {};
+                for (const s of se) d[s.id] = s.weights ?? { a1: 0.3, a2: 0.05, a3: 0.3, a4: 0.3, a5: 0.05 };
+                setSeDraft(d);
+            })
+            .catch(() => { if (!cancelled) setSubEpochs(null); });
+        return () => { cancelled = true; };
+    }, [secret, epoch, epochId]);
 
     function showToast(msg: string, type: 'success' | 'error') {
         setToast({ msg, type });
@@ -266,6 +287,17 @@ export default function AdminMutagenEpochPage() {
             const n = Number(topN) || 100;
             const res = await adminMutagenBootstrap(n, secret);
             showToast(`Bootstrap queued ${res.queued} wallets (${res.sources.adrenaLeaderboard} Adrena + ${res.sources.forgeRegistrations} Forge)`, 'success');
+        });
+    }
+
+    function saveSubWeights(id: number) {
+        const w = seDraft[id];
+        run('se-' + id, async () => {
+            const sum = w.a1 + w.a2 + w.a3 + w.a4 + w.a5;
+            if (Math.abs(sum - 1) > 1e-6) { showToast(`Weights must sum to 1.0 (currently ${sum.toFixed(2)})`, 'error'); return; }
+            await adminSetSubEpochWeights(id, w, secret);
+            showToast('Sub-epoch weights saved', 'success');
+            adminListMutagenSubEpochs(epochId, secret).then(setSubEpochs).catch(() => {});
         });
     }
 
@@ -530,6 +562,52 @@ export default function AdminMutagenEpochPage() {
                             );
                         })()}
                     </section>
+
+                    {/* per-sub-epoch weights (rotation) */}
+                    {epoch.status === 'active' && (
+                        <section className={styles.section}>
+                            <h2 className={styles.sectionTitle}>Sub-epoch weights</h2>
+                            <p className={styles.formHint} style={{ marginBottom: 'var(--space-md)' }}>
+                                Set activity weights per sub-epoch, announced before it starts. A started sub-epoch is locked; an unset one inherits the epoch weights.
+                            </p>
+                            {!subEpochs && <p className={styles.emptyText}>Loading sub-epochs…</p>}
+                            {subEpochs && subEpochs.map((se) => {
+                                const started = new Date(se.startAt) <= new Date();
+                                const d = seDraft[se.id] ?? { a1: 0, a2: 0, a3: 0, a4: 0, a5: 0 };
+                                const sum = d.a1 + d.a2 + d.a3 + d.a4 + d.a5;
+                                const ok = Math.abs(sum - 1) < 1e-6;
+                                const wLabels: Array<['a1' | 'a2' | 'a3' | 'a4' | 'a5', string]> = [['a1', 'LP'], ['a2', 'Staking'], ['a3', 'Trading'], ['a4', 'ADX-LP'], ['a5', 'Marketing']];
+                                return (
+                                    <div key={se.id} className="card" style={{ marginBottom: 'var(--space-sm)', padding: 'var(--space-md)' }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-sm)' }}>
+                                            <strong>Sub-epoch {se.subEpochIndex + 1}</strong>
+                                            <span className={styles.formHint} style={{ margin: 0 }}>
+                                                {new Date(se.startAt).toLocaleDateString()} → {new Date(se.endAt).toLocaleDateString()} · {started ? 'locked' : 'editable'}
+                                            </span>
+                                        </div>
+                                        <div className={styles.formGrid}>
+                                            {wLabels.map(([k, label]) => (
+                                                <div className={styles.formGroup} key={k}>
+                                                    <label className={styles.formLabel}>{label}</label>
+                                                    <input type="number" step="0.01" className="input" value={d[k]} disabled={started}
+                                                        onChange={(e) => setSeDraft((prev) => ({ ...prev, [se.id]: { ...d, [k]: Number(e.target.value) } }))} />
+                                                </div>
+                                            ))}
+                                        </div>
+                                        {!started && (
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-md)', marginTop: 'var(--space-sm)' }}>
+                                                <span style={{ color: ok ? 'var(--status-success)' : 'var(--status-danger)', fontSize: '.8rem' }}>Σ {sum.toFixed(2)} {ok ? '✓' : ': must equal 1.0'}</span>
+                                                <button className="btn btn--secondary" disabled={busy !== null || !ok} onClick={() => saveSubWeights(se.id)}>
+                                                    {busy === 'se-' + se.id ? 'Saving…' : 'Save weights'}
+                                                </button>
+                                                {se.weights === null && <span className={styles.formHint} style={{ margin: 0 }}>inherits epoch weights until set</span>}
+                                            </div>
+                                        )}
+                                    </div>
+                                );
+                            })}
+                        </section>
+                    )}
 
                     {/* marketing award */}
                     <section className={styles.section}>

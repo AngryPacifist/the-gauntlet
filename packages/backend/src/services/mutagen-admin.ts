@@ -10,7 +10,7 @@
 // (not_found→404, conflict→409, bad_request→400) without string-sniffing.
 // ============================================================================
 
-import { and, eq, inArray } from 'drizzle-orm';
+import { and, asc, eq, inArray } from 'drizzle-orm';
 import { PublicKey } from '@solana/web3.js';
 import { db } from '../db/index.js';
 import {
@@ -102,6 +102,14 @@ export async function listEpochs(): Promise<EpochRow[]> {
 export async function getEpochById(id: number): Promise<EpochRow | null> {
     const [epoch] = await db.select().from(mutagenEpochs).where(eq(mutagenEpochs.id, id)).limit(1);
     return epoch ?? null;
+}
+
+export async function listSubEpochs(epochId: number): Promise<Array<typeof mutagenSubEpochs.$inferSelect>> {
+    return db
+        .select()
+        .from(mutagenSubEpochs)
+        .where(eq(mutagenSubEpochs.epochId, epochId))
+        .orderBy(asc(mutagenSubEpochs.subEpochIndex));
 }
 
 export async function updateEpochConfig(

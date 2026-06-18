@@ -1114,3 +1114,29 @@ export async function adminMutagenBootstrap(
         headers: { 'X-Admin-Secret': adminSecret },
     });
 }
+
+export interface MutagenSubEpoch {
+    id: number;
+    subEpochIndex: number;
+    startAt: string;
+    endAt: string;
+    weights: { a1: number; a2: number; a3: number; a4: number; a5: number } | null;
+}
+
+export async function adminListMutagenSubEpochs(epochId: number, adminSecret: string): Promise<MutagenSubEpoch[]> {
+    return apiFetch<MutagenSubEpoch[]>(`/api/admin/mutagen/epochs/${epochId}/sub-epochs`, {
+        headers: { 'X-Admin-Secret': adminSecret },
+    });
+}
+
+export async function adminSetSubEpochWeights(
+    subEpochId: number,
+    weights: { a1: number; a2: number; a3: number; a4: number; a5: number },
+    adminSecret: string,
+): Promise<MutagenSubEpoch> {
+    return apiFetch<MutagenSubEpoch>(`/api/admin/mutagen/sub-epochs/${subEpochId}/weights`, {
+        method: 'PATCH',
+        body: JSON.stringify({ weights }),
+        headers: { 'X-Admin-Secret': adminSecret },
+    });
+}
