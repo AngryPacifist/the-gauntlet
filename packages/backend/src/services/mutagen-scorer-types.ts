@@ -270,6 +270,12 @@ export interface EpochConfig {
         type: 'fixed' | 'percent_fees';
         value: number;
         denominatedIn: 'ADX' | 'USDC';
+        /**
+         * Relative rank weights for the payout split (admin-tunable). Rank r gets
+         * prizesByRank[r-1] / sum(used weights) of the pool; ties split evenly.
+         * Omitted/empty => the payouts endpoint emits ranks with amount 0.
+         */
+        prizesByRank?: number[];
     };
 }
 
@@ -401,6 +407,8 @@ export const DEFAULT_EPOCH_CONFIG: EpochConfig = {
 
     metaMutationTable: { 1: 1.00, 2: 1.05, 3: 1.15, 4: 1.30, 5: 1.50 },
 
-    // Default 0 ADX — admin must explicitly fund per epoch (no auto-fund).
-    prizePool: { type: 'fixed', value: 0, denominatedIn: 'ADX' },
+    // Default 0 ADX — admin must explicitly fund per epoch (no auto-fund). The
+    // prizesByRank curve is shape-only (relative weights); the pool value stays 0
+    // until funded. Geometric default, admin-tunable.
+    prizePool: { type: 'fixed', value: 0, denominatedIn: 'ADX', prizesByRank: [100, 60, 40, 25, 15, 10, 8, 6, 4, 2] },
 };
