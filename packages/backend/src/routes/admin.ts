@@ -567,13 +567,14 @@ const MUTAGEN_FAIL_STATUS: Record<mutagenAdmin.AdminFail['code'], number> = {
 // POST /api/admin/mutagen/epochs — create an epoch (config defaults to DEFAULT_EPOCH_CONFIG)
 router.post('/mutagen/epochs', async (req, res) => {
     try {
-        const { name, startAt, endAt, subEpochWeeks, config } = req.body as {
-            name?: string; startAt?: string; endAt?: string; subEpochWeeks?: number; config?: EpochConfig;
+        const { name, startAt, endAt, epochWeeks, subEpochWeeks, config } = req.body as {
+            name?: string; startAt?: string; endAt?: string; epochWeeks?: number; subEpochWeeks?: number; config?: EpochConfig;
         };
         const result = await mutagenAdmin.createEpoch({
             name: name ?? '',
             startAt: startAt ? new Date(startAt) : new Date(NaN),
-            endAt: endAt ? new Date(endAt) : new Date(NaN),
+            endAt: endAt ? new Date(endAt) : undefined,
+            epochWeeks,
             subEpochWeeks,
             config,
         });

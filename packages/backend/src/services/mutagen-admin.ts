@@ -12,6 +12,7 @@
 
 import { and, asc, eq, inArray } from 'drizzle-orm';
 import { PublicKey } from '@solana/web3.js';
+import { addWeeks } from 'date-fns';
 import { db } from '../db/index.js';
 import {
     mutagenEpochs,
@@ -63,7 +64,15 @@ export function validateEpochConfig(config: EpochConfig): string | null {
 export interface CreateEpochInput {
     name: string;
     startAt: Date;
-    endAt: Date;
+    /** Explicit end date (legacy path). Ignored when epochWeeks is provided. */
+    endAt?: Date;
+    /**
+     * Epoch length in whole weeks (preferred). When set, endAt is derived as
+     * startAt + epochWeeks and must be a whole multiple of subEpochWeeks, so the
+     * sub-epochs tile exactly with no leftover-days final sub-epoch. If both
+     * epochWeeks and endAt are passed, epochWeeks wins.
+     */
+    epochWeeks?: number;
     subEpochWeeks?: number;
     config?: EpochConfig;
 }
@@ -73,10 +82,29 @@ export async function createEpoch(
 ): Promise<{ ok: true; epoch: EpochRow } | AdminFail> {
     if (!input.name) return bad('name is required');
     if (!(input.startAt instanceof Date) || isNaN(input.startAt.getTime())) return bad('a valid startAt is required');
-    if (!(input.endAt instanceof Date) || isNaN(input.endAt.getTime())) return bad('a valid endAt is required');
-    if (input.endAt <= input.startAt) return bad('endAt must be after startAt');
     const subEpochWeeks = input.subEpochWeeks ?? 3;
     if (subEpochWeeks < 1) return bad('subEpochWeeks must be >= 1');
+
+    // Resolve the epoch end. Preferred path: epochWeeks (whole weeks) — endAt is
+    // derived as startAt + epochWeeks, and the length must be a whole multiple of
+    // subEpochWeeks so the sub-epochs tile exactly (no leftover-days final
+    // sub-epoch). Legacy path: an explicit endAt, tolerated as-is (scripts/verifier
+    // deliberately test ragged spans, where the final window is truncated).
+    let endAt: Date;
+    if (input.epochWeeks != null) {
+        if (!Number.isInteger(input.epochWeeks) || input.epochWeeks < 1) {
+            return bad('epochWeeks must be a whole number >= 1');
+        }
+        if (input.epochWeeks % subEpochWeeks !== 0) {
+            return bad(`epoch length (${input.epochWeeks} weeks) must be a whole multiple of the sub-epoch length (${subEpochWeeks} weeks)`);
+        }
+        endAt = addWeeks(input.startAt, input.epochWeeks);
+    } else {
+        if (!(input.endAt instanceof Date) || isNaN(input.endAt.getTime())) return bad('a valid endAt (or epochWeeks) is required');
+        if (input.endAt <= input.startAt) return bad('endAt must be after startAt');
+        endAt = input.endAt;
+    }
+
     const config = input.config ?? DEFAULT_EPOCH_CONFIG;
     const configErr = validateEpochConfig(config);
     if (configErr) return bad(configErr);
@@ -87,7 +115,7 @@ export async function createEpoch(
             name: input.name,
             status: 'registration',
             startAt: input.startAt,
-            endAt: input.endAt,
+            endAt,
             subEpochWeeks,
             config,
         })

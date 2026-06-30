@@ -1044,7 +1044,7 @@ export async function adminGetMutagenEpoch(id: number, adminSecret: string): Pro
 }
 
 export async function adminCreateMutagenEpoch(
-    input: { name: string; startAt: string; endAt: string; subEpochWeeks?: number; config?: Record<string, unknown> },
+    input: { name: string; startAt: string; epochWeeks: number; subEpochWeeks?: number; config?: Record<string, unknown> },
     adminSecret: string,
 ): Promise<MutagenEpoch> {
     return apiFetch<MutagenEpoch>('/api/admin/mutagen/epochs', {

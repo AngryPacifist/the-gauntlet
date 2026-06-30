@@ -34,8 +34,8 @@ export default function AdminMutagenPage() {
     // create-form fields
     const [name, setName] = useState('');
     const [startAt, setStartAt] = useState('');
-    const [endAt, setEndAt] = useState('');
-    const [weeks, setWeeks] = useState('3');
+    const [epochWeeks, setEpochWeeks] = useState('4');
+    const [weeks, setWeeks] = useState('2');
     const [submitting, setSubmitting] = useState(false);
 
     useEffect(() => {
@@ -76,20 +76,20 @@ export default function AdminMutagenPage() {
 
     async function create(e: FormEvent) {
         e.preventDefault();
-        if (!name || !startAt || !endAt) return;
+        if (!name || !startAt || !epochWeeks) return;
         setSubmitting(true);
         try {
             await adminCreateMutagenEpoch(
                 {
                     name,
                     startAt: new Date(startAt).toISOString(),
-                    endAt: new Date(endAt).toISOString(),
+                    epochWeeks: Number(epochWeeks),
                     subEpochWeeks: Number(weeks) || 3,
                 },
                 secret,
             );
             setShowCreate(false);
-            setName(''); setStartAt(''); setEndAt(''); setWeeks('3');
+            setName(''); setStartAt(''); setEpochWeeks('4'); setWeeks('2');
             showToast('Epoch created', 'success');
             refresh();
         } catch (e) {
@@ -98,6 +98,16 @@ export default function AdminMutagenPage() {
             setSubmitting(false);
         }
     }
+
+    // Create-form preview (backend is authoritative; this is a display hint). The
+    // end date is approximate vs the backend's addWeeks only across a DST boundary,
+    // and matches at date granularity.
+    const epochWeeksNum = Number(epochWeeks);
+    const subWeeksNum = Number(weeks) || 3;
+    const derivedEnd = startAt && Number.isInteger(epochWeeksNum) && epochWeeksNum >= 1
+        ? new Date(new Date(startAt).getTime() + epochWeeksNum * 7 * 24 * 60 * 60 * 1000)
+        : null;
+    const divisibilityBad = Number.isInteger(epochWeeksNum) && epochWeeksNum >= 1 && epochWeeksNum % subWeeksNum !== 0;
 
     return (
         <div className="container">
@@ -185,18 +195,23 @@ export default function AdminMutagenPage() {
                                     <input type="datetime-local" className="input" value={startAt} onChange={(e) => setStartAt(e.target.value)} required />
                                 </div>
                                 <div className={styles.formGroup}>
-                                    <label className={styles.formLabel}>End</label>
-                                    <input type="datetime-local" className="input" value={endAt} onChange={(e) => setEndAt(e.target.value)} required />
+                                    <label className={styles.formLabel}>Epoch length (weeks)</label>
+                                    <input type="number" min={1} step={1} className="input" value={epochWeeks} onChange={(e) => setEpochWeeks(e.target.value)} required />
                                 </div>
                             </div>
                             <div className={styles.formGroup}>
                                 <label className={styles.formLabel}>Sub-epoch length (weeks)</label>
                                 <input type="number" min={1} className="input" value={weeks} onChange={(e) => setWeeks(e.target.value)} />
-                                <span className={styles.formHint}>Config defaults to the standard 30/5/30/30/5 weights; tune it after creating, on the epoch page.</span>
+                                <span className={styles.formHint}>
+                                    {derivedEnd ? `Ends ${fmtDate(derivedEnd.toISOString())}. ` : ''}
+                                    {divisibilityBad
+                                        ? <span style={{ color: 'var(--status-error, #e5484d)' }}>Epoch length must be a whole multiple of the sub-epoch length.</span>
+                                        : 'Config defaults to the standard 30/5/30/30/5 weights; tune it after creating, on the epoch page.'}
+                                </span>
                             </div>
                             <div className={styles.modalActions}>
                                 <button type="button" className="btn btn--secondary" onClick={() => setShowCreate(false)}>Cancel</button>
-                                <button type="submit" className="btn btn--primary" disabled={submitting}>{submitting ? 'Creating…' : 'Create epoch'}</button>
+                                <button type="submit" className="btn btn--primary" disabled={submitting || divisibilityBad}>{submitting ? 'Creating…' : 'Create epoch'}</button>
                             </div>
                         </form>
                     </div>
